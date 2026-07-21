@@ -1,0 +1,19 @@
+"""
+Main URL configuration
+"""
+from django.contrib import admin
+from django.urls import path, include
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    # Auth
+    path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # Core app
+    path('api/', include('core.urls')),
+    # Reports (print)
+    path('api/', include('reports.urls')),
+    # Import
+    path('api/', include('imports.urls')),
+]

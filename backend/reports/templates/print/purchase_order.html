@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Print Preview - Purchase Order {{ reference }}</title>
+<style>
+  /* ── Page setup (print) ── */
+  @page {
+    size: A4;
+    margin: 2cm;
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 9px;
+      color: #888;
+    }
+  }
+
+  body {
+    font-family: 'DejaVu Sans', 'Arial', sans-serif;
+    font-size: 11px;
+    color: #222;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #1677ff;
+  }
+  .header .company-name { font-size: 18px; font-weight: bold; color: #1677ff; }
+  .header .company-detail { font-size: 10px; color: #555; }
+
+  .doc-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 20px 0;
+    text-transform: uppercase;
+  }
+
+  .info-section { width: 100%; margin-bottom: 15px; }
+  .info-section td { vertical-align: top; padding: 2px 5px; }
+  .info-section .label { font-weight: bold; width: 120px; color: #555; }
+
+  table.items { width: 100%; border-collapse: collapse; margin: 15px 0; }
+  table.items thead th {
+    background-color: #1677ff; color: white; padding: 8px 6px;
+    text-align: left; font-size: 10px; text-transform: uppercase;
+  }
+  table.items thead th.text-right { text-align: right; }
+  table.items tbody td { padding: 6px; border-bottom: 1px solid #ddd; }
+  table.items tbody td.text-right { text-align: right; }
+  table.items tbody tr:nth-child(even) { background-color: #f9f9f9; }
+
+  .summary { width: 300px; margin-left: auto; margin-top: 10px; }
+  .summary td { padding: 4px 8px; }
+  .summary .label { font-weight: bold; color: #555; }
+  .summary .value { text-align: right; }
+  .summary .grand-total td {
+    font-size: 14px; font-weight: bold;
+    border-top: 2px solid #222; padding-top: 8px;
+  }
+
+  .footer {
+    margin-top: 40px; font-size: 10px; color: #888;
+    text-align: center; border-top: 1px solid #ddd; padding-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="company-name">{{ company.name|default:'DIGILIO TEKNOLOGI' }}</div>
+  <div class="company-detail">
+    {{ company.address|default:'Jl. Raya No. 123' }}<br>
+    Tel: {{ company.phone|default:'(021) 555-1234' }} | Email: {{ company.email|default:'info@digilio.id' }}
+  </div>
+</div>
+
+<div class="doc-title">Purchase Order</div>
+
+<table class="info-section">
+  <tr>
+    <td class="label">Nomor</td>
+    <td>: {{ reference }}</td>
+    <td class="label">Tanggal</td>
+    <td>: {{ order_date|default:'-' }}</td>
+  </tr>
+  <tr>
+    <td class="label">Status</td>
+    <td>: {{ status|title }}</td>
+    <td class="label">Expected</td>
+    <td>: {{ expected_date|default:'-' }}</td>
+  </tr>
+  <tr>
+    <td class="label">Vendor</td>
+    <td>: {{ vendor.name }}</td>
+    <td></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td class="label">Alamat Vendor</td>
+    <td colspan="3">: {{ vendor.address|default:'-' }}</td>
+  </tr>
+</table>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th style="width:40px;">#</th>
+      <th>Item</th>
+      <th style="width:60px;" class="text-right">Qty</th>
+      <th style="width:50px;">UOM</th>
+      <th style="width:100px;" class="text-right">Harga</th>
+      <th style="width:100px;" class="text-right">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for line in order_lines %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td>{{ line.name|default:line.product.name }}</td>
+      <td class="text-right">{{ line.qty }}</td>
+      <td>{{ line.uom|default:'pcs' }}</td>
+      <td class="text-right">{{ line.price|floatformat:2 }}</td>
+      <td class="text-right">{{ line.total|floatformat:2 }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" style="text-align:center; color:#999;">No items</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<table class="summary">
+  <tr>
+    <td class="label">Subtotal</td>
+    <td class="value">{{ subtotal|floatformat:2 }}</td>
+  </tr>
+  <tr>
+    <td class="label">Discount ({{ discount_rate|default:0 }}%)</td>
+    <td class="value">-{{ discount|floatformat:2 }}</td>
+  </tr>
+  <tr>
+    <td class="label">Tax ({{ tax_rate|default:0 }}%)</td>
+    <td class="value">{{ tax|floatformat:2 }}</td>
+  </tr>
+  <tr class="grand-total">
+    <td class="label">Grand Total</td>
+    <td class="value">{{ grand_total|floatformat:2 }}</td>
+  </tr>
+</table>
+
+<div style="margin-top:40px;">
+  <table style="width:100%;">
+    <tr>
+      <td style="text-align:center;">
+        <div style="margin-bottom:50px;">_________________________</div>
+        <div>Dibuat Oleh</div>
+      </td>
+      <td style="text-align:center;">
+        <div style="margin-bottom:50px;">_________________________</div>
+        <div>Disetujui Oleh</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div class="footer">
+  Dokumen ini digenerate secara otomatis oleh Digilio ERP.
+</div>
+
+</body>
+</html>

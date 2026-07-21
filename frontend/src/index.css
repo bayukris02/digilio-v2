@@ -1,0 +1,25 @@
+/* Reset minimal */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* AG Grid — sembunyikan teks placeholder date input (dd/mm/yyyy) saat kosong */
+.ag-floating-filter input[type="date"]::-webkit-datetime-edit {
+  display: none;
+}
+.ag-floating-filter input[type="date"]:focus::-webkit-datetime-edit,
+.ag-floating-filter input[type="date"]:valid::-webkit-datetime-edit {
+  display: inline-flex;
+}
+
+/* Sembunyikan watermark AG Grid Enterprise */
+.ag-watermark {
+  display: none !important;
+}

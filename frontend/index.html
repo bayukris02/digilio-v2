@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digilio ERP</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      (function() {
+        var methods = ['log', 'warn', 'error'];
+        methods.forEach(function(method) {
+          var orig = console[method];
+          console[method] = function() {
+            if (arguments.length > 0 && typeof arguments[0] === 'string' &&
+                (arguments[0].indexOf('AG Grid') !== -1 ||
+                 arguments[0].indexOf('License Key') !== -1 ||
+                 arguments[0].indexOf('watermark') !== -1 ||
+                 arguments[0].indexOf('ag-grid') !== -1)) {
+              return;
+            }
+            return orig.apply(console, arguments);
+          };
+        });
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
