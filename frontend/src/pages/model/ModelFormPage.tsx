@@ -1168,7 +1168,8 @@ export default function ModelFormPage() {
       ...prev,
       [relationField]: (prev[relationField] || []).filter((item) => item._key !== key),
     }));
-  }, []);
+    setSummaryRevision((v) => v + 1);
+  }, [setSummaryRevision]);
 
   // ── Required field validators for child lines ──
 
