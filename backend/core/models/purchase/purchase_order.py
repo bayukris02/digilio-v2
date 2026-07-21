@@ -397,10 +397,19 @@ class PurchaseOrder(BaseModel):
         # Saat pindah dari global ke per_product + %, frontend line items masih
         # bawa discount_amount=prorata. Karena di mode % nilai discount_amount
         # harus berasal dari discount_percentage, kita reset ke 0 jika disc%=0.
-        # (Menangani mode switch global→per_product tanpa perlu compare DB)
         if discount_type == 'per_product':
             self.global_discount = 0
             disc_method = getattr(self, 'discount_method', 'percentage') or 'percentage'
+
+            # Cek apakah ini mode switch dari global (berdasarkan DB)
+            was_global = False
+            if self.pk:
+                try:
+                    db_record = PurchaseOrder.objects.get(pk=self.pk)
+                    was_global = db_record.discount_type == 'global'
+                except PurchaseOrder.DoesNotExist:
+                    pass
+
             if disc_method == 'percentage':
                 for cl in computed_lines:
                     if cl['discount_percentage'] == 0:
@@ -408,8 +417,10 @@ class PurchaseOrder(BaseModel):
             else:  # nominal
                 for cl in computed_lines:
                     cl['discount_percentage'] = 0
-                    cl['discount_amount'] = 0
-                    
+                # Reset discount_amount hanya saat mode switch dari global (existing PO)
+                if was_global:
+                    for cl in computed_lines:
+                        cl['discount_amount'] = 0
 
         # ── Recompute tax & total (1 formula untuk semua mode) ──
         for cl in computed_lines:
