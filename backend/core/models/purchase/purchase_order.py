@@ -132,6 +132,7 @@ class PurchaseOrder(BaseModel):
             options=[('percentage', 'Discount (%)'), ('nominal', 'Discount (Rp)')],
             default='percentage',
             onchange={'global_discount': 0},
+            line_onchange={'discount_amount': 0, 'discount_percentage': 0},
         ),
         'global_discount': FloatField(label='Global Discount', default=0,
             compute='_compute_summary'),
@@ -401,15 +402,6 @@ class PurchaseOrder(BaseModel):
             self.global_discount = 0
             disc_method = getattr(self, 'discount_method', 'percentage') or 'percentage'
 
-            # Cek apakah ini mode switch dari global (berdasarkan DB)
-            was_global = False
-            if self.pk:
-                try:
-                    db_record = PurchaseOrder.objects.get(pk=self.pk)
-                    was_global = db_record.discount_type == 'global'
-                except PurchaseOrder.DoesNotExist:
-                    pass
-
             if disc_method == 'percentage':
                 for cl in computed_lines:
                     if cl['discount_percentage'] == 0:
@@ -417,10 +409,8 @@ class PurchaseOrder(BaseModel):
             else:  # nominal
                 for cl in computed_lines:
                     cl['discount_percentage'] = 0
-                # Reset discount_amount hanya saat mode switch dari global (existing PO)
-                if was_global:
-                    for cl in computed_lines:
-                        cl['discount_amount'] = 0
+                    # discount_amount tidak direset di backend —
+                    # line_onchange di frontend handle via setLineItems pas method change
 
         # ── Recompute tax & total (1 formula untuk semua mode) ──
         for cl in computed_lines:

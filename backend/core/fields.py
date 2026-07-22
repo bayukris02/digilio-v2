@@ -11,7 +11,7 @@ class BaseField:
     field_type = None  # e.g., 'char', 'date', 'monetary'
     django_field_class = None
 
-    def __init__(self, label='', required=False, default=None, help_text='', compute=None, depends=None, chatter_show=True, unique=False, virtual=False, editable_statuses=None, placeholder=None, hidden_statuses=None, onchange=None):
+    def __init__(self, label='', required=False, default=None, help_text='', compute=None, depends=None, chatter_show=True, unique=False, virtual=False, editable_statuses=None, placeholder=None, hidden_statuses=None, onchange=None, line_onchange=None):
         self.label = label
         self.required = required
         self.default = default
@@ -25,6 +25,7 @@ class BaseField:
         self.placeholder = placeholder  # custom placeholder text
         self.hidden_statuses = hidden_statuses  # e.g., ['draft'] — hide field at these statuses
         self.onchange = onchange or {}  # {target_field: target_value} — reset field saat nilai berubah
+        self.line_onchange = line_onchange or {}  # {target_field: target_value} — reset line field saat nilai berubah
 
     def to_config(self):
         """Return JSON-serialisable config for the frontend."""
@@ -54,6 +55,8 @@ class BaseField:
             cfg['hidden_statuses'] = self.hidden_statuses
         if self.onchange:
             cfg['onchange'] = self.onchange
+        if self.line_onchange:
+            cfg['line_onchange'] = self.line_onchange
         return cfg
 
     def to_python(self, value):

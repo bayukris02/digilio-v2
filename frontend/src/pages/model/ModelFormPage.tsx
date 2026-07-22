@@ -440,8 +440,27 @@ export default function ModelFormPage() {
       if (Object.keys(updates).length > 0) {
         form.setFieldsValue(updates);
       }
+
+      // line_onchange: reset line-level fields saat source field berubah
+      // definisinya di model: SelectionField(..., line_onchange={'discount_amount': 0})
+      Object.entries(changedValues).forEach(([fieldName]) => {
+        const fieldCfg = config.fields?.[fieldName];
+        if (fieldCfg?.line_onchange) {
+          const lineUpdates = fieldCfg.line_onchange as Record<string, unknown>;
+          setLineItems((prev) => {
+            const updated: Record<string, Record<string, unknown>[]> = {};
+            for (const [rel, items] of Object.entries(prev)) {
+              updated[rel] = items.map((item) => ({
+                ...item,
+                ...lineUpdates,
+              }));
+            }
+            return updated;
+          });
+        }
+      });
     }
-  }, [form, config]);
+  }, [form, config, setLineItems]);
 
   // ── Fetch model config (once per model) ──
   useEffect(() => {
