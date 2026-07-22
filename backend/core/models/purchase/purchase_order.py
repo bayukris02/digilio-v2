@@ -126,6 +126,7 @@ class PurchaseOrder(BaseModel):
             options=[('per_product', 'Per Product'), ('global', 'Global Discount')],
             default='per_product',
             onchange={'global_discount': 0},
+            line_onchange={'discount_amount': 0, 'discount_percentage': 0},
         ),
         'discount_method': SelectionField(
             label='Metode Diskon',
