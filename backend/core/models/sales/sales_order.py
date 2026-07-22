@@ -63,11 +63,13 @@ class SalesOrder(BaseModel):
             label='Metode Diskon',
             options=[('percentage', 'Discount (%)'), ('nominal', 'Discount (Rp)')],
             default='percentage',
+            line_onchange={'discount_amount': 0, 'discount_percentage': 0},
         ),
         'discount_type': SelectionField(
             label='Tipe Diskon',
             options=[('per_product', 'Per Product'), ('global', 'Global Discount')],
             default='per_product',
+            line_onchange={'discount_amount': 0, 'discount_percentage': 0},
         ),
         'global_discount': FloatField(label='Global Discount', default=0),
         'discount': MonetaryField(label='Discount', currency='IDR',
