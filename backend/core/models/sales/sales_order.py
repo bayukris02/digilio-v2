@@ -69,9 +69,11 @@ class SalesOrder(BaseModel):
             label='Tipe Diskon',
             options=[('per_product', 'Per Product'), ('global', 'Global Discount')],
             default='per_product',
+            onchange={'global_discount': 0},
             line_onchange={'discount_amount': 0, 'discount_percentage': 0},
         ),
-        'global_discount': FloatField(label='Global Discount', default=0),
+        'global_discount': FloatField(label='Global Discount', default=0,
+            compute='_compute_summary'),
         'discount': MonetaryField(label='Discount', currency='IDR',
             compute='_compute_summary', depends=['order_lines', 'discount_type', 'discount_method', 'global_discount']),
         'tax': MonetaryField(label='Tax', currency='IDR',
@@ -223,11 +225,10 @@ class SalesOrder(BaseModel):
                 'key': 'lines',
                 'label': 'Order Lines',
                 'relation': 'order_lines',
-                'columns': ['product', 'name', 'qty', 'uom', 'price', 'discount_percentage', 'discount_amount', 'global_discount_amount', 'tax_percentage', 'tax_amount', 'total'],
+                'columns': ['product', 'name', 'qty', 'uom', 'price', 'discount_percentage', 'discount_amount', 'tax_percentage', 'tax_amount', 'total'],
                 'summary': {
-                    'columns': {'qty': 'sum', 'discount_percentage': 'avg', 'discount_amount': 'sum',
-                                'global_discount_amount': 'sum',
-                                'tax_percentage': 'avg', 'tax_amount': 'sum', 'total': 'sum'},
+                    'columns': {'qty': 'sum', 'discount_amount': 'sum',
+                                'tax_amount': 'sum', 'total': 'sum'},
                     'subtotal': 'subtotal',
                     'lines': ['discount', 'manual_discount', 'tax'],
                     'inputs': ['manual_discount'],
@@ -681,58 +682,128 @@ class SalesOrder(BaseModel):
         verbose_name_plural = 'Sales Orders'
 
     def _compute_summary(self):
-        """Compute subtotal, discount, tax, and grand_total from order lines + manual_discount."""
-        # Get line totals from in-memory data (compute API) or from DB
+        """Compute subtotal, discount, tax, and grand_total from order lines.
+
+        Single formula for both per-product and global discount:
+          subtotal    = sum(qty × price)
+          discount    = sum(discount_amount per line) + manual_discount
+          tax         = sum(tax_amount per line)
+          grand_total = subtotal - discount + tax
+
+        Global discount: prorated directly into discount_amount per line.
+        manual_discount: additional header % applied in per_product mode.
+        """
         lines_data = getattr(self, '_tmp_one2many', {}).get('order_lines', [])
 
-        def sum_lines(field):
-            if lines_data:
-                return sum(float(line.get(field, 0) or 0) for line in lines_data)
-            elif self.pk:
-                fd = self._field_descriptors.get('order_lines')
-                if fd:
-                    child_model = ErpModelBase._model_registry.get(fd.relation)
-                    if child_model:
-                        return sum(
-                            float(getattr(line, field, 0) or 0)
-                            for line in child_model.objects.filter(
-                                **{fd.inverse_field: self.pk, 'is_deleted': False}
-                            )
-                        )
-            return 0
+        # Jika tidak ada data tmp, load dari DB
+        if not lines_data and self.pk:
+            fd = self._field_descriptors.get('order_lines')
+            if fd:
+                child_model = ErpModelBase._model_registry.get(fd.relation)
+                if child_model:
+                    db_lines = child_model.objects.filter(
+                        **{fd.inverse_field: self.pk, 'is_deleted': False}
+                    )
+                    for line in db_lines:
+                        lines_data.append({
+                            'qty': float(getattr(line, 'qty', 0) or 0),
+                            'price': float(getattr(line, 'price', 0) or 0),
+                            'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
+                            'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
+                            'tax_percentage': float(getattr(line, 'tax_percentage', 0) or 0),
+                        })
 
-        line_total = sum_lines('total')
-        line_discount = sum_lines('discount_amount')
-        line_tax = sum_lines('tax_amount')
+        # ── Recompute per-line values dari raw data ──
+        computed_lines = []
+        for line in lines_data:
+            qty = float(line.get('qty', 0) or 0)
+            price = float(line.get('price', 0) or 0)
+            subtotal = qty * price
 
-        # Raw subtotal = sum(qty*price)
-        raw_subtotal = line_total + line_discount - line_tax
+            # Line-level discount
+            disc_pct = float(line.get('discount_percentage', 0) or 0)
+            if disc_pct > 0:
+                disc_amt = subtotal * (disc_pct / 100)
+            else:
+                disc_amt = float(line.get('discount_amount', 0) or 0)
 
-        # Hitung total discount tergantung tipe
+            computed_lines.append({
+                '_key': line.get('_key'),
+                'subtotal_raw': subtotal,
+                'discount_amount': round(disc_amt, 2),
+                'discount_percentage': disc_pct,
+                'tax_percentage': float(line.get('tax_percentage', 0) or 0),
+                'tax_amount': 0,
+                'total': 0,
+            })
+
         discount_type = getattr(self, 'discount_type', 'per_product') or 'per_product'
+
+        # ── Global: prorata header discount ke discount_amount tiap line ──
         if discount_type == 'global':
             global_val = float(getattr(self, 'global_discount', 0) or 0)
             disc_method = getattr(self, 'discount_method', 'percentage') or 'percentage'
-            if disc_method == 'nominal':
-                total_discount = global_val
-            else:
-                total_discount = raw_subtotal * (global_val / 100)
-        else:
-            # Pre-tax base setelah line discounts
-            after_line_disc = raw_subtotal - line_discount
-            # Manual discount applied to pre-tax base
-            manual_disc_pct = float(getattr(self, 'manual_discount', 0) or 0)
-            manual_disc_amt = after_line_disc * (manual_disc_pct / 100)
-            total_discount = line_discount + manual_disc_amt
+            raw_all = sum(cl['subtotal_raw'] for cl in computed_lines)
 
-        self.subtotal = raw_subtotal
-        self.discount = total_discount
-        if discount_type == 'global' and raw_subtotal > 0:
-            computed_tax = line_tax * (raw_subtotal - total_discount) / raw_subtotal
-        else:
-            computed_tax = line_tax
-        self.tax = computed_tax
-        self.grand_total = raw_subtotal - total_discount + computed_tax
+            if disc_method == 'nominal':
+                total_disc = global_val
+            else:
+                total_disc = raw_all * (global_val / 100) if raw_all > 0 else 0
+
+            for cl in computed_lines:
+                cl['discount_percentage'] = 0
+                if raw_all > 0:
+                    cl['discount_amount'] = round((cl['subtotal_raw'] / raw_all) * total_disc, 2)
+                else:
+                    cl['discount_amount'] = 0
+
+        # ── Per-product: bersihkan stale values ──
+        if discount_type == 'per_product':
+            self.global_discount = 0
+            disc_method = getattr(self, 'discount_method', 'percentage') or 'percentage'
+            if disc_method == 'percentage':
+                for cl in computed_lines:
+                    if cl['discount_percentage'] == 0:
+                        cl['discount_amount'] = 0
+            else:  # nominal
+                for cl in computed_lines:
+                    cl['discount_percentage'] = 0
+                    # discount_amount line_onchange di frontend handle reset
+
+        # ── Recompute tax & total (1 formula untuk semua mode) ──
+        for cl in computed_lines:
+            taxable = cl['subtotal_raw'] - cl['discount_amount']
+            tax_pct = cl['tax_percentage']
+            tax_amt = round(taxable * (tax_pct / 100), 2)
+            cl['tax_amount'] = tax_amt
+            cl['total'] = round(cl['subtotal_raw'] - cl['discount_amount'] + tax_amt, 2)
+
+        # ── Summary (1 formula) ──
+        subtotal = sum(cl['subtotal_raw'] for cl in computed_lines)
+        discount_total = sum(cl['discount_amount'] for cl in computed_lines)
+        tax_total = sum(cl['tax_amount'] for cl in computed_lines)
+        grand_total = sum(cl['total'] for cl in computed_lines)
+
+        # manual_discount: tambahan header % di per_product mode
+        manual_disc_pct = float(getattr(self, 'manual_discount', 0) or 0)
+        if discount_type == 'per_product' and manual_disc_pct > 0:
+            after_line_disc = subtotal - discount_total
+            manual_disc_amt = after_line_disc * (manual_disc_pct / 100)
+            discount_total += manual_disc_amt
+            grand_total -= manual_disc_amt
+
+        self.subtotal = subtotal
+        self.discount = discount_total
+        self.tax = tax_total
+        self.grand_total = grand_total
+
+        # ── Store per-line computed values untuk response API ──
+        self._computed_o2m_lines = {
+            'order_lines': [
+                {k: cl[k] for k in ('_key', 'discount_amount', 'discount_percentage', 'tax_amount', 'total')}
+                for cl in computed_lines if cl.get('_key')
+            ],
+        }
 
     def _compute_dp_info(self):
         """Cari DP invoice & hitung dp_amount, due_amount."""
@@ -763,12 +834,8 @@ class SalesOrder(BaseModel):
                     'hide_when': {'discount_method': 'nominal', 'discount_type': 'global'},
                 },
                 'discount_amount': {
-                    'hide_when': {'discount_type': 'global'},
-                    'editable_when': {'discount_method': 'nominal'},
-                },
-                'global_discount_amount': {
-                    'hide_when': {'discount_type': 'per_product'},
                     'readonly_when': {'discount_type': 'global'},
+                    'editable_when': {'discount_method': 'nominal'},
                 },
             },
         }
