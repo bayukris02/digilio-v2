@@ -74,7 +74,10 @@ class VendorPayment(BaseModel):
         ),
         'payment_ref': CharField(label='Payment Reference', placeholder='No. Cek / Transfer / dll'),
         'currency': CharField(label='Currency', default='IDR'),
-        'total_amount': MonetaryField(label='Total Amount', currency='IDR'),
+        'total_amount': MonetaryField(
+            label='Total Payment', currency='IDR',
+            compute='_compute_total_payment',
+        ),
 
         'payment_lines': One2ManyField(
             label='Payment Lines',
@@ -119,6 +122,7 @@ class VendorPayment(BaseModel):
                 'summary': {
                     'columns': {'paid_amount': 'sum'},
                     'grand_total': 'total_amount',
+                    'compute_deps': ['total_amount'],
                 },
             },
         ],
@@ -142,6 +146,12 @@ class VendorPayment(BaseModel):
         if active_seq:
             config['fields']['sequence_id']['default'] = active_seq.pk
         return config
+
+    def _compute_total_payment(self):
+        """Total Payment is set manually by the user — no auto-computation needed.
+        This compute method exists so the field is included in get_computed_fields(),
+        allowing the SummaryCard to display the value via the compute API."""
+        pass
 
     # ── Guards ──
 
