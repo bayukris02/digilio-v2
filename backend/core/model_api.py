@@ -264,7 +264,22 @@ class ModelRecordView(APIView):
             # ── Generic field filtering from query params ──
             # Model apa pun bisa difilter via: ?vendor=5&status=draft&payment_status=unpaid
             # Many2One fields otomatis pakai _id suffix.
-            skip_params = {'page', 'page_size', 'model_ref'}
+            skip_params = {'page', 'page_size', 'model_ref', 'search'}
+
+            # ── Global text search via ?search= ──
+            # Cari di semua CharField/TextField dengan icontains (OR).
+            search = request.query_params.get('search', '').strip()
+            if search:
+                from django.db.models import Q
+                from core.fields import CharField as CoreCharField, TextField as CoreTextField
+                search_q = Q()
+                for key, fd in model_cls._field_descriptors.items():
+                    if getattr(fd, 'virtual', False):
+                        continue
+                    if isinstance(fd, (CoreCharField, CoreTextField)):
+                        search_q |= Q(**{f'{key}__icontains': search})
+                if search_q:
+                    objs = objs.filter(search_q)
             for param_key, param_val in request.query_params.items():
                 if param_key in skip_params or not param_val:
                     continue

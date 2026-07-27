@@ -38,6 +38,24 @@ export default function ModelListPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
+  const [searchText, setSearchText] = useState('');
+
+  // ── Debounce global search ──
+  // Ketik di search box → tunggu 300ms idle → baru trigger re-fetch
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (quickFilter !== searchText) {
+        setSearchText(quickFilter);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickFilter]);
+
+  // Reset ke page 1 saat search berubah
+  useEffect(() => {
+    setPage(1);
+  }, [searchText]);
 
   // ── Fetch config + records (with server-side pagination) ──
   useEffect(() => {
@@ -48,10 +66,11 @@ export default function ModelListPage() {
     const shouldPaginate = !groupByField;
     const fetchPage = shouldPaginate ? page : 1;
     const fetchSize = shouldPaginate ? pageSize : 999999;
+    const extraParams = searchText ? { search: searchText } : undefined;
 
     Promise.all([
       modelApi.getConfig(apiModelName),
-      modelApi.listRecords(apiModelName, fetchPage, fetchSize),
+      modelApi.listRecords(apiModelName, fetchPage, fetchSize, extraParams),
     ])
       .then(([cfg, resp]) => {
         setConfig(cfg);
@@ -62,7 +81,7 @@ export default function ModelListPage() {
         message.error('Failed to load model: ' + (err?.message || 'Unknown error'));
       })
       .finally(() => setLoading(false));
-  }, [modelName, page, pageSize, groupByField]);
+  }, [modelName, page, pageSize, groupByField, searchText]);
 
   // ── Build AG Grid columns from field config ──
   const fieldList = useMemo(() => {
