@@ -69,6 +69,7 @@ const menuItems = [
       { key: '/accounting.chart_of_account', icon: <BankOutlined />, label: 'Chart of Account' },
       { key: '/accounting.vendor_bill', icon: <FormOutlined />, label: 'Tagihan' },
       { key: '/accounting.customer_invoice', icon: <FileTextOutlined />, label: 'Faktur' },
+      { key: '/accounting.payment_method', icon: <DollarOutlined />, label: 'Payment Methods' },
     ],
   },
   {
