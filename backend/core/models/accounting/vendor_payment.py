@@ -164,6 +164,7 @@ class VendorPayment(BaseModel):
 
     def _compute_summary(self):
         """Hitung Total Allocation (sum paid_amount dari lines) dan Remaining Amount."""
+        from decimal import Decimal
         lines_data = getattr(self, '_tmp_one2many', {}).get('payment_lines', [])
 
         # Fallback ke DB jika tidak ada tmp data
@@ -185,7 +186,8 @@ class VendorPayment(BaseModel):
             float(l.get('paid_amount', 0) or 0) for l in lines_data
         )
         self.total_allocation = total_alloc
-        self.remaining_amount = (self.total_amount or 0) - total_alloc
+        # Convert ke float biar konsisten (MonetaryField menerima float)
+        self.remaining_amount = float(self.total_amount or 0) - total_alloc
 
     # ── Guards ──
 
