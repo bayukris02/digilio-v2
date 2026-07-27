@@ -109,7 +109,7 @@ class VendorPayment(BaseModel):
                 'key': 'allocations',
                 'label': 'Payment Allocations',
                 'relation': 'payment_lines',
-                'columns': ['bill_id', 'vendor_name', 'due_amount', 'paid_amount'],
+                'columns': [{'name': 'bill_id', 'display_field': 'reference'}, 'vendor_name', 'due_amount', 'paid_amount'],
                 'summary': {
                     'columns': {'paid_amount': 'sum'},
                     'grand_total': 'total_amount',

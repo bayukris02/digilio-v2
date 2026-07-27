@@ -629,11 +629,18 @@ export default function ModelFormPage() {
             for (const [fKey, fMeta] of m2oFields) {
               const relName = (fMeta as Record<string, string>).relation;
               if (!relName) continue;
+              // Check if notebook column config has display_field for this field
+              const tabColumn = Array.isArray(tab.columns)
+                ? (tab.columns as any[]).find((c) => typeof c === 'object' && c.name === fKey)
+                : undefined;
+              const displayField = (tabColumn as any)?.display_field;
               modelApi.listRecords(relName).then((response) => {
                 const opts = response.results.map((r) => ({
                   ...r,  // spread all fields (price, description, uom, etc.) for autofill
                   value: r.id as number,
-                  label: (r.name as string) || `#${r.id}`,
+                  label: displayField
+                    ? ((r[displayField] as string) || `#${r.id}`)
+                    : ((r.name as string) || `#${r.id}`),
                 }));
                 setMany2oneOptions((prev) => ({
                   ...prev,
@@ -1229,9 +1236,21 @@ export default function ModelFormPage() {
   }
 
   /** Build AG Grid column defs from child model config, excluding FK/audit fields */
-  const buildColumns = useCallback((relationField: string, columnFilter?: string[], tabReadOnly?: boolean): ColDef[] => {
+  const buildColumns = useCallback((relationField: string, columnFilter?: (string | {name: string; display_field?: string})[], tabReadOnly?: boolean): ColDef[] => {
     const childCfg = childConfigs[relationField];
     if (!childCfg?.fields) return [];
+    // Build column metadata from mixed columnFilter (string | {name, display_field})
+    const columnNames = new Set<string>();
+    const columnMeta: Record<string, {display_field?: string}> = {};
+    if (Array.isArray(columnFilter)) {
+      columnFilter.forEach((c) => {
+        const name = typeof c === 'string' ? c : c.name;
+        columnNames.add(name);
+        if (typeof c === 'object' && c.display_field) {
+          columnMeta[name] = {display_field: c.display_field};
+        }
+      });
+    }
     const cols: ColDef[] = [];
     // Row number column — atau tombol "+ Add" untuk baris add-button
     cols.push({
@@ -1255,7 +1274,7 @@ export default function ModelFormPage() {
       const fieldMeta = config?.fields?.[relationField];
       if (fieldMeta?.type === 'one2many' && key === (fieldMeta as Record<string, string>).inverse_field) return;
       // Skip if columnFilter is provided and this field isn't in it
-      if (columnFilter && !columnFilter.includes(key)) return;
+      if (columnFilter && !columnNames.has(key)) return;
       // Check field-level editable_statuses first, fallback to form-level
       const fieldEditable = Array.isArray((field as any)?.editable_statuses)
         ? (field as any).editable_statuses.includes(currentStatus)
@@ -1348,6 +1367,11 @@ export default function ModelFormPage() {
           filterList: true,
           searchType: 'fuzzy',
         };
+        // Store display_field from notebook column config
+        const colMeta = columnMeta[key];
+        if (colMeta?.display_field) {
+          (col as any).displayField = colMeta.display_field;
+        }
       }
       // ── Generic: column config rules dari backend ──
       // column_config_rules mendefinikan hide/readonly berdasarkan field value
@@ -1562,7 +1586,7 @@ export default function ModelFormPage() {
     : formFields;
 
   // ── Build tab items (reusable for both header tabs and notebook tabs) ──
-  const buildTabItems = (tabs: Array<{ key: string; label: string; fields?: string[]; relation?: string; columns?: string[]; read_only?: boolean; summary?: Record<string, unknown> }>) => {
+  const buildTabItems = (tabs: Array<{ key: string; label: string; fields?: string[]; relation?: string; columns?: (string | {name: string; display_field?: string})[]; read_only?: boolean; summary?: Record<string, unknown> }>) => {
     return tabs.map((tab) => ({
       key: tab.key,
       label: tab.label,
@@ -1660,6 +1684,7 @@ export default function ModelFormPage() {
                 // Refresh many2one options tiap ada klik cell many2one
                 const childCfg = childConfigs[tab.relation!];
                 const fieldName = params.colDef.field;
+                const displayField = (params.colDef as any)?.displayField;
                 if (childCfg?.fields && fieldName) {
                   const fieldMeta = childCfg.fields[fieldName];
                   if (fieldMeta?.type === 'many2one' && fieldMeta.relation) {
@@ -1668,7 +1693,9 @@ export default function ModelFormPage() {
                         const opts = response.results.map((r) => ({
                           ...r,
                           value: r.id as number,
-                          label: (r.name as string) || `#${r.id}`,
+                          label: displayField
+                            ? ((r[displayField] as string) || `#${r.id}`)
+                            : ((r.name as string) || `#${r.id}`),
                         }));
                         setMany2oneOptions((prev) => ({
                           ...prev,
