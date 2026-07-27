@@ -85,6 +85,19 @@ class VendorBill(BaseModel):
         'grand_total': MonetaryField(label='Grand Total', currency='IDR',
             compute='_compute_summary', depends=['bill_lines', 'manual_discount', 'down_payment_amount']),
 
+        # ── Payment fields ──
+        'due_amount': MonetaryField(label='Amount Due', currency='IDR',
+            compute='_compute_payment_summary', depends=['grand_total', 'paid_amount']),
+        'paid_amount': MonetaryField(label='Paid', currency='IDR', default=0),
+        'payment_status': SelectionField(
+            label='Payment Status',
+            options=[('unpaid', 'Unpaid'), ('partial', 'Partial'), ('paid', 'Paid')],
+            compute='_compute_payment_summary',
+            depends=['grand_total', 'paid_amount'],
+            default='unpaid',
+            colors={'unpaid': 'red', 'partial': 'orange', 'paid': 'green'},
+        ),
+
         'bill_lines': One2ManyField(
             label='Bill Lines',
             relation='accounting.vendor_bill_line',
@@ -93,9 +106,9 @@ class VendorBill(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'purchase_order', 'vendor', 'bill_date', 'due_date', 'status', 'grand_total'],
-        'filters': ['status', 'vendor', 'bill_date'],
-        'group_by': ['status', 'vendor'],
+        'columns': ['reference', 'purchase_order', 'vendor', 'bill_date', 'due_date', 'status', 'grand_total', 'due_amount', 'payment_status'],
+        'filters': ['status', 'vendor', 'bill_date', 'payment_status'],
+        'group_by': ['status', 'vendor', 'payment_status'],
         'default_sort': ['-updated_at'],
     }
 
@@ -106,7 +119,8 @@ class VendorBill(BaseModel):
                     'key': 'general',
                     'label': 'General',
                     'fields': ['reference', 'purchase_order', 'vendor', 'code', 'address',
-                               'bill_date', 'due_date', 'status', 'sequence_id'],
+                               'bill_date', 'due_date', 'status', 'sequence_id',
+                               'payment_status'],
                 },
                 {
                     'key': 'details',
@@ -136,6 +150,7 @@ class VendorBill(BaseModel):
                     'lines': ['discount', 'manual_discount', 'tax', 'down_payment_amount'],
                     'inputs': ['manual_discount'],
                     'grand_total': 'grand_total',
+                    'after_grand_total': ['due_amount'],
                 },
             },
         ],
@@ -220,6 +235,18 @@ class VendorBill(BaseModel):
             is_deleted=False,
         ).first()
         self.down_payment_amount = dp_bill.grand_total if dp_bill else 0
+
+    def _compute_payment_summary(self):
+        """Hitung due_amount & payment_status berdasarkan grand_total dan paid_amount."""
+        paid = float(getattr(self, 'paid_amount', 0) or 0)
+        grand = float(getattr(self, 'grand_total', 0) or 0)
+        self.due_amount = max(grand - paid, 0)
+        if paid <= 0:
+            self.payment_status = 'unpaid'
+        elif paid >= grand:
+            self.payment_status = 'paid'
+        else:
+            self.payment_status = 'partial'
 
     # ── Legacy Actions ──
 
