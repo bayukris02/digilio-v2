@@ -1333,7 +1333,16 @@ export default function ModelFormPage() {
         };
         col.cellEditor = 'agRichSelectCellEditor';
         col.cellEditorParams = {
-          values: many2oneOptions[`${relationField}.${key}`] || [],
+          values: (many2oneOptions[`${relationField}.${key}`] || []).filter((opt) => {
+            // Hide options already selected in other lines of the same relation
+            const record = opt as Record<string, unknown>;
+            const selectedIds = new Set(
+              (lineItems[relationField] || [])
+                .filter((item) => !item._isAddButton && item[key]?.id)
+                .map((item) => (item[key] as Record<string, unknown>).id as number),
+            );
+            return !selectedIds.has(record.value as number);
+          }),
           formatValue: (v: { value: number; label?: string; name?: string }) => v?.label || v?.name || '',
           allowTyping: true,
           filterList: true,
@@ -1409,7 +1418,7 @@ export default function ModelFormPage() {
       });
     }
     return cols;
-  }, [childConfigs, config, deleteLine, many2oneOptions, isReadOnly, columnFieldValues]);
+  }, [childConfigs, config, deleteLine, many2oneOptions, isReadOnly, columnFieldValues, lineItems]);
 
   // ── Save handler ──
   const onSave = async () => {
@@ -1701,7 +1710,12 @@ export default function ModelFormPage() {
                   Object.entries(autofillMap).forEach(([targetField, sourceField]) => {
                     const sourceVal = relVal[sourceField as string];
                     if (sourceVal != null && childFields?.[targetField]) {
-                      autofilledLine![targetField] = sourceVal;
+                      // If source is a Many2One object {id, name}, extract the name string
+                      if (typeof sourceVal === 'object' && sourceVal !== null && 'name' in (sourceVal as Record<string, unknown>)) {
+                        autofilledLine![targetField] = (sourceVal as Record<string, unknown>).name as string;
+                      } else {
+                        autofilledLine![targetField] = sourceVal;
+                      }
                     }
                   });
                   setLineItems((prev) => {
@@ -1727,7 +1741,10 @@ export default function ModelFormPage() {
                     });
                     // Force parent compute (SummaryCard) agar _compute_summary jalan
                     setSummaryRevision((v) => v + 1);
-                  }).catch(() => {});
+                  }).catch((err: unknown) => {
+                    const errMsg = (err as Record<string, unknown>)?.response?.data?.error || (err as Error)?.message || 'Compute error';
+                    if (errMsg) message.error(errMsg as string);
+                  });
                 }
               }}
               theme={themeBalham}

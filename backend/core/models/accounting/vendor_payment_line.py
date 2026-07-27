@@ -21,18 +21,21 @@ class VendorPaymentLine(BaseModel):
             label='Bill',
             relation='accounting.vendor_bill',
             required=True,
-            autofill={'due_amount': 'due_amount'},
+            autofill={'due_amount': 'due_amount', 'vendor_name': 'vendor'},
         ),
         'vendor_name': TextField(
             label='Vendor',
             virtual=True,
+            editable_statuses=[],
         ),
         'due_amount': MonetaryField(
             label='Amount Due', currency='IDR',
             virtual=True,
+            editable_statuses=[],
         ),
         'paid_amount': MonetaryField(
             label='Payment', currency='IDR',
+            compute='_compute_total', depends=['bill_id'],
         ),
     }
 
@@ -52,6 +55,20 @@ class VendorPaymentLine(BaseModel):
         app_label = 'core'
         verbose_name = 'Vendor Payment Line'
         verbose_name_plural = 'Vendor Payment Lines'
+
+    def _compute_total(self):
+        """Populate vendor_name/due_amount dari bill & validasi paid_amount ≤ due_amount."""
+        bill = getattr(self, 'bill_id', None)
+        if bill:
+            self.vendor_name = str(bill.vendor.name) if bill.vendor else ''
+            self.due_amount = float(bill.due_amount or 0)
+
+        paid = float(self.paid_amount or 0)
+        due = float(getattr(self, 'due_amount', 0) or 0)
+        if paid > due > 0:
+            raise ValueError(
+                f'Payment ({paid:,.0f}) melebihi Amount Due ({due:,.0f}).'
+            )
 
     def to_record(self):
         data = super().to_record()
