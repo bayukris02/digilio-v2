@@ -63,6 +63,7 @@ class SalesOrder(BaseModel):
             label='Metode Diskon',
             options=[('percentage', 'Discount (%)'), ('nominal', 'Discount (Rp)')],
             default='percentage',
+            onchange={'global_discount': 0},
             line_onchange={'discount_amount': 0, 'discount_percentage': 0},
         ),
         'discount_type': SelectionField(
@@ -230,8 +231,7 @@ class SalesOrder(BaseModel):
                     'columns': {'qty': 'sum', 'discount_amount': 'sum',
                                 'tax_amount': 'sum', 'total': 'sum'},
                     'subtotal': 'subtotal',
-                    'lines': ['discount', 'manual_discount', 'tax'],
-                    'inputs': ['manual_discount'],
+                    'lines': ['discount', 'tax'],
                     'compute_deps': ['discount_type', 'discount_method', 'global_discount'],
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],

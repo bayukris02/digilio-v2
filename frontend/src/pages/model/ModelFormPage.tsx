@@ -1368,7 +1368,10 @@ export default function ModelFormPage() {
           ([field, value]) => columnFieldValues[field] === value,
         );
         if (shouldEditable) {
-          col.editable = true;
+          col.editable = (params: any) => {
+            if (params.data?._isAddButton) return false;
+            return !isReadOnly;
+          };
           col.cellStyle = undefined;
         }
       }
