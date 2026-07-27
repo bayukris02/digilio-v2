@@ -1372,7 +1372,12 @@ export default function ModelFormPage() {
             if (params.data?._isAddButton) return false;
             return !isReadOnly;
           };
-          col.cellStyle = undefined;
+          col.cellStyle = (params: any) => {
+            if (params.data?._isAddButton) return undefined;
+            if (params.node?.rowPinned) return undefined;
+            if (isReadOnly) return { backgroundColor: '#f5f5f5' };
+            return undefined;
+          };
         }
       }
       cols.push(col);
