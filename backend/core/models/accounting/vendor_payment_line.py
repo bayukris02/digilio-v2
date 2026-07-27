@@ -33,10 +33,11 @@ class VendorPaymentLine(BaseModel):
             label='Amount Due', currency='IDR',
             virtual=True,
             editable_statuses=[],
+            compute='_compute_total',
         ),
         'paid_amount': MonetaryField(
             label='Payment', currency='IDR',
-            compute='_compute_total', depends=['bill_id'],
+            required=True,
         ),
     }
 
