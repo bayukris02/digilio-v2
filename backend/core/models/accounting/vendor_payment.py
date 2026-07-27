@@ -78,6 +78,14 @@ class VendorPayment(BaseModel):
             label='Total Payment', currency='IDR',
             compute='_compute_total_payment',
         ),
+        'total_allocation': MonetaryField(
+            label='Total Allocation', currency='IDR',
+            compute='_compute_summary',
+        ),
+        'remaining_amount': MonetaryField(
+            label='Remaining Amount', currency='IDR',
+            compute='_compute_summary',
+        ),
 
         'payment_lines': One2ManyField(
             label='Payment Lines',
@@ -123,6 +131,7 @@ class VendorPayment(BaseModel):
                     'columns': {'paid_amount': 'sum'},
                     'grand_total': 'total_amount',
                     'compute_deps': ['total_amount'],
+                    'after_grand_total': ['total_allocation', 'remaining_amount'],
                 },
             },
         ],
@@ -152,6 +161,31 @@ class VendorPayment(BaseModel):
         This compute method exists so the field is included in get_computed_fields(),
         allowing the SummaryCard to display the value via the compute API."""
         pass
+
+    def _compute_summary(self):
+        """Hitung Total Allocation (sum paid_amount dari lines) dan Remaining Amount."""
+        lines_data = getattr(self, '_tmp_one2many', {}).get('payment_lines', [])
+
+        # Fallback ke DB jika tidak ada tmp data
+        if not lines_data and self.pk:
+            fd = self._field_descriptors.get('payment_lines')
+            if fd:
+                from core.model_meta import ErpModelBase
+                child_model = ErpModelBase._model_registry.get(fd.relation)
+                if child_model:
+                    db_lines = child_model.objects.filter(
+                        **{fd.inverse_field: self.pk, 'is_deleted': False}
+                    )
+                    for line in db_lines:
+                        lines_data.append({
+                            'paid_amount': float(getattr(line, 'paid_amount', 0) or 0),
+                        })
+
+        total_alloc = sum(
+            float(l.get('paid_amount', 0) or 0) for l in lines_data
+        )
+        self.total_allocation = total_alloc
+        self.remaining_amount = (self.total_amount or 0) - total_alloc
 
     # ── Guards ──
 

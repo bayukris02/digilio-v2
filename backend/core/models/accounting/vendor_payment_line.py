@@ -36,7 +36,7 @@ class VendorPaymentLine(BaseModel):
             compute='_compute_total',
         ),
         'paid_amount': MonetaryField(
-            label='Payment', currency='IDR',
+            label='Payment Allocation', currency='IDR',
             required=True,
         ),
     }

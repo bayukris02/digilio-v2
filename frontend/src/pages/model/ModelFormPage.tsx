@@ -1854,6 +1854,9 @@ export default function ModelFormPage() {
                   items[idx] = { ...items[idx], [params.colDef.field!]: params.newValue };
                   return { ...prev, [relationField]: items };
                 });
+                // Force parent compute (SummaryCard) agar summary refresh
+                // setelah line value berubah — regardless of child compute result.
+                setSummaryRevision((v) => v + 1);
 
                 // 2. Many2One: auto-fill from related record
                 const editedField = childFields?.[params.colDef.field!];
