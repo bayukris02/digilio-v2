@@ -493,6 +493,7 @@ export default function ModelFormPage() {
           onCancel: () => {
             isRevertingRef.current = true;
             form.setFieldValue(fieldName, oldValue);
+            isRevertingRef.current = false;
           },
         });
       });
@@ -688,7 +689,8 @@ export default function ModelFormPage() {
               const extraParams: Record<string, string> = {};
               if (domain) {
                 Object.entries(domain).forEach(([relatedField, headerField]) => {
-                  const headerVal = form.getFieldValue(headerField);
+                  const isFormField = config?.fields?.[headerField] != null;
+                  const headerVal = isFormField ? form.getFieldValue(headerField) : headerField;
                   if (headerVal != null) {
                     extraParams[relatedField] = String(headerVal);
                   }
@@ -738,7 +740,8 @@ export default function ModelFormPage() {
         const domain = fMeta.domain as Record<string, string>;
         const extraParams: Record<string, string> = {};
         Object.entries(domain).forEach(([relatedField, headerField]) => {
-          const headerVal = form.getFieldValue(headerField);
+          const isFormField = config?.fields?.[headerField] != null;
+          const headerVal = isFormField ? form.getFieldValue(headerField) : headerField;
           if (headerVal != null) {
             extraParams[relatedField] = String(headerVal);
           }
@@ -1812,7 +1815,8 @@ export default function ModelFormPage() {
                     const extraParams: Record<string, string> = {};
                     if (domain) {
                       Object.entries(domain).forEach(([relatedField, headerField]) => {
-                        const headerVal = form.getFieldValue(headerField);
+                        const isFormField = config?.fields?.[headerField] != null;
+                        const headerVal = isFormField ? form.getFieldValue(headerField) : headerField;
                         if (headerVal != null) {
                           extraParams[relatedField] = String(headerVal);
                         }
