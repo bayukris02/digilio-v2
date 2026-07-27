@@ -70,6 +70,7 @@ const menuItems = [
       { key: '/accounting.vendor_bill', icon: <FormOutlined />, label: 'Tagihan' },
       { key: '/accounting.vendor_payment', icon: <DollarOutlined />, label: 'Pembayaran' },
       { key: '/accounting.customer_invoice', icon: <FileTextOutlined />, label: 'Faktur' },
+      { key: '/accounting.customer_receipt', icon: <DollarOutlined />, label: 'Penerimaan' },
       { key: '/accounting.payment_method', icon: <DollarOutlined />, label: 'Payment Methods' },
     ],
   },
