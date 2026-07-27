@@ -263,7 +263,7 @@ function renderField(
 
   if (field.type === 'date') {
     return (
-      <Form.Item label={label} name={key}>
+      <Form.Item label={label} name={key} rules={required ? [{ required: true, message: `${label} wajib diisi` }] : []}>
         <DatePicker format={DATE_FORMAT} style={{ width: '100%' }} disabled={disabled} />
       </Form.Item>
     );
