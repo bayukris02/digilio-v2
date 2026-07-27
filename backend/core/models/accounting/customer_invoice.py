@@ -90,12 +90,25 @@ class CustomerInvoice(BaseModel):
             relation='accounting.customer_invoice_line',
             inverse_field='invoice_id',
         ),
+
+        # ── Payment fields ──
+        'due_amount': MonetaryField(label='Amount Due', currency='IDR',
+            compute='_compute_payment_summary', depends=['grand_total', 'paid_amount']),
+        'paid_amount': MonetaryField(label='Paid', currency='IDR', default=0),
+        'payment_status': SelectionField(
+            label='Payment Status',
+            options=[('unpaid', 'Unpaid'), ('partial', 'Partial'), ('paid', 'Paid')],
+            compute='_compute_payment_summary',
+            depends=['grand_total', 'paid_amount'],
+            default='unpaid',
+            colors={'unpaid': 'red', 'partial': 'orange', 'paid': 'green'},
+        ),
     }
 
     _list_view = {
-        'columns': ['reference', 'sales_order', 'customer', 'invoice_date', 'due_date', 'status', 'grand_total'],
-        'filters': ['status', 'customer', 'invoice_date'],
-        'group_by': ['status', 'customer'],
+        'columns': ['reference', 'sales_order', 'customer', 'invoice_date', 'due_date', 'status', 'grand_total', 'due_amount', 'payment_status'],
+        'filters': ['status', 'customer', 'invoice_date', 'payment_status'],
+        'group_by': ['status', 'customer', 'payment_status'],
         'default_sort': ['-updated_at'],
     }
 
@@ -106,7 +119,8 @@ class CustomerInvoice(BaseModel):
                     'key': 'general',
                     'label': 'General',
                     'fields': ['reference', 'sales_order', 'customer', 'code', 'address',
-                               'invoice_date', 'due_date', 'status', 'sequence_id'],
+                               'invoice_date', 'due_date', 'status', 'sequence_id',
+                               'payment_status'],
                 },
                 {
                     'key': 'details',
@@ -136,6 +150,12 @@ class CustomerInvoice(BaseModel):
                     'lines': ['discount', 'manual_discount', 'tax', 'down_payment_amount'],
                     'inputs': ['manual_discount'],
                     'grand_total': 'grand_total',
+                    'after_grand_total': ['due_amount'],
+                    'child_details': {
+                        'label': 'Payments',
+                        'data_key': '_receipt_details',
+                        'model': 'accounting.customer_receipt',
+                    },
                 },
             },
         ],
@@ -221,6 +241,18 @@ class CustomerInvoice(BaseModel):
         ).first()
         self.down_payment_amount = dp_inv.grand_total if dp_inv else 0
 
+    def _compute_payment_summary(self):
+        """Hitung due_amount & payment_status berdasarkan grand_total dan paid_amount."""
+        paid = float(getattr(self, 'paid_amount', 0) or 0)
+        grand = float(getattr(self, 'grand_total', 0) or 0)
+        self.due_amount = max(grand - paid, 0)
+        if paid <= 0:
+            self.payment_status = 'unpaid'
+        elif paid >= grand:
+            self.payment_status = 'paid'
+        else:
+            self.payment_status = 'partial'
+
     # ── Legacy Actions ──
 
     def _action_print(self, *args, **kwargs):
@@ -244,4 +276,22 @@ class CustomerInvoice(BaseModel):
         data['tax'] = lines_tax
         data['manual_discount'] = lines_total * (manual_disc_pct / 100)
         data['grand_total'] = lines_total - lines_discount + lines_tax - data['manual_discount'] - dp_amount
+        return data
+
+    def to_record(self):
+        """Sertakan daftar receipt terkait untuk child_details di summary."""
+        data = super().to_record()
+        from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+        lines = CustomerReceiptLine.objects.filter(
+            invoice_id=self.pk, is_deleted=False
+        ).exclude(receipt_id__status='cancelled').order_by('pk')
+        data['_receipt_details'] = []
+        for line in lines:
+            r = line.receipt_id
+            data['_receipt_details'].append({
+                'id': r.pk,
+                'label': 'Receipt',
+                'ref': r.reference or f'#{r.pk}',
+                'amount': float(line.received_amount or 0),
+            })
         return data
