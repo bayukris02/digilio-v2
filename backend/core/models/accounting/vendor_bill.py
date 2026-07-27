@@ -151,6 +151,11 @@ class VendorBill(BaseModel):
                     'inputs': ['manual_discount'],
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],
+                    'child_details': {
+                        'label': 'Payments',
+                        'data_key': '_payment_details',
+                        'model': 'accounting.vendor_payment',
+                    },
                 },
             },
         ],
@@ -271,4 +276,22 @@ class VendorBill(BaseModel):
         data['tax'] = lines_tax
         data['manual_discount'] = lines_total * (manual_disc_pct / 100)
         data['grand_total'] = lines_total - lines_discount + lines_tax - data['manual_discount'] - dp_amount
+        return data
+
+    def to_record(self):
+        """Sertakan daftar payment terkait untuk child_details di summary."""
+        data = super().to_record()
+        from core.models.accounting.vendor_payment_line import VendorPaymentLine
+        lines = VendorPaymentLine.objects.filter(
+            bill_id=self.pk, is_deleted=False
+        ).exclude(payment_id__status='cancelled').order_by('pk')
+        data['_payment_details'] = []
+        for line in lines:
+            p = line.payment_id
+            data['_payment_details'].append({
+                'id': p.pk,
+                'label': 'Payment',
+                'ref': p.reference or f'#{p.pk}',
+                'amount': float(line.paid_amount or 0),
+            })
         return data

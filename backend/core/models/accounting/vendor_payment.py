@@ -203,27 +203,29 @@ class VendorPayment(BaseModel):
             self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
 
         # Update paid_amount pada setiap bill yang dialokasikan
-        lines = getattr(self, 'payment_lines', None)
-        if lines is not None:
-            lines = lines.filter(is_deleted=False)
-            for line in lines:
-                bill = line.bill_id
-                if bill:
-                    bill.paid_amount = (bill.paid_amount or 0) + (line.paid_amount or 0)
-                    bill._run_compute()
-                    bill.save()
+        from core.models.accounting.vendor_payment_line import VendorPaymentLine
+        lines = VendorPaymentLine.objects.filter(
+            payment_id=self.pk, is_deleted=False
+        )
+        for line in lines:
+            bill = line.bill_id
+            if bill:
+                bill.paid_amount = (bill.paid_amount or 0) + (line.paid_amount or 0)
+                bill._run_compute()
+                bill.save()
 
     def _effect_cancel(self):
         """Reverse paid_amount pada bill yang dialokasikan saat payment di-cancel."""
-        lines = getattr(self, 'payment_lines', None)
-        if lines is not None:
-            lines = lines.filter(is_deleted=False)
-            for line in lines:
-                bill = line.bill_id
-                if bill:
-                    bill.paid_amount = max((bill.paid_amount or 0) - (line.paid_amount or 0), 0)
-                    bill._run_compute()
-                    bill.save()
+        from core.models.accounting.vendor_payment_line import VendorPaymentLine
+        lines = VendorPaymentLine.objects.filter(
+            payment_id=self.pk, is_deleted=False
+        )
+        for line in lines:
+            bill = line.bill_id
+            if bill:
+                bill.paid_amount = max((bill.paid_amount or 0) - (line.paid_amount or 0), 0)
+                bill._run_compute()
+                bill.save()
 
     # ── Legacy Actions ──
 
