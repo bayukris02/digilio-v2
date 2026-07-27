@@ -5,3 +5,5 @@ from core.models.accounting.customer_invoice_line import CustomerInvoiceLine
 from core.models.accounting.payment_method import PaymentMethod
 from core.models.accounting.vendor_payment import VendorPayment
 from core.models.accounting.vendor_payment_line import VendorPaymentLine
+from core.models.accounting.customer_receipt import CustomerReceipt
+from core.models.accounting.customer_receipt_line import CustomerReceiptLine
