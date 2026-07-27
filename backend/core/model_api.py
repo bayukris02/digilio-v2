@@ -261,6 +261,22 @@ class ModelRecordView(APIView):
             if model_ref and hasattr(model_cls, 'model_ref'):
                 objs = objs.filter(**{'model_ref': model_ref})
 
+            # ── Generic field filtering from query params ──
+            # Model apa pun bisa difilter via: ?vendor=5&status=draft&payment_status=unpaid
+            # Many2One fields otomatis pakai _id suffix.
+            skip_params = {'page', 'page_size', 'model_ref'}
+            for param_key, param_val in request.query_params.items():
+                if param_key in skip_params or not param_val:
+                    continue
+                fd = model_cls._field_descriptors.get(param_key)
+                if fd:
+                    if fd.field_type == 'many2one':
+                        objs = objs.filter(**{f'{param_key}_id': param_val})
+                    else:
+                        objs = objs.filter(**{param_key: param_val})
+                elif hasattr(model_cls, param_key):
+                    objs = objs.filter(**{param_key: param_val})
+
             # Pagination: page_size=0 means "all records"
             page = int(request.query_params.get('page', 1))
             total = objs.count()

@@ -21,6 +21,7 @@ class VendorPaymentLine(BaseModel):
             label='Bill',
             relation='accounting.vendor_bill',
             required=True,
+            domain={'vendor': 'vendor'},
             autofill={'due_amount': 'due_amount', 'vendor_name': 'vendor'},
         ),
         'vendor_name': TextField(

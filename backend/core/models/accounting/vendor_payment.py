@@ -43,6 +43,7 @@ class VendorPayment(BaseModel):
             'to': 'cancelled',
             'label': 'Cancel',
             'icon': 'StopOutlined',
+            'effect': '_effect_cancel',
         },
     ]
 
@@ -58,6 +59,10 @@ class VendorPayment(BaseModel):
             relation='purchase.vendor',
             required=True,
             autofill={'address': 'address', 'code': 'code'},
+            confirm_onchange={
+                'message': 'Mengganti vendor akan mereset semua alokasi. Lanjutkan?',
+                'reset_relations': ['payment_lines'],
+            },
         ),
         'address': TextField(label='Alamat Vendor', virtual=True),
         'code': TextField(label='Kode Vendor', virtual=True),
@@ -109,6 +114,7 @@ class VendorPayment(BaseModel):
                 'key': 'allocations',
                 'label': 'Payment Allocations',
                 'relation': 'payment_lines',
+                'add_line_guard': ['vendor'],
                 'columns': [{'name': 'bill_id', 'display_field': 'reference'}, 'vendor_name', 'due_amount', 'paid_amount'],
                 'summary': {
                     'columns': {'paid_amount': 'sum'},
@@ -149,6 +155,29 @@ class VendorPayment(BaseModel):
         from core.sequence_engine import SequenceEngine
         if (self.reference or '').startswith('Draft#'):
             self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
+        # Update paid_amount pada setiap bill yang dialokasikan
+        lines = getattr(self, 'payment_lines', None)
+        if lines is not None:
+            lines = lines.filter(is_deleted=False)
+            for line in lines:
+                bill = line.bill_id
+                if bill:
+                    bill.paid_amount = (bill.paid_amount or 0) + (line.paid_amount or 0)
+                    bill._run_compute()
+                    bill.save()
+
+    def _effect_cancel(self):
+        """Reverse paid_amount pada bill yang dialokasikan saat payment di-cancel."""
+        lines = getattr(self, 'payment_lines', None)
+        if lines is not None:
+            lines = lines.filter(is_deleted=False)
+            for line in lines:
+                bill = line.bill_id
+                if bill:
+                    bill.paid_amount = max((bill.paid_amount or 0) - (line.paid_amount or 0), 0)
+                    bill._run_compute()
+                    bill.save()
 
     # ── Legacy Actions ──
 

@@ -11,7 +11,7 @@ class BaseField:
     field_type = None  # e.g., 'char', 'date', 'monetary'
     django_field_class = None
 
-    def __init__(self, label='', required=False, default=None, help_text='', compute=None, depends=None, chatter_show=True, unique=False, virtual=False, editable_statuses=None, placeholder=None, hidden_statuses=None, onchange=None, line_onchange=None):
+    def __init__(self, label='', required=False, default=None, help_text='', compute=None, depends=None, chatter_show=True, unique=False, virtual=False, editable_statuses=None, placeholder=None, hidden_statuses=None, onchange=None, line_onchange=None, confirm_onchange=None):
         self.label = label
         self.required = required
         self.default = default
@@ -26,6 +26,7 @@ class BaseField:
         self.hidden_statuses = hidden_statuses  # e.g., ['draft'] — hide field at these statuses
         self.onchange = onchange or {}  # {target_field: target_value} — reset field saat nilai berubah
         self.line_onchange = line_onchange or {}  # {target_field: target_value} — reset line field saat nilai berubah
+        self.confirm_onchange = confirm_onchange  # {message, reset_relations} — konfirmasi + reset lines
 
     def to_config(self):
         """Return JSON-serialisable config for the frontend."""
@@ -57,6 +58,8 @@ class BaseField:
             cfg['onchange'] = self.onchange
         if self.line_onchange:
             cfg['line_onchange'] = self.line_onchange
+        if self.confirm_onchange:
+            cfg['confirm_onchange'] = self.confirm_onchange
         return cfg
 
     def to_python(self, value):
@@ -321,16 +324,19 @@ class Many2OneField(BaseField):
     field_type = 'many2one'
     django_field_class = dj_models.ForeignKey
 
-    def __init__(self, label='', required=False, relation=None, help_text='', autofill=None, **kwargs):
+    def __init__(self, label='', required=False, relation=None, help_text='', autofill=None, domain=None, **kwargs):
         super().__init__(label, required, help_text=help_text, **kwargs)
         self.relation = relation  # e.g., 'res.partner' or PartnerModel class
         self.autofill = autofill or {}
+        self.domain = domain or {}  # {related_field: header_field} — filter options by header field
 
     def to_config(self):
         cfg = super().to_config()
         cfg['relation'] = self.relation
         if self.autofill:
             cfg['autofill'] = self.autofill
+        if self.domain:
+            cfg['domain'] = self.domain
         return cfg
 
     def to_python(self, value):

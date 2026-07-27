@@ -407,6 +407,10 @@ export default function ModelFormPage() {
   // Force form remount on data load — ensures initialValues applied correctly
   const [loadKey, setLoadKey] = useState(0);
 
+  // ── confirm_onchange: track previous field values + revert state ──
+  const prevFieldValuesRef = useRef<Record<string, unknown>>({});
+  const isRevertingRef = useRef(false);
+
   // ── Save status tracking ──
   const lastSnapshotRef = useRef<string>('');         // JSON form values saat terakhir save
   const [dirtyFlag, setDirtyFlag] = useState(false);
@@ -459,8 +463,41 @@ export default function ModelFormPage() {
           });
         }
       });
+
+      // confirm_onchange: jika field berubah dan ada line items → konfirmasi dulu
+      // definisinya di model: Many2OneField(..., confirm_onchange={message, reset_relations})
+      Object.entries(changedValues).forEach(([fieldName, newValue]) => {
+        const fieldCfg = config.fields?.[fieldName];
+        const confirmCfg = fieldCfg?.confirm_onchange as Record<string, unknown> | undefined;
+        if (!confirmCfg || isRevertingRef.current) return;
+        const oldValue = prevFieldValuesRef.current[fieldName];
+        if (oldValue === newValue || oldValue === undefined) return;
+        const resetRels = (confirmCfg.reset_relations as string[]) || [];
+        const hasLines = resetRels.some((rel: string) => {
+          const items = lineItems[rel] || [];
+          return items.filter((item) => !item._isAddButton).length > 0;
+        });
+        if (!hasLines) return;
+        Modal.confirm({
+          title: 'Konfirmasi Perubahan',
+          content: (confirmCfg.message as string) || 'Mengubah nilai ini akan mereset data baris. Lanjutkan?',
+          onOk: () => {
+            setLineItems((prev) => {
+              const updated = { ...prev };
+              resetRels.forEach((rel: string) => { updated[rel] = []; });
+              return updated;
+            });
+            setSummaryRevision((v) => v + 1);
+            prevFieldValuesRef.current = { ...prevFieldValuesRef.current, [fieldName]: newValue };
+          },
+          onCancel: () => {
+            isRevertingRef.current = true;
+            form.setFieldValue(fieldName, oldValue);
+          },
+        });
+      });
     }
-  }, [form, config, setLineItems]);
+  }, [form, config, setLineItems, lineItems, setSummaryRevision]);
 
   // ── Fetch model config (once per model) ──
   useEffect(() => {
@@ -497,6 +534,18 @@ export default function ModelFormPage() {
     setChildConfigs({});
     setMany2oneOptions({});
   }, [recordId]);
+
+  // ── Init prevFieldValuesRef for confirm_onchange fields when config loads ──
+  useEffect(() => {
+    if (!config) return;
+    const initial: Record<string, unknown> = {};
+    Object.entries(config.fields || {}).forEach(([key, field]) => {
+      if ((field as any).confirm_onchange) {
+        initial[key] = form.getFieldValue(key);
+      }
+    });
+    prevFieldValuesRef.current = initial;
+  }, [config, form]);
 
   // ── Fetch record or set defaults ──
   useEffect(() => {
@@ -634,7 +683,18 @@ export default function ModelFormPage() {
                 ? (tab.columns as any[]).find((c) => typeof c === 'object' && c.name === fKey)
                 : undefined;
               const displayField = (tabColumn as any)?.display_field;
-              modelApi.listRecords(relName).then((response) => {
+              // domain: filter pre-fetch options berdasarkan field header
+              const domain = (fMeta as any)?.domain as Record<string, string> | undefined;
+              const extraParams: Record<string, string> = {};
+              if (domain) {
+                Object.entries(domain).forEach(([relatedField, headerField]) => {
+                  const headerVal = form.getFieldValue(headerField);
+                  if (headerVal != null) {
+                    extraParams[relatedField] = String(headerVal);
+                  }
+                });
+              }
+              modelApi.listRecords(relName, undefined, undefined, extraParams).then((response) => {
                 const opts = response.results.map((r) => ({
                   ...r,  // spread all fields (price, description, uom, etc.) for autofill
                   value: r.id as number,
@@ -663,6 +723,47 @@ export default function ModelFormPage() {
       }
     }
   }, [config, recordData]);
+
+  // ── Domain refetch: saat header field berubah, refetch many2one options ──
+  const headerFieldForDomain = Form.useWatch('vendor', form);
+  useEffect(() => {
+    if (!config || !Object.keys(childConfigs).length) return;
+    const tabs = config?.form_view?.notebook || [];
+    tabs.forEach((tab: { relation?: string; columns?: any[] }) => {
+      if (!tab.relation) return;
+      const childCfg = childConfigs[tab.relation];
+      if (!childCfg?.fields) return;
+      Object.entries(childCfg.fields).forEach(([fKey, fMeta]: [string, any]) => {
+        if (fMeta.type !== 'many2one' || !fMeta.relation || !fMeta.domain) return;
+        const domain = fMeta.domain as Record<string, string>;
+        const extraParams: Record<string, string> = {};
+        Object.entries(domain).forEach(([relatedField, headerField]) => {
+          const headerVal = form.getFieldValue(headerField);
+          if (headerVal != null) {
+            extraParams[relatedField] = String(headerVal);
+          }
+        });
+        if (!Object.keys(extraParams).length) return;
+        const tabColumn = Array.isArray(tab.columns)
+          ? tab.columns.find((c: any) => typeof c === 'object' && c.name === fKey)
+          : undefined;
+        const displayField = (tabColumn as any)?.display_field;
+        modelApi.listRecords(fMeta.relation, undefined, undefined, extraParams).then((response) => {
+          const opts = response.results.map((r: any) => ({
+            ...r,
+            value: r.id as number,
+            label: displayField
+              ? ((r[displayField] as string) || `#${r.id}`)
+              : ((r.name as string) || `#${r.id}`),
+          }));
+          setMany2oneOptions((prev) => ({
+            ...prev,
+            [`${tab.relation}.${fKey}`]: opts,
+          }));
+        }).catch(() => {});
+      });
+    });
+  }, [headerFieldForDomain, config, childConfigs]);
 
   // ── Stepper steps from status field ──
   const stepperSteps = useMemo(() => {
@@ -1153,6 +1254,23 @@ export default function ModelFormPage() {
   // ── One2Many line item helpers ──
   const addLine = useCallback((relationField: string) => {
     const childCfg = childConfigs[relationField];
+
+    // ── add_line_guard: pastikan field header wajib sudah diisi sebelum add line ──
+    // definisinya di notebook tab: { ..., add_line_guard: ['vendor', 'payment_method'] }
+    const notebookTabs = config?.form_view?.notebook || [];
+    const tab = notebookTabs.find((t: { relation?: string }) => t.relation === relationField);
+    const guardFields = (tab as any)?.add_line_guard as string[] | undefined;
+    if (guardFields && guardFields.length > 0) {
+      for (const gf of guardFields) {
+        const val = form.getFieldValue(gf);
+        if (!val) {
+          const fieldLabel = config?.fields?.[gf]?.label || gf;
+          message.warning(`Isi ${fieldLabel} terlebih dahulu`);
+          return;
+        }
+      }
+    }
+
     // ── Validate required fields on last line before adding new one ──
     const items = lineItems[relationField] || [];
     if (items.length > 0) {
@@ -1187,7 +1305,7 @@ export default function ModelFormPage() {
       ...prev,
       [relationField]: [...(prev[relationField] || []), newItem],
     }));
-  }, [childConfigs, lineItems]);
+  }, [childConfigs, lineItems, config, form]);
 
   const deleteLine = useCallback((relationField: string, key: string) => {
     setLineItems((prev) => ({
@@ -1688,7 +1806,19 @@ export default function ModelFormPage() {
                 if (childCfg?.fields && fieldName) {
                   const fieldMeta = childCfg.fields[fieldName];
                   if (fieldMeta?.type === 'many2one' && fieldMeta.relation) {
-                    modelApi.listRecords(fieldMeta.relation)
+                    // domain: filter related records berdasarkan field header
+                    // definisi di Many2OneField: domain={'vendor': 'vendor'}
+                    const domain = (fieldMeta as any)?.domain as Record<string, string> | undefined;
+                    const extraParams: Record<string, string> = {};
+                    if (domain) {
+                      Object.entries(domain).forEach(([relatedField, headerField]) => {
+                        const headerVal = form.getFieldValue(headerField);
+                        if (headerVal != null) {
+                          extraParams[relatedField] = String(headerVal);
+                        }
+                      });
+                    }
+                    modelApi.listRecords(fieldMeta.relation, undefined, undefined, extraParams)
                       .then((response) => {
                         const opts = response.results.map((r) => ({
                           ...r,
