@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Typography, Card, Input, Select, DatePicker, Space, Button, Dropdown, Checkbox, message, Spin, Popover, Radio, Modal, Tag, Pagination,
+  Typography, Card, Input, Select, DatePicker, Space, Button, Dropdown, Checkbox, message, Spin, Popover, Radio, Modal, Tag,
 } from 'antd';
 import {
   SearchOutlined, DeleteOutlined, DownloadOutlined, SettingOutlined, FilterOutlined, DownOutlined, PlusOutlined, BarsOutlined, UploadOutlined,
@@ -34,54 +34,27 @@ export default function ModelListPage() {
   const [groupByField, setGroupByField] = useState<string | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
-  // ── Server-side pagination state ──
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
-  const [total, setTotal] = useState(0);
-  const [searchText, setSearchText] = useState('');
+  // ── AG Grid handles pagination & search client-side (all records loaded) ──
 
-  // ── Debounce global search ──
-  // Ketik di search box → tunggu 300ms idle → baru trigger re-fetch
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (quickFilter !== searchText) {
-        setSearchText(quickFilter);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickFilter]);
-
-  // Reset ke page 1 saat search berubah
-  useEffect(() => {
-    setPage(1);
-  }, [searchText]);
-
-  // ── Fetch config + records (with server-side pagination) ──
+  // ── Fetch config + all records ──
+  // Load all records once — AG Grid handles pagination & search client-side
   useEffect(() => {
     if (!apiModelName) return;
     setLoading(true);
 
-    // When groupBy is active, load ALL records (grouping needs full dataset)
-    const shouldPaginate = !groupByField;
-    const fetchPage = shouldPaginate ? page : 1;
-    const fetchSize = shouldPaginate ? pageSize : 999999;
-    const extraParams = searchText ? { search: searchText } : undefined;
-
     Promise.all([
       modelApi.getConfig(apiModelName),
-      modelApi.listRecords(apiModelName, fetchPage, fetchSize, extraParams),
+      modelApi.listRecords(apiModelName, 1, 0),  // page_size=0 = all records
     ])
       .then(([cfg, resp]) => {
         setConfig(cfg);
         setRecords(resp.results);
-        setTotal(resp.count);
       })
       .catch((err) => {
         message.error('Failed to load model: ' + (err?.message || 'Unknown error'));
       })
       .finally(() => setLoading(false));
-  }, [modelName, page, pageSize, groupByField, searchText]);
+  }, [apiModelName]);
 
   // ── Build AG Grid columns from field config ──
   const fieldList = useMemo(() => {
@@ -114,7 +87,20 @@ export default function ModelListPage() {
         sortable: false,
         filter: false,
         pinned: 'left' as const,
-        valueGetter: (params) => (params.node?.rowIndex ?? 0) + 1,
+        valueGetter: (params) => {
+          // Use forEachNodeAfterFilterAndSort so row numbers are sequential
+          // even after quickFilterText or column filter is active
+          if (params.api) {
+            let idx = -1;
+            params.api.forEachNodeAfterFilterAndSort((node, index) => {
+              if (node.data?.id === params.data?.id) {
+                idx = index;
+              }
+            });
+            if (idx >= 0) return idx + 1;
+          }
+          return (params.node?.rowIndex ?? 0) + 1;
+        },
       },
       ...fieldList.map(({ key, field }) => {
       const col: ColDef = {
@@ -157,9 +143,12 @@ export default function ModelListPage() {
       } else if (field.type === 'integer') {
         col.filter = 'agNumberColumnFilter';
       } else if (field.type === 'many2one') {
+        col.valueGetter = (params: Record<string, unknown>) => {
+          const val = (params as any).data?.[key];
+          return (val as Record<string, unknown>)?.name as string || '';
+        };
         col.cellRenderer = (params: ICellRendererParams) => {
-          const val = params.value;
-          return <span>{(val as Record<string, unknown>)?.name as string || ''}</span>;
+          return <span>{params.value}</span>;
         };
       }
 
@@ -293,10 +282,9 @@ export default function ModelListPage() {
                             await modelApi.deleteRecord(apiModelName, row.id as number);
                           }
                           message.success(`${selectedRows.length} record(s) deleted`);
-                          // Refresh list with current page
-                          const resp = await modelApi.listRecords(apiModelName, page, pageSize);
+                          // Refresh list
+                          const resp = await modelApi.listRecords(apiModelName, 1, 0);
                           setRecords(resp.results);
-                          setTotal(resp.count);
                           setSelectedRows([]);
                         } catch (err) {
                           message.error((err as Error)?.message || 'Delete failed');
@@ -435,6 +423,9 @@ export default function ModelListPage() {
             rowSelection={{ mode: 'multiRow', selectAll: 'filtered' }}
             onSelectionChanged={onSelectionChanged}
             quickFilterText={quickFilter}
+            pagination={true}
+            paginationPageSize={50}
+            paginationPageSizeSelector={[10, 20, 50, 100]}
             animateRows
             theme={themeBalham}
             onRowDoubleClicked={(e) => {
@@ -445,39 +436,14 @@ export default function ModelListPage() {
           />
         </div>
       </Card>
-      {/* ═══ PAGINATION BAR ═══ */}
-      {!groupByField && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, color: '#888' }}>
-            {total} record
-          </span>
-          <Pagination
-            current={page}
-            pageSize={pageSize}
-            total={total}
-            showSizeChanger
-            pageSizeOptions={[10, 20, 50, 100]}
-            onChange={(p, ps) => {
-              if (ps !== pageSize) {
-                setPageSize(ps);
-                setPage(1);
-              } else {
-                setPage(p);
-              }
-            }}
-            showTotal={false}
-          />
-        </div>
-      )}
       <ImportModal
         open={importModalOpen}
         modelName={modelName!}
         apiModelName={apiModelName}
         onClose={() => setImportModalOpen(false)}
         onSuccess={async () => {
-          const resp = await modelApi.listRecords(apiModelName, page, pageSize);
+          const resp = await modelApi.listRecords(apiModelName, 1, 0);
           setRecords(resp.results);
-          setTotal(resp.count);
         }}
       />
     </div>
