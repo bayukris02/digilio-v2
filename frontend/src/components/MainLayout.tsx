@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Layout, Menu, Button, theme } from 'antd';
+import { Layout, Menu, Button } from 'antd';
 import {
   DashboardOutlined,
   MenuFoldOutlined,
@@ -121,7 +121,6 @@ export default function MainLayout() {
   const location = useLocation();
   const logout = useAuthStore((s) => s.logout);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { token } = theme.useToken();
 
   const currentModule = getModuleKey(location.pathname);
   const selectedItem = menuItems.find((m) => m.key === currentModule);
@@ -289,11 +288,14 @@ export default function MainLayout() {
       <Layout style={{ height: '100vh' }}>
         <Header
           style={{
-            padding: '0 24px',
-            background: token.colorBgContainer,
+            height: 48,
+            lineHeight: '48px',
+            padding: '0 16px',
+            background: '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            borderBottom: '1px solid #f0f0f0',
           }}
         >
           <Button
@@ -305,7 +307,7 @@ export default function MainLayout() {
             Logout
           </Button>
         </Header>
-        <Content style={{ margin: 12, overflow: 'auto', height: 'calc(100vh - 64px)' }}>
+        <Content style={{ margin: 12, overflow: 'auto', height: 'calc(100vh - 48px)' }}>
           <Outlet />
         </Content>
       </Layout>
