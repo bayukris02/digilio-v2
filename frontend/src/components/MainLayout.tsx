@@ -19,6 +19,9 @@ import {
   CarOutlined,
   TagOutlined,
   FileTextOutlined,
+  PieChartOutlined,
+  UnorderedListOutlined,
+  FileAddOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
@@ -32,9 +35,24 @@ const menuItems = [
     icon: <ShoppingCartOutlined />,
     label: 'Purchase',
     children: [
-      { key: '/purchase.order', icon: <FormOutlined />, label: 'Purchase Order' },
-      { key: '/purchase.goods_receipt', icon: <ImportOutlined />, label: 'Goods Receipt' },
-      { key: '/purchase.vendor', icon: <TeamOutlined />, label: 'Vendor' },
+      { key: '/purchase/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
+      { key: '/purchase/insight', icon: <PieChartOutlined />, label: 'Insight' },
+      { type: 'group', label: 'OPERATION', children: [
+        { key: '/purchase.request', icon: <FileAddOutlined />, label: 'Purchase Request' },
+        { key: '/purchase.order', icon: <FormOutlined />, label: 'Purchase Order' },
+        { key: '/purchase.goods_receipt', icon: <ImportOutlined />, label: 'Goods Receipt' },
+        { key: '/purchase.quick_purchase', icon: <FormOutlined />, label: 'Quick Purchase' },
+      ]},
+      { type: 'group', label: 'MASTER DATA', children: [
+        { key: '/purchase.vendor', icon: <TeamOutlined />, label: 'Vendor' },
+        { key: '/inventory.product', icon: <AppstoreOutlined />, label: 'Product' },
+        { key: '/purchase.order_template', icon: <FileTextOutlined />, label: 'Order Template' },
+        { key: '/purchase.vendor_pricelist', icon: <DollarOutlined />, label: 'Vendor Pricelist' },
+      ]},
+      { type: 'group', label: 'REPORT', children: [
+        { key: '/purchase/pivot', icon: <PieChartOutlined />, label: 'Purchase Pivot' },
+        { key: '/purchase/detail', icon: <UnorderedListOutlined />, label: 'Purchase Detail' },
+      ]},
     ],
   },
   {
@@ -89,7 +107,7 @@ const topLevelItems = menuItems.map(({ key, icon, label }) => ({ key, icon, labe
 
 function getModuleKey(pathname: string): string {
   if (pathname === '/') return '/';
-  if (pathname.startsWith('/purchase.')) return 'purchase';
+  if (pathname.startsWith('/purchase.') || pathname.startsWith('/purchase/')) return 'purchase';
   if (pathname.startsWith('/sales.')) return 'sales';
   if (pathname.startsWith('/inventory.')) return 'inventory';
   if (pathname.startsWith('/accounting.')) return 'accounting';
@@ -162,7 +180,7 @@ export default function MainLayout() {
       {/* Sidebar 2: Submenu items for selected module */}
       {subItems.length > 0 && (
         <Sider
-          width={200}
+          width={160}
           theme="dark"
           style={{
             overflow: 'auto',
@@ -178,7 +196,7 @@ export default function MainLayout() {
               paddingLeft: 20,
               color: 'rgba(255,255,255,0.45)',
               fontWeight: 600,
-              fontSize: 13,
+              fontSize: 12,
               textTransform: 'uppercase',
               letterSpacing: '0.8px',
             }}
@@ -189,7 +207,11 @@ export default function MainLayout() {
             theme="dark"
             mode="inline"
             selectedKeys={[location.pathname]}
-            items={subItems}
+            items={subItems.map(item => ({
+              ...item,
+              label: <span style={{ whiteSpace: 'normal', lineHeight: 1.4, wordBreak: 'break-word' }}>{item.label}</span>,
+            }))}
+            style={{ fontSize: 12 }}
             onClick={({ key }) => navigate(key)}
           />
         </Sider>
