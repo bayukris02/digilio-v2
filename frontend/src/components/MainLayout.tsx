@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Layout, Menu, Button, theme } from 'antd';
 import {
   DashboardOutlined,
@@ -6,9 +6,6 @@ import {
   MenuUnfoldOutlined,
   LogoutOutlined,
   FormOutlined,
-  UnorderedListOutlined,
-  PieChartOutlined,
-  TableOutlined,
   AppstoreOutlined,
   ShoppingCartOutlined,
   ImportOutlined,
@@ -87,22 +84,31 @@ const menuItems = [
   },
 ];
 
+// Top-level items for sidebar 1 (icon-only when collapsed)
+const topLevelItems = menuItems.map(({ key, icon, label }) => ({ key, icon, label }));
+
+function getModuleKey(pathname: string): string {
+  if (pathname === '/') return '/';
+  if (pathname.startsWith('/purchase.')) return 'purchase';
+  if (pathname.startsWith('/sales.')) return 'sales';
+  if (pathname.startsWith('/inventory.')) return 'inventory';
+  if (pathname.startsWith('/accounting.')) return 'accounting';
+  if (pathname.startsWith('/settings.')) return 'settings';
+  return '/';
+}
+
 export default function MainLayout() {
-  const [collapsed, setCollapsed] = useState(false);
+  const [sidebar1Collapsed, setSidebar1Collapsed] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((s) => s.logout);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { token } = theme.useToken();
 
-  // Auto-open parent submenu based on current path
-  const parentKey = location.pathname === '/' ? '' : location.pathname.startsWith('/docs') || location.pathname.startsWith('/form') || location.pathname.startsWith('/list') || location.pathname.startsWith('/report') ? 'base' : location.pathname.startsWith('/purchase.') ? 'purchase' : location.pathname.startsWith('/sales.') ? 'sales' : location.pathname.startsWith('/inventory.') ? 'inventory' : location.pathname.startsWith('/accounting.') ? 'accounting' : location.pathname.startsWith('/settings.') ? 'settings' : 'base';
-  const [openKeys, setOpenKeys] = useState<string[]>(parentKey ? [parentKey] : []);
-
-  // Sync openKeys when path changes
-  useEffect(() => {
-    setOpenKeys(parentKey ? [parentKey] : []);
-  }, [location.pathname]);
+  const currentModule = getModuleKey(location.pathname);
+  const selectedItem = menuItems.find((m) => m.key === currentModule);
+  const subItems = selectedItem?.children || [];
+  const selectedModuleLabel = selectedItem?.label;
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -110,13 +116,15 @@ export default function MainLayout() {
 
   return (
     <Layout style={{ height: '100vh' }}>
+      {/* Sidebar 1: Main module icons — default collapsed */}
       <Sider
         collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        breakpoint="lg"
+        collapsed={sidebar1Collapsed}
+        onCollapse={setSidebar1Collapsed}
+        collapsedWidth={56}
+        width={180}
         theme="dark"
-        style={{ overflow: 'auto', position: 'sticky', top: 0, height: '100vh' }}
+        style={{ overflow: 'auto', height: '100vh' }}
       >
         <div
           style={{
@@ -126,24 +134,68 @@ export default function MainLayout() {
             justifyContent: 'center',
             color: '#fff',
             fontWeight: 'bold',
-            fontSize: collapsed ? 16 : 20,
+            fontSize: sidebar1Collapsed ? 16 : 20,
           }}
         >
-          {collapsed ? 'DE' : 'Digilio ERP'}
+          {sidebar1Collapsed ? 'DE' : 'Digilio ERP'}
         </div>
         <Menu
           theme="dark"
           mode="inline"
-          selectedKeys={[location.pathname]}
-          openKeys={openKeys}
-          onOpenChange={setOpenKeys}
-          items={menuItems}
+          selectedKeys={[currentModule]}
+          inlineCollapsed={sidebar1Collapsed}
+          items={topLevelItems}
           onClick={({ key }) => {
-            // Only navigate for leaf menu items (not submenu groups)
-            if (key !== 'base' && key !== 'purchase' && key !== 'sales' && key !== 'inventory' && key !== 'settings' && key !== 'accounting') navigate(key);
+            if (key === '/') {
+              navigate('/');
+            } else {
+              // Navigate to first child of selected module
+              const module = menuItems.find((m) => m.key === key);
+              if (module?.children?.[0]) {
+                navigate(module.children[0].key);
+              }
+            }
           }}
         />
       </Sider>
+
+      {/* Sidebar 2: Submenu items for selected module */}
+      {subItems.length > 0 && (
+        <Sider
+          width={200}
+          theme="dark"
+          style={{
+            overflow: 'auto',
+            height: '100vh',
+            borderLeft: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          <div
+            style={{
+              height: 64,
+              display: 'flex',
+              alignItems: 'center',
+              paddingLeft: 20,
+              color: 'rgba(255,255,255,0.45)',
+              fontWeight: 600,
+              fontSize: 13,
+              textTransform: 'uppercase',
+              letterSpacing: '0.8px',
+            }}
+          >
+            {selectedModuleLabel}
+          </div>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[location.pathname]}
+            items={subItems}
+            onClick={({ key }) => navigate(key)}
+          />
+        </Sider>
+      )}
+
+      {/* Main content area */}
       <Layout style={{ height: '100vh' }}>
         <Header
           style={{
@@ -156,8 +208,8 @@ export default function MainLayout() {
         >
           <Button
             type="text"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed(!collapsed)}
+            icon={sidebar1Collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setSidebar1Collapsed(!sidebar1Collapsed)}
           />
           <Button type="text" icon={<LogoutOutlined />} onClick={logout}>
             Logout
