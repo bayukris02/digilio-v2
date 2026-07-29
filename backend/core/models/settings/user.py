@@ -102,6 +102,20 @@ class User(models.Model, metaclass=ErpModelBase):
         data['display_name'] = self.get_display_name()
         return data
 
+    def to_list_record(self, batch_counts=None):
+        """Lightweight serialization for list views."""
+        columns = getattr(self, '_list_view', {}).get('columns', [])
+        data = {}
+        for fname in columns:
+            val = getattr(self, fname, None)
+            fd = self._field_descriptors.get(fname)
+            if fd and hasattr(fd, 'to_representation'):
+                val = fd.to_representation(val)
+            data[fname] = val
+        data['id'] = self.pk
+        data['display_name'] = self.get_display_name()
+        return data
+
     def get_display_name(self):
         """Return a human-readable label for this record."""
         if self.first_name and self.last_name:
@@ -119,3 +133,8 @@ class User(models.Model, metaclass=ErpModelBase):
     @classmethod
     def get_computed_fields(cls):
         return []
+
+    @classmethod
+    def batch_compute_smart_button_counts(cls, records):
+        """No smart buttons on User model."""
+        return {}
