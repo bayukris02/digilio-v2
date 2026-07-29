@@ -134,6 +134,73 @@ export default function MainLayout() {
 
   return (
     <Layout style={{ height: '100vh' }}>
+      {/* Custom CSS for sidebar styling */}
+      <style>{`
+        /* ── Sidebar 2: detail menu ── */
+        .sidebar2-menu .ant-menu-item {
+          height: 30px !important;
+          line-height: 30px !important;
+          margin: 0 !important;
+          padding: 0 16px !important;
+          width: 100% !important;
+          border-radius: 0 !important;
+          font-size: 10px !important;
+        }
+        .sidebar2-menu .ant-menu-item:hover {
+          background: rgba(255,255,255,0.06) !important;
+        }
+        .sidebar2-menu .ant-menu-item-selected {
+          background: rgba(24,144,255,0.12) !important;
+        }
+        .sidebar2-menu .ant-menu-item-selected::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 3px;
+          bottom: 3px;
+          width: 3px;
+          background: #1677ff;
+          border-radius: 0 2px 2px 0;
+        }
+        .sidebar2-menu .ant-menu-title-content {
+          white-space: normal !important;
+          word-break: break-word !important;
+          line-height: 1.35 !important;
+        }
+        .sidebar2-menu .ant-menu-item-group-title {
+          font-size: 9px !important;
+          color: rgba(255,255,255,0.25) !important;
+          letter-spacing: 0.6px !important;
+          text-transform: uppercase !important;
+          padding: 8px 16px 2px !important;
+          margin-top: 4px !important;
+          border-top: 1px solid rgba(255,255,255,0.06) !important;
+          line-height: 1.2 !important;
+        }
+        .sidebar2-menu .ant-menu-item-group:first-of-type .ant-menu-item-group-title {
+          border-top: none !important;
+          margin-top: 0 !important;
+        }
+        .sidebar2-menu .ant-menu-item-group:first-of-type {
+          margin-top: 4px;
+        }
+
+        /* ── Scrollbar minimalis ── */
+        .sidebar-scroll::-webkit-scrollbar {
+          width: 3px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.08);
+          border-radius: 3px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.18);
+        }
+      `}</style>
+
       {/* Sidebar 1: Main module icons — default collapsed */}
       <Sider
         collapsible
@@ -142,20 +209,22 @@ export default function MainLayout() {
         collapsedWidth={56}
         width={180}
         theme="dark"
+        className="sidebar-scroll"
         style={{ overflow: 'auto', height: '100vh' }}
       >
         <div
           style={{
-            height: 64,
+            height: 48,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: '#fff',
             fontWeight: 'bold',
-            fontSize: sidebar1Collapsed ? 16 : 20,
+            fontSize: sidebar1Collapsed ? 14 : 18,
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          {sidebar1Collapsed ? 'DE' : 'Digilio ERP'}
+          {sidebar1Collapsed ? 'D' : 'Digilio'}
         </div>
         <Menu
           theme="dark"
@@ -182,6 +251,7 @@ export default function MainLayout() {
         <Sider
           width={160}
           theme="dark"
+          className="sidebar-scroll"
           style={{
             overflow: 'auto',
             height: '100vh',
@@ -190,28 +260,26 @@ export default function MainLayout() {
         >
           <div
             style={{
-              height: 64,
+              height: 48,
               display: 'flex',
               alignItems: 'center',
-              paddingLeft: 20,
-              color: 'rgba(255,255,255,0.45)',
+              padding: '0 16px',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              color: 'rgba(255,255,255,0.55)',
               fontWeight: 600,
-              fontSize: 12,
+              fontSize: 11,
+              letterSpacing: '0.5px',
               textTransform: 'uppercase',
-              letterSpacing: '0.8px',
             }}
           >
             {selectedModuleLabel}
           </div>
           <Menu
+            className="sidebar2-menu"
             theme="dark"
             mode="inline"
             selectedKeys={[location.pathname]}
-            items={subItems.map(item => ({
-              ...item,
-              label: <span style={{ whiteSpace: 'normal', lineHeight: 1.4, wordBreak: 'break-word' }}>{item.label}</span>,
-            }))}
-            style={{ fontSize: 12 }}
+            items={subItems}
             onClick={({ key }) => navigate(key)}
           />
         </Sider>
