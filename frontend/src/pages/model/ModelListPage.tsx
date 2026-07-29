@@ -4,7 +4,7 @@ import {
   Typography, Card, Input, Select, DatePicker, Space, Button, Dropdown, Checkbox, message, Spin, Popover, Radio, Modal, Tag,
 } from 'antd';
 import {
-  SearchOutlined, DeleteOutlined, DownloadOutlined, SettingOutlined, FilterOutlined, DownOutlined, PlusOutlined, BarsOutlined, UploadOutlined,
+  SearchOutlined, DeleteOutlined, DownloadOutlined, SettingOutlined, FilterOutlined, DownOutlined, PlusOutlined, BarsOutlined, UploadOutlined, ReloadOutlined,
 } from '@ant-design/icons';
 import { AgGridReact } from 'ag-grid-react';
 import type { ColDef, ICellRendererParams } from 'ag-grid-community';
@@ -33,6 +33,7 @@ export default function ModelListPage() {
   const [filterValues, setFilterValues] = useState<Record<string, string | null>>({});
   const [groupByField, setGroupByField] = useState<string | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // ── AG Grid handles pagination & search client-side (all records loaded) ──
 
@@ -54,6 +55,20 @@ export default function ModelListPage() {
         message.error('Failed to load model: ' + (err?.message || 'Unknown error'));
       })
       .finally(() => setLoading(false));
+  }, [apiModelName]);
+
+  // ── Refresh data without resetting grid state (filter/search/group preserved) ──
+  const refreshData = useCallback(async () => {
+    if (!apiModelName) return;
+    setRefreshing(true);
+    try {
+      const resp = await modelApi.listRecords(apiModelName, 1, 0);
+      setRecords(resp.results);
+    } catch (err) {
+      message.error('Failed to refresh: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setRefreshing(false);
+    }
   }, [apiModelName]);
 
   // ── Build AG Grid columns from field config ──
@@ -332,6 +347,11 @@ export default function ModelListPage() {
             onChange={(e) => onQuickFilter(e.target.value)}
             style={{ width: 200 }}
             allowClear
+          />
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={refreshData}
+            loading={refreshing}
           />
           {filterConfigs.length > 0 && (
             <Popover
