@@ -23,6 +23,8 @@ class PurchaseRequest(BaseModel):
             'to': 'confirmed',
             'label': 'Confirm',
             'icon': 'CheckOutlined',
+            'guard': '_guard_confirm',
+            'effect': '_effect_confirm',
         },
         {
             'name': 'cancel',
@@ -34,6 +36,11 @@ class PurchaseRequest(BaseModel):
     ]
 
     _fields = {
+        'sequence_id': Many2OneField(
+            label='Document Type',
+            relation='settings.sequence',
+            help_text='Pilih format nomor dokumen (PR, dll)',
+        ),
         'reference': CharField(
             label='Reference', required=True, editable_statuses=[],
             placeholder='Automatic',
@@ -50,7 +57,7 @@ class PurchaseRequest(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'requested_by', 'request_date', 'estimated_receipt_date', 'status'],
+        'columns': ['reference', 'sequence_id', 'requested_by', 'request_date', 'estimated_receipt_date', 'status'],
         'filters': ['status', 'request_date'],
         'default_sort': ['-updated_at'],
     }
@@ -61,7 +68,7 @@ class PurchaseRequest(BaseModel):
                 {
                     'key': 'general',
                     'label': 'General',
-                    'fields': ['reference', 'requested_by', 'request_date',
+                    'fields': ['reference', 'sequence_id', 'requested_by', 'request_date',
                                'estimated_receipt_date', 'notes'],
                 },
             ],
@@ -103,3 +110,28 @@ class PurchaseRequest(BaseModel):
 
     def __str__(self):
         return self.reference or f'PR#{self.pk}'
+
+    # ── Guards ──
+
+    def _guard_confirm(self):
+        """Wajib pilih sequence sebelum konfirmasi."""
+        if not self.sequence_id:
+            raise ValueError('Silakan pilih Sequence (Document Type) terlebih dahulu.')
+
+    def _effect_confirm(self):
+        """Generate reference dari sequence setelah confirm."""
+        from core.sequence_engine import SequenceEngine
+        if (self.reference or '').startswith('Draft#'):
+            self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
+    @classmethod
+    def get_model_config(cls):
+        """Override: inject default sequence (Document Type)."""
+        config = super().get_model_config()
+        from core.models.settings.sequence import Sequence
+        active_seq = Sequence.objects.filter(
+            model_ref='purchase.request', active=True, is_deleted=False
+        ).first()
+        if active_seq:
+            config['fields']['sequence_id']['default'] = active_seq.pk
+        return config
