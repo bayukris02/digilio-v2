@@ -224,6 +224,42 @@ class PurchaseRequest(BaseModel):
         if len(selected_lines_raw) == 0:
             return {'error': 'Tidak ada line yang dipilih.'}
 
+        # ── Guard: cek existing PO dari PR ini ──
+        from core.models.purchase.purchase_request_line import PurchaseRequestLine
+
+        pr_line_ids = list(PurchaseRequestLine.objects.filter(
+            request_id=self, is_deleted=False
+        ).values_list('pk', flat=True))
+
+        existing_po_ids = PurchaseOrderLine.objects.filter(
+            purchase_request_line_id__in=pr_line_ids,
+            is_deleted=False,
+            order_id__is_deleted=False,
+        ).exclude(
+            order_id__status='cancelled',
+        ).values_list('order_id', flat=True).distinct()
+
+        existing_pos = PurchaseOrder.objects.filter(
+            pk__in=existing_po_ids,
+            is_deleted=False,
+        ).exclude(status='cancelled')
+
+        # 1) Same vendor → BLOCK
+        same_vendor_pos = existing_pos.filter(vendor_id=int(vendor_id))
+        if same_vendor_pos.exists():
+            refs = ', '.join(same_vendor_pos.values_list('reference', flat=True))
+            return {'error': f'Sudah ada PO untuk vendor ini: {refs}. Cancel PO tersebut dulu.'}
+
+        # 2) Different vendor → warning jika ada yg confirmed
+        diff_confirmed = existing_pos.exclude(vendor_id=int(vendor_id)).exclude(status='draft')
+        warning_msg = ''
+        if diff_confirmed.exists():
+            po_infos = []
+            for po in diff_confirmed:
+                vname = po.vendor.name if po.vendor else '-'
+                po_infos.append(f'{po.reference} ({vname})')
+            warning_msg = 'Catatan: PR ini juga memiliki PO yang sudah confirmed: ' + ', '.join(po_infos) + '.'
+
         # Ambil sequence untuk PO
         po_seq = Sequence.objects.filter(
             model_ref='purchase.order', active=True, is_deleted=False
@@ -277,7 +313,7 @@ class PurchaseRequest(BaseModel):
             created_po = po.pk
 
         return {
-            'message': 'Purchase Order berhasil dibuat.',
+            'message': 'Purchase Order berhasil dibuat.' + (' ' + warning_msg if warning_msg else ''),
             '_action_type': 'open_record',
             'model': 'purchase.order',
             'record_id': created_po,
