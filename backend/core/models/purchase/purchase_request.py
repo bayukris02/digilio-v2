@@ -224,12 +224,6 @@ class PurchaseRequest(BaseModel):
         if len(selected_lines_raw) == 0:
             return {'error': 'Tidak ada line yang dipilih.'}
 
-        # Validasi qty
-        for item in selected_lines_raw:
-            order_qty = float(item.get('qty', 0) or 0)
-            if order_qty <= 0:
-                return {'error': 'Qty harus lebih dari 0 untuk setiap line.'}
-
         # Ambil sequence untuk PO
         po_seq = Sequence.objects.filter(
             model_ref='purchase.order', active=True, is_deleted=False
@@ -252,9 +246,12 @@ class PurchaseRequest(BaseModel):
             po.save(update_fields=['reference'])
 
             # Copy lines
+            line_count = 0
             for item in selected_lines_raw:
                 pr_line_id = int(item['id'])
                 order_qty = float(item.get('qty', 0) or 0)
+                if order_qty <= 0:
+                    continue  # skip — user tinggal confirm aja, qty 0 diabaikan
 
                 pr_line_fd = self._field_descriptors.get('request_lines')
                 if pr_line_fd:
@@ -269,8 +266,12 @@ class PurchaseRequest(BaseModel):
                                 qty=order_qty,
                                 purchase_request_line=source_line,
                             )
+                            line_count += 1
                         except child_model.DoesNotExist:
                             return {'error': f'PR line #{pr_line_id} tidak ditemukan.'}
+
+            if line_count == 0:
+                return {'error': 'Tidak ada line dengan qty > 0 untuk dibuat PO.'}
 
             created_po = po.pk
 
