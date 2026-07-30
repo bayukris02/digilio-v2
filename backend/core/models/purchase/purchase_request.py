@@ -99,7 +99,7 @@ class PurchaseRequest(BaseModel):
                 'key': 'lines',
                 'label': 'Request Lines',
                 'relation': 'request_lines',
-                'columns': ['product', 'description', 'qty', 'estimated_cost', 'total', 'vendor'],
+                'columns': ['product', 'description', 'qty', 'estimated_cost', 'total'],
                 'summary': {
                     'columns': {'qty': 'sum', 'estimated_cost': 'sum', 'total': 'sum'},
                 },

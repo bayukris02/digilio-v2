@@ -29,14 +29,10 @@ class PurchaseRequestLine(BaseModel):
             compute='_compute_total',
             depends=['qty', 'estimated_cost'],
         ),
-        'vendor': Many2OneField(
-            label='Vendor',
-            relation='purchase.vendor',
-        ),
     }
 
     _list_view = {
-        'columns': ['product', 'description', 'qty', 'estimated_cost', 'total', 'vendor'],
+        'columns': ['product', 'description', 'qty', 'estimated_cost', 'total'],
         'default_sort': ['id'],
     }
 
