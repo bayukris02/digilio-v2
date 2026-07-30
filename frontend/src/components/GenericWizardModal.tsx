@@ -370,7 +370,7 @@ export default function GenericWizardModal({
     if (many2oneOptions[relation]) return; // already loaded
     try {
       const token = localStorage.getItem('access_token');
-      const resp = await fetch(`/api/models/${relation}/list/?limit=200`, {
+      const resp = await fetch(`/api/models/${relation}/records/?limit=200`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!resp.ok) throw new Error('Fetch failed');
