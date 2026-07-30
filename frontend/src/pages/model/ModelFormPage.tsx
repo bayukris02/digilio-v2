@@ -601,6 +601,12 @@ export default function ModelFormPage() {
         if (field.default !== undefined && field.default !== null) {
           defaults[key] = field.default;
         }
+        // Auto-fill Many2One ke User dengan current user
+        if (field.type === 'many2one' && field.relation === 'settings.user' && defaults[key] === undefined) {
+          if ((config as any)._current_user_id) {
+            defaults[key] = (config as any)._current_user_id;
+          }
+        }
       });
       setRecordData(defaults);
       setLoadKey((prev) => prev + 1);

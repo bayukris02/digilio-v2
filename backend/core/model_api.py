@@ -79,7 +79,9 @@ def model_config(request, model_name):
     model_cls = get_model_class(model_name)
     if not model_cls:
         return Response({'error': f'Model "{model_name}" not found'}, status=404)
-    return Response(model_cls.get_model_config())
+    config = model_cls.get_model_config()
+    config['_current_user_id'] = request.user.pk if request.user.is_authenticated else None
+    return Response(config)
 
 
 @api_view(['POST'])
