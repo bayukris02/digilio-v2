@@ -45,8 +45,12 @@ class PurchaseRequest(BaseModel):
             label='Reference', required=True, editable_statuses=[],
             placeholder='Automatic',
         ),
-        'requested_by': CharField(label='Requested By', required=True),
-        'request_date': DateField(label='Request Date'),
+        'requested_by': Many2OneField(
+            label='Requested By',
+            relation='settings.user',
+            required=False,
+        ),
+        'request_date': DateField(label='Request Date', required=True),
         'estimated_receipt_date': DateField(label='Estimated Receipt Date'),
         'notes': TextField(label='Notes'),
         'request_lines': One2ManyField(
@@ -111,12 +115,37 @@ class PurchaseRequest(BaseModel):
     def __str__(self):
         return self.reference or f'PR#{self.pk}'
 
+    def save(self, *args, **kwargs):
+        """Auto-fill requested_by (dari user yg buat) & request_date (hari ini)."""
+        is_new = not self.pk
+        if is_new:
+            if not self.requested_by_id and hasattr(self, 'created_by_id') and self.created_by_id:
+                self.requested_by_id = self.created_by_id
+            if not self.request_date:
+                from datetime import date
+                self.request_date = date.today()
+        super().save(*args, **kwargs)
+
     # ── Guards ──
 
     def _guard_confirm(self):
-        """Wajib pilih sequence sebelum konfirmasi."""
+        """Wajib pilih sequence & minimal 1 line sebelum konfirmasi."""
         if not self.sequence_id:
             raise ValueError('Silakan pilih Sequence (Document Type) terlebih dahulu.')
+
+        # Validasi minimal 1 request line
+        if not self.pk:
+            raise ValueError('Record belum disimpan.')
+        from core.model_meta import ErpModelBase
+        fd = self._field_descriptors.get('request_lines')
+        if fd:
+            child_model = ErpModelBase._model_registry.get(fd.relation)
+            if child_model:
+                count = child_model.objects.filter(
+                    **{fd.inverse_field: self.pk, 'is_deleted': False}
+                ).count()
+                if count == 0:
+                    raise ValueError('Minimal harus ada 1 Request Line sebelum konfirmasi.')
 
     def _effect_confirm(self):
         """Generate reference dari sequence setelah confirm."""
@@ -126,7 +155,7 @@ class PurchaseRequest(BaseModel):
 
     @classmethod
     def get_model_config(cls):
-        """Override: inject default sequence (Document Type)."""
+        """Override: inject default sequence, request_date (hari ini), & requested_by (user login)."""
         config = super().get_model_config()
         from core.models.settings.sequence import Sequence
         active_seq = Sequence.objects.filter(
@@ -134,4 +163,9 @@ class PurchaseRequest(BaseModel):
         ).first()
         if active_seq:
             config['fields']['sequence_id']['default'] = active_seq.pk
+
+        # Default request_date = hari ini
+        from datetime import date
+        config['fields']['request_date']['default'] = date.today().isoformat()
+
         return config
