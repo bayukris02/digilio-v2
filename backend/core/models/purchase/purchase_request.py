@@ -85,6 +85,32 @@ class PurchaseRequest(BaseModel):
                     'states': ['draft'],
                 },
                 {
+                    'label': 'Buat PO',
+                    'icon': 'ShoppingCartOutlined',
+                    'color': 'primary',
+                    'action': 'create_po',
+                    'states': ['confirmed'],
+                    'wizard': {
+                        'title': 'Buat Purchase Order',
+                        'modes': [
+                            {
+                                'value': 'save_draft',
+                                'label': '📄 Buat Draft PO',
+                                'icon': 'FileAddOutlined',
+                                'inputs': [
+                                    {'key': 'vendor_id', 'label': 'Vendor', 'type': 'many2one', 'relation': 'purchase.vendor'},
+                                ],
+                            },
+                        ],
+                        'line_selection': {
+                            'relation': 'request_lines',
+                            'columns': ['product', 'qty'],
+                            'show_for_modes': ['save_draft'],
+                            'qty_label': 'Order Qty',
+                        },
+                    },
+                },
+                {
                     'label': 'Cancel',
                     'icon': 'StopOutlined',
                     'color': 'red',
@@ -169,3 +195,96 @@ class PurchaseRequest(BaseModel):
         config['fields']['request_date']['default'] = date.today().isoformat()
 
         return config
+
+    # ── Buat PO dari PR ──
+
+    def _action_create_po(self, data=None):
+        """Buat Purchase Order dari PR lines — semua line 1 PO dengan vendor terpilih.
+
+        data: dict dari frontend wizard — {mode, selected_lines, vendor_id}
+          selected_lines = [{id: pr_line_id, qty: order_qty}, ...]
+          vendor_id = id vendor dari input wizard
+        """
+        from django.db import transaction
+        from core.models.purchase.purchase_order import PurchaseOrder
+        from core.models.purchase.purchase_order_line import PurchaseOrderLine
+        from core.models.settings.sequence import Sequence
+        from core.sequence_engine import SequenceEngine
+
+        mode = (data or {}).get('mode', 'save_draft')
+        vendor_id = (data or {}).get('vendor_id')
+        selected_lines_raw = (data or {}).get('selected_lines')
+
+        if not vendor_id:
+            return {'error': 'Harap pilih Vendor.'}
+
+        if not selected_lines_raw or not isinstance(selected_lines_raw, list):
+            return {'error': 'Tidak ada line yang dipilih.'}
+
+        if len(selected_lines_raw) == 0:
+            return {'error': 'Tidak ada line yang dipilih.'}
+
+        # Validasi qty
+        for item in selected_lines_raw:
+            order_qty = float(item.get('qty', 0) or 0)
+            if order_qty <= 0:
+                return {'error': 'Qty harus lebih dari 0 untuk setiap line.'}
+
+        # Ambil sequence untuk PO
+        po_seq = Sequence.objects.filter(
+            model_ref='purchase.order', active=True, is_deleted=False
+        ).first()
+        if not po_seq:
+            return {'error': 'Tidak ada sequence aktif untuk Purchase Order.'}
+
+        created_po = None
+
+        with transaction.atomic():
+            # Buat 1 PO untuk vendor terpilih
+            po = PurchaseOrder.objects.create(
+                vendor_id=int(vendor_id),
+                sequence_id=po_seq,
+                reference=f'Draft#PR#{self.pk}',
+                status='draft',
+                purchase_request=self,
+            )
+            po.reference = SequenceEngine.next_by_id(po_seq.pk)
+            po.save(update_fields=['reference'])
+
+            # Copy lines
+            for item in selected_lines_raw:
+                pr_line_id = int(item['id'])
+                order_qty = float(item.get('qty', 0) or 0)
+
+                pr_line_fd = self._field_descriptors.get('request_lines')
+                if pr_line_fd:
+                    child_model = self._get_line_model('request_lines')
+                    if child_model:
+                        try:
+                            source_line = child_model.objects.get(pk=pr_line_id, is_deleted=False)
+                            PurchaseOrderLine.objects.create(
+                                order_id=po,
+                                product=source_line.product,
+                                name=source_line.description or '',
+                                qty=order_qty,
+                                purchase_request_line=source_line,
+                            )
+                        except child_model.DoesNotExist:
+                            return {'error': f'PR line #{pr_line_id} tidak ditemukan.'}
+
+            created_po = po.pk
+
+        return {
+            'message': 'Purchase Order berhasil dibuat.',
+            '_action_type': 'open_record',
+            'model': 'purchase.order',
+            'record_id': created_po,
+        }
+
+    def _get_line_model(self, relation_name):
+        """Helper: ambil model class untuk relation."""
+        from core.model_meta import ErpModelBase
+        fd = self._field_descriptors.get(relation_name)
+        if fd:
+            return ErpModelBase._model_registry.get(fd.relation)
+        return None

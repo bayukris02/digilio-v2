@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button } from 'antd';
+import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select } from 'antd';
 
 const { Text } = Typography;
 
@@ -31,11 +31,20 @@ interface WizardInput {
   options?: { value: string; label: string }[];
 }
 
+interface EditableColumnConfig {
+  key: string;
+  label: string;
+  type: string;
+  relation?: string;
+  options?: { value: string; label: string }[];
+}
+
 interface LineSelectionConfig {
   relation: string;
   columns: string[];
   show_for_modes: string[];
   qty_label?: string;
+  editable_columns?: EditableColumnConfig[];
 }
 
 export interface WizardConfig {
@@ -47,6 +56,7 @@ export interface WizardConfig {
 export interface SelectedLine {
   id: number;
   qty: number;
+  [key: string]: unknown;
 }
 
 interface GenericWizardModalProps {
@@ -91,19 +101,61 @@ function ModeCards({
   );
 }
 
+/** Wizard input for many2one field — Select dengan fetch dari API */
+function Many2OneWizardInput({ inp, value, onChange, many2oneOptions, onFetch }: {
+  inp: WizardInput & { relation?: string };
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+  many2oneOptions: Record<string, { value: number; label: string }[]>;
+  onFetch: (relation: string) => void;
+}) {
+  const relation = inp.relation || '';
+  const opts = many2oneOptions[relation] || [];
+
+  useEffect(() => {
+    if (relation && opts.length === 0) onFetch(relation);
+  }, [relation]);
+
+  return (
+    <Select
+      style={{ width: '100%' }}
+      value={value && value !== 0 ? value : undefined}
+      onChange={(v) => onChange(v ?? undefined)}
+      showSearch
+      placeholder={`Pilih ${inp.label}`}
+      options={opts}
+      filterOption={(input, option) =>
+        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+      }
+      onFocus={() => onFetch(relation)}
+      allowClear
+    />
+  );
+}
+
 interface LineSelectorProps {
   items: WizardLineItem[];
   selectedIds: number[];
   columns: string[];
   qtys: Record<number, number>;
   qtyLabel: string;
+  editableColumns: EditableColumnConfig[];
+  editableValues: Record<number, Record<string, unknown>>;
+  many2oneOptions: Record<string, { value: number; label: string }[]>;
   onToggle: (id: number) => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onQtyChange: (id: number, qty: number) => void;
+  onEditableChange: (id: number, key: string, value: unknown) => void;
+  onFetchMany2One: (relation: string) => void;
 }
 
-function LineSelector({ items, selectedIds, columns, qtys, qtyLabel, onToggle, onSelectAll, onDeselectAll, onQtyChange }: LineSelectorProps) {
+function LineSelector({
+  items, selectedIds, columns, qtys, qtyLabel,
+  editableColumns, editableValues, many2oneOptions,
+  onToggle, onSelectAll, onDeselectAll, onQtyChange,
+  onEditableChange, onFetchMany2One,
+}: LineSelectorProps) {
   const displayValue = (item: WizardLineItem, col: string): string => {
     const val = item[col];
     if (val == null) return '';
@@ -126,6 +178,9 @@ function LineSelector({ items, selectedIds, columns, qtys, qtyLabel, onToggle, o
             <th style={{ padding: '6px 8px', textAlign: 'left', width: 28 }}>#</th>
             {columns.map((col) => (
               <th key={col} style={{ padding: '6px 8px', textAlign: 'left', textTransform: 'capitalize' }}>{col}</th>
+            ))}
+            {editableColumns.map((ec) => (
+              <th key={ec.key} style={{ padding: '6px 8px', textAlign: 'left', minWidth: 120 }}>{ec.label}</th>
             ))}
             <th style={{ padding: '6px 8px', textAlign: 'left', width: 80 }}>{qtyLabel}</th>
           </tr>
@@ -150,6 +205,43 @@ function LineSelector({ items, selectedIds, columns, qtys, qtyLabel, onToggle, o
                 {columns.map((col) => (
                   <td key={col} style={{ padding: '6px 8px' }}>{displayValue(item, col)}</td>
                 ))}
+                {editableColumns.map((ec) => {
+                  const val = editableValues[numId]?.[ec.key];
+                  if (ec.type === 'many2one' && ec.relation) {
+                    const opts = many2oneOptions[ec.relation] || [];
+                    return (
+                      <td key={ec.key} style={{ padding: '4px 8px' }} onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          size="small"
+                          style={{ width: '100%', minWidth: 120 }}
+                          value={val as number | undefined}
+                          onChange={(v) => onEditableChange(numId, ec.key, v)}
+                          showSearch
+                          placeholder={`Pilih ${ec.label}`}
+                          options={opts}
+                          filterOption={(input, option) =>
+                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                          }
+                          onFocus={() => onFetchMany2One(ec.relation!)}
+                          disabled={!checked}
+                        />
+                      </td>
+                    );
+                  }
+                  // Default: InputNumber
+                  return (
+                    <td key={ec.key} style={{ padding: '4px 8px' }} onClick={(e) => e.stopPropagation()}>
+                      <InputNumber
+                        size="small"
+                        min={0}
+                        value={(val as number) ?? 0}
+                        disabled={!checked}
+                        onChange={(v) => onEditableChange(numId, ec.key, v ?? 0)}
+                        style={{ width: 80 }}
+                      />
+                    </td>
+                  );
+                })}
                 <td style={{ padding: '4px 8px' }} onClick={(e) => e.stopPropagation()}>
                   <InputNumber
                     size="small"
@@ -187,6 +279,16 @@ export default function GenericWizardModal({
     });
     return q;
   });
+  const [editableValues, setEditableValues] = useState<Record<number, Record<string, unknown>>>(() => {
+    const ev: Record<number, Record<string, unknown>> = {};
+    items.forEach((item) => {
+      if (item.id != null) {
+        ev[Number(item.id)] = {};
+      }
+    });
+    return ev;
+  });
+  const [many2oneOptions, setMany2oneOptions] = useState<Record<string, { value: number; label: string }[]>>({});
   const [extraInputValues, setExtraInputValues] = useState<Record<string, number | string>>(() => {
     const currentMode = config.modes.find((m) => m.value === selectedMode);
     const vals: Record<string, number | string> = {};
@@ -216,6 +318,12 @@ export default function GenericWizardModal({
         if (item.id != null) defaultQtys[Number(item.id)] = Number(item.remaining_bill_qty ?? item.remaining_qty ?? item.qty ?? 0);
       });
       setQtys(defaultQtys);
+      // Reset editable values
+      const ev: Record<number, Record<string, unknown>> = {};
+      items.forEach((item) => {
+        if (item.id != null) ev[Number(item.id)] = {};
+      });
+      setEditableValues(ev);
     }
   }, [itemsFingerprint]);
 
@@ -224,6 +332,7 @@ export default function GenericWizardModal({
   const showLines = config.line_selection?.show_for_modes?.includes(selectedMode) ?? false;
   const columns = config.line_selection?.columns || [];
   const qtyLabel = config.line_selection?.qty_label || 'Receive Qty';
+  const editableColumns = config.line_selection?.editable_columns || [];
   const currentMode = config.modes.find((m) => m.value === selectedMode);
   const extraInputs = currentMode?.inputs || [];
 
@@ -250,9 +359,39 @@ export default function GenericWizardModal({
     setQtys((prev) => ({ ...prev, [id]: qty }));
   };
 
+  const handleEditableChange = (id: number, key: string, value: unknown) => {
+    setEditableValues((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [key]: value },
+    }));
+  };
+
+  const handleFetchMany2One = async (relation: string) => {
+    if (many2oneOptions[relation]) return; // already loaded
+    try {
+      const token = localStorage.getItem('access_token');
+      const resp = await fetch(`/api/models/${relation}/list/?limit=200`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!resp.ok) throw new Error('Fetch failed');
+      const data = await resp.json();
+      const opts = (data.results || []).map((r: { id: number; display_name?: string }) => ({
+        value: r.id,
+        label: r.display_name || `#${r.id}`,
+      }));
+      setMany2oneOptions((prev) => ({ ...prev, [relation]: opts }));
+    } catch {
+      // silently fail
+    }
+  };
+
   const handleConfirm = (mode?: string) => {
     const m = mode || selectedMode;
-    const selectedLines = selectedIds.map((id) => ({ id, qty: qtys[id] ?? 0 }));
+    const selectedLines = selectedIds.map((id) => ({
+      id,
+      qty: qtys[id] ?? 0,
+      ...(editableValues[id] || {}),
+    }));
     onConfirm(m, selectedLines, extraInputValues);
   };
 
@@ -310,6 +449,14 @@ export default function GenericWizardModal({
                         buttonStyle="solid"
                         options={inp.options}
                       />
+                    ) : inp.type === 'many2one' ? (
+                      <Many2OneWizardInput
+                        inp={inp}
+                        value={extraInputValues[inp.key] as number | undefined}
+                        onChange={(v) => handleExtraInputChange(inp.key, v)}
+                        many2oneOptions={many2oneOptions}
+                        onFetch={handleFetchMany2One}
+                      />
                     ) : (() => {
                       const isDpValue = inp.key === 'dp_value';
                       const dpMode = extraInputValues['dp_mode'];
@@ -344,10 +491,15 @@ export default function GenericWizardModal({
               columns={columns}
               qtys={qtys}
               qtyLabel={qtyLabel}
+              editableColumns={editableColumns}
+              editableValues={editableValues}
+              many2oneOptions={many2oneOptions}
               onToggle={handleToggle}
               onSelectAll={handleSelectAll}
               onDeselectAll={handleDeselectAll}
               onQtyChange={handleQtyChange}
+              onEditableChange={handleEditableChange}
+              onFetchMany2One={handleFetchMany2One}
             />
           </div>
         )}

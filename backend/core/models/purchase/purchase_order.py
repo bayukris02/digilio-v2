@@ -164,6 +164,11 @@ class PurchaseOrder(BaseModel):
             virtual=True,
         ),
 
+        'purchase_request': Many2OneField(
+            label='Purchase Request',
+            relation='purchase.request',
+            required=False,
+        ),
         'order_lines': One2ManyField(
             label='Order Lines',
             relation='purchase.order.line',

@@ -1109,7 +1109,7 @@ export default function ModelFormPage() {
   }, [apiModelName, recordId, isNew, form, config, recordData, lineItems, childConfigs, modelName, navigate]);
 
   // ── Action wizard confirm — called from GenericWizardModal ──
-  const handleWizardConfirm = useCallback(async (mode: string, selectedLines: { id: number; qty: number }[], extraInputs?: Record<string, number>) => {
+  const handleWizardConfirm = useCallback(async (mode: string, selectedLines: Record<string, unknown>[], extraInputs?: Record<string, number>) => {
     if (!actionWizardBtn) return;
     const actionName = actionWizardBtn.action as string;
     if (!actionName) return;

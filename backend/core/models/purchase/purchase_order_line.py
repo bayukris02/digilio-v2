@@ -15,6 +15,11 @@ class PurchaseOrderLine(BaseModel):
             relation='purchase.order',
             required=True,
         ),
+        'purchase_request_line': Many2OneField(
+            label='Purchase Request Line',
+            relation='purchase.request.line',
+            required=False,
+        ),
         'product': Many2OneField(
             label='Product',
             relation='inventory.product',
