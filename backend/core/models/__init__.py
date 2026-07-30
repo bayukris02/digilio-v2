@@ -5,6 +5,8 @@ from core.models.purchase.purchase_order_line import PurchaseOrderLine
 from core.models.purchase.goods_receipt import GoodsReceipt
 from core.models.purchase.goods_receipt_line import GoodsReceiptLine
 from core.models.purchase.vendor import Vendor
+from core.models.purchase.purchase_request import PurchaseRequest
+from core.models.purchase.purchase_request_line import PurchaseRequestLine
 from core.models.sales.customer import Customer
 from core.models.sales.sales_order import SalesOrder
 from core.models.sales.sales_order_line import SalesOrderLine
@@ -36,4 +38,5 @@ __all__ = [
     'ChartOfAccount', 'Jurnal', 'JurnalLine',
     'VendorBill', 'VendorBillLine',
     'CustomerInvoice', 'CustomerInvoiceLine',
+    'PurchaseRequest', 'PurchaseRequestLine',
 ]

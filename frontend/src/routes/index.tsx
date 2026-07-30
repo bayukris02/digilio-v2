@@ -32,7 +32,6 @@ export const router = createBrowserRouter([
       { path: 'purchase/pivot', element: <ComingSoon /> },
       { path: 'purchase/detail', element: <ComingSoon /> },
       // Purchase model routes (coming soon)
-      { path: 'purchase.request', element: <ComingSoon /> },
       { path: 'purchase.quick_purchase', element: <ComingSoon /> },
       { path: 'purchase.order_template', element: <ComingSoon /> },
       { path: 'purchase.vendor_pricelist', element: <ComingSoon /> },
