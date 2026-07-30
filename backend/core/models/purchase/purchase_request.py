@@ -241,6 +241,7 @@ class PurchaseRequest(BaseModel):
                 reference=f'Draft#PR#{self.pk}',
                 status='draft',
                 purchase_request=self,
+                source_document=self.reference or '',
             )
             po.reference = SequenceEngine.next_by_id(po_seq.pk)
             po.save(update_fields=['reference'])

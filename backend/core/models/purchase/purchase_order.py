@@ -169,6 +169,11 @@ class PurchaseOrder(BaseModel):
             relation='purchase.request',
             required=False,
         ),
+        'source_document': CharField(
+            label='Source Document',
+            required=False,
+            editable_statuses=[],
+        ),
         'order_lines': One2ManyField(
             label='Order Lines',
             relation='purchase.order.line',
@@ -177,7 +182,7 @@ class PurchaseOrder(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'sequence_id', 'vendor', 'order_date', 'status'],
+        'columns': ['reference', 'sequence_id', 'vendor', 'source_document', 'order_date', 'status'],
         'filters': ['status', 'category', 'order_date'],
         'group_by': ['status', 'category'],
         'default_sort': ['-updated_at'],
@@ -190,7 +195,7 @@ class PurchaseOrder(BaseModel):
                     'key': 'general',
                     'label': 'General',
                     'fields': [ 'reference', 'vendor', 'code', 'address', 
-                               'order_date', 'expected_date',  'sequence_id',
+                               'source_document', 'order_date', 'expected_date',  'sequence_id',
                                'discount_type', 'discount_method', 'global_discount'],
                 },
                 {
