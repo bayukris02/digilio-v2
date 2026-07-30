@@ -29,6 +29,8 @@ class PurchaseRequestLine(BaseModel):
             compute='_compute_total',
             depends=['qty', 'estimated_cost'],
         ),
+        'processed_qty': FloatField(label='Processed Qty', default=0, virtual=True),
+        'remaining_qty': FloatField(label='Remaining Qty', default=0, virtual=True),
     }
 
     _list_view = {
@@ -45,3 +47,24 @@ class PurchaseRequestLine(BaseModel):
         qty = float(self.qty or 0)
         cost = float(self.estimated_cost or 0)
         self.total = round(qty * cost, 2)
+
+    def to_record(self):
+        """Override: inject processed_qty + remaining_qty dari PurchaseOrder terkait."""
+        data = super().to_record()
+
+        from django.db.models import Sum
+        from core.models.purchase.purchase_order_line import PurchaseOrderLine
+
+        agg = PurchaseOrderLine.objects.filter(
+            purchase_request_line=self,
+            is_deleted=False,
+            order_id__is_deleted=False,
+        ).exclude(
+            order_id__status='cancelled',
+        ).aggregate(total=Sum('qty'))
+
+        processed_qty = float(agg['total'] or 0)
+        data['processed_qty'] = processed_qty
+        data['remaining_qty'] = max(float(self.qty or 0) - processed_qty, 0)
+
+        return data

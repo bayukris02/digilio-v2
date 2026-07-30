@@ -104,7 +104,7 @@ class PurchaseRequest(BaseModel):
                         ],
                         'line_selection': {
                             'relation': 'request_lines',
-                            'columns': ['product', 'qty'],
+                            'columns': ['product', 'qty', 'processed_qty', 'remaining_qty'],
                             'show_for_modes': ['save_draft'],
                             'qty_label': 'Order Qty',
                         },
