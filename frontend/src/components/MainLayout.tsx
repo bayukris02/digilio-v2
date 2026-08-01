@@ -83,7 +83,7 @@ const menuItems = [
     children: [
       { key: '/project/dashboard', label: 'Dashboard' },
       { type: 'group', label: 'OPERATION', children: [
-        { key: '/project/registration', label: 'Project Update' },
+        { key: '/project/progress', label: 'Project Update' },
         { key: '/project/wbs', label: 'WBS & Task Assignment' },
         { key: '/project/budgeting', label: 'Project Budgeting (RAB)' },
       ]},
