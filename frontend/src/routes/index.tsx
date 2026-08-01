@@ -44,7 +44,6 @@ export const router = createBrowserRouter([
       { path: 'project/pnl', element: <ComingSoon /> },
       { path: 'project/cashflow', element: <ComingSoon /> },
       // Project model routes (coming soon)
-      { path: 'project.unit', element: <ComingSoon /> },
       { path: 'project.dokumen', element: <ComingSoon /> },
       // Generic model pages — e.g., /purchase-order, /purchase-order/new, /purchase-order/1
       { path: ':modelName', element: <ModelListPage /> },
