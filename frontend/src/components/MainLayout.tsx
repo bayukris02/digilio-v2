@@ -22,6 +22,7 @@ import {
   PieChartOutlined,
   UnorderedListOutlined,
   FileAddOutlined,
+  ProjectOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
@@ -76,6 +77,29 @@ const menuItems = [
     ],
   },
   {
+    key: 'project',
+    icon: <ProjectOutlined />,
+    label: 'Project',
+    children: [
+      { key: '/project/dashboard', label: 'Dashboard' },
+      { type: 'group', label: 'OPERATION', children: [
+        { key: '/project/registration', label: 'Project Registration' },
+        { key: '/project/wbs', label: 'WBS & Task Assignment' },
+        { key: '/project/budgeting', label: 'Project Budgeting (RAB)' },
+      ]},
+      { type: 'group', label: 'MASTER DATA', children: [
+        { key: '/project.project', label: 'Project' },
+        { key: '/project.unit', label: 'Units' },
+        { key: '/project.dokumen', label: 'Dokumen' },
+      ]},
+      { type: 'group', label: 'REPORT', children: [
+        { key: '/project/pivot', label: 'Project Progress Pivot' },
+        { key: '/project/pnl', label: 'Project P&L Detail' },
+        { key: '/project/cashflow', label: 'Cash Flow Report' },
+      ]},
+    ],
+  },
+  {
     key: 'accounting',
     icon: <BookOutlined />,
     label: 'Accounting',
@@ -110,6 +134,7 @@ function getModuleKey(pathname: string): string {
   if (pathname.startsWith('/purchase.') || pathname.startsWith('/purchase/')) return 'purchase';
   if (pathname.startsWith('/sales.')) return 'sales';
   if (pathname.startsWith('/inventory.')) return 'inventory';
+  if (pathname.startsWith('/project.') || pathname.startsWith('/project/')) return 'project';
   if (pathname.startsWith('/accounting.')) return 'accounting';
   if (pathname.startsWith('/settings.')) return 'settings';
   return '/';

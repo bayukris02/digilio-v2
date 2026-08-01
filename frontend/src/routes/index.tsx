@@ -35,6 +35,18 @@ export const router = createBrowserRouter([
       { path: 'purchase.quick_purchase', element: <ComingSoon /> },
       { path: 'purchase.order_template', element: <ComingSoon /> },
       { path: 'purchase.vendor_pricelist', element: <ComingSoon /> },
+      // Project custom routes (coming soon)
+      { path: 'project/dashboard', element: <ComingSoon /> },
+      { path: 'project/registration', element: <ComingSoon /> },
+      { path: 'project/wbs', element: <ComingSoon /> },
+      { path: 'project/budgeting', element: <ComingSoon /> },
+      { path: 'project/pivot', element: <ComingSoon /> },
+      { path: 'project/pnl', element: <ComingSoon /> },
+      { path: 'project/cashflow', element: <ComingSoon /> },
+      // Project model routes (coming soon)
+      { path: 'project.project', element: <ComingSoon /> },
+      { path: 'project.unit', element: <ComingSoon /> },
+      { path: 'project.dokumen', element: <ComingSoon /> },
       // Generic model pages — e.g., /purchase-order, /purchase-order/new, /purchase-order/1
       { path: ':modelName', element: <ModelListPage /> },
       { path: ':modelName/new', element: <ModelFormPage /> },
