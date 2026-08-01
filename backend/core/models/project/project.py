@@ -45,6 +45,11 @@ class Project(BaseModel):
             relation='project.project_line',
             inverse_field='project_id',
         ),
+        'units': One2ManyField(
+            label='Project Units',
+            relation='project.project_unit',
+            inverse_field='project_id',
+        ),
     }
 
     _list_view = {
@@ -75,6 +80,12 @@ class Project(BaseModel):
                 'label': 'Project Milestones',
                 'relation': 'lines',
                 'columns': ['milestone_id', 'progress'],
+            },
+            {
+                'key': 'units',
+                'label': 'Unit',
+                'relation': 'units',
+                'columns': ['unit_id', 'qty_available', 'qty_sold', 'sold_percentage'],
             },
         ],
     }
