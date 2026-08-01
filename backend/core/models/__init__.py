@@ -26,6 +26,7 @@ from core.models.accounting.vendor_bill import VendorBill
 from core.models.accounting.vendor_bill_line import VendorBillLine
 from core.models.accounting.customer_invoice import CustomerInvoice
 from core.models.accounting.customer_invoice_line import CustomerInvoiceLine
+from core.models.project.project import Project
 
 __all__ = [
     'BaseModel', 'ChatterLog', 'PurchaseOrder', 'PurchaseOrderLine', 'GoodsReceipt', 'GoodsReceiptLine',
@@ -39,4 +40,5 @@ __all__ = [
     'VendorBill', 'VendorBillLine',
     'CustomerInvoice', 'CustomerInvoiceLine',
     'PurchaseRequest', 'PurchaseRequestLine',
+    'Project',
 ]
