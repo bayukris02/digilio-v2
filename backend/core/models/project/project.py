@@ -1,5 +1,5 @@
 from core.fields import (
-    CharField, DateField, MonetaryField, SelectionField, Many2OneField,
+    CharField, DateField, MonetaryField, Many2OneField, One2ManyField,
 )
 from core.model_meta import BaseModel
 
@@ -40,6 +40,11 @@ class Project(BaseModel):
             relation='settings.company',
             required=False,
         ),
+        'lines': One2ManyField(
+            label='Project Lines',
+            relation='project.project_line',
+            inverse_field='project_id',
+        ),
     }
 
     _list_view = {
@@ -64,6 +69,14 @@ class Project(BaseModel):
             ],
             'smart_buttons': [],
         },
+        'notebook': [
+            {
+                'key': 'lines',
+                'label': 'Project Milestones',
+                'relation': 'lines',
+                'columns': ['milestone_id'],
+            },
+        ],
     }
 
     class Meta(BaseModel.Meta):
