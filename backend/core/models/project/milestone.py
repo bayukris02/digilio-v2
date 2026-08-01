@@ -1,5 +1,5 @@
 from core.fields import (
-    CharField, TextField, PercentageField,
+    CharField, TextField,
 )
 from core.model_meta import BaseModel
 
@@ -11,19 +11,10 @@ class Milestone(BaseModel):
     _display_name = 'name'
 
     _fields = {
-        'code': CharField(
-            label='Kode Milestone',
-            required=True,
-            help_text='Kode standar, misal: MS-01, MS-02',
-        ),
         'name': CharField(
             label='Nama Milestone',
             required=True,
             help_text='Misal: DP / Tanda Jadi, Pondasi, Struktur & Atap, Finishing, Retensi',
-        ),
-        'weight': PercentageField(
-            label='Bobot (%)',
-            help_text='Estimasi bobot persentase milestone (misal: Pondasi 25%, Struktur & Atap 30%)',
         ),
         'claim_requirements': TextField(
             label='Syarat Klaim / Kelengkapan Dokumen',
@@ -32,8 +23,8 @@ class Milestone(BaseModel):
     }
 
     _list_view = {
-        'columns': ['code', 'name', 'weight', 'claim_requirements'],
-        'default_sort': ['code'],
+        'columns': ['name', 'claim_requirements'],
+        'default_sort': ['name'],
     }
 
     _form_view = {
@@ -42,12 +33,7 @@ class Milestone(BaseModel):
                 {
                     'key': 'general',
                     'label': 'General',
-                    'fields': ['code', 'name', 'weight'],
-                },
-                {
-                    'key': 'details',
-                    'label': 'Details',
-                    'fields': ['claim_requirements'],
+                    'fields': ['name', 'claim_requirements'],
                 },
             ],
             'smart_buttons': [],
@@ -60,4 +46,4 @@ class Milestone(BaseModel):
         verbose_name_plural = 'Milestones'
 
     def __str__(self):
-        return f'{self.code or ""} - {self.name or ""}'.strip(' -')
+        return self.name or ''
