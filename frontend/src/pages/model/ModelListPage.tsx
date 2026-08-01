@@ -24,7 +24,8 @@ const { Title } = Typography;
 export default function ModelListPage({
   modelName: propModelName,
   basePath: propBasePath,
-}: { modelName?: string; basePath?: string } = {}) {
+  readOnly = false,
+}: { modelName?: string; basePath?: string; readOnly?: boolean } = {}) {
   const { modelName: urlModelName } = useParams<{ modelName: string }>();
   // modelName bisa di-override via prop (menu alias seperti Project Update);
   // fallback ke param URL = perilaku default tidak berubah
@@ -288,6 +289,7 @@ export default function ModelListPage({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={4} style={{ margin: 0 }}>{config.verbose_name_plural}</Title>
+        {!readOnly && (
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -295,6 +297,7 @@ export default function ModelListPage({
         >
           New
         </Button>
+        )}
       </div>
 
       {/* ═══ TOOLBAR ═══ */}
@@ -303,37 +306,41 @@ export default function ModelListPage({
           <Dropdown
             menu={{
               items: [
-                {
-                  key: 'delete',
-                  label: 'Delete Selected',
-                  icon: <DeleteOutlined />,
-                  danger: true,
-                  onClick: () => {
-                    if (selectedRows.length === 0) {
-                      message.warning('No rows selected');
-                      return;
-                    }
-                    Modal.confirm({
-                      title: `Delete ${selectedRows.length} record(s)?`,
-                      content: 'This will soft-delete the selected records.',
-                      okText: 'Yes, Delete',
-                      okType: 'danger',
-                      cancelText: 'Cancel',
-                      onOk: async () => {
-                        try {
-                          for (const row of selectedRows) {
-                            await modelApi.deleteRecord(apiModelName, row.id as number);
+                ...(readOnly
+                  ? []
+                  : [
+                      {
+                        key: 'delete',
+                        label: 'Delete Selected',
+                        icon: <DeleteOutlined />,
+                        danger: true,
+                        onClick: () => {
+                          if (selectedRows.length === 0) {
+                            message.warning('No rows selected');
+                            return;
                           }
-                          message.success(`${selectedRows.length} record(s) deleted`);
-                          queryClient.invalidateQueries({ queryKey: ['model-records'] });
-                          setSelectedRows([]);
-                        } catch (err) {
-                          message.error((err as Error)?.message || 'Delete failed');
-                        }
+                          Modal.confirm({
+                            title: `Delete ${selectedRows.length} record(s)?`,
+                            content: 'This will soft-delete the selected records.',
+                            okText: 'Yes, Delete',
+                            okType: 'danger',
+                            cancelText: 'Cancel',
+                            onOk: async () => {
+                              try {
+                                for (const row of selectedRows) {
+                                  await modelApi.deleteRecord(apiModelName, row.id as number);
+                                }
+                                message.success(`${selectedRows.length} record(s) deleted`);
+                                queryClient.invalidateQueries({ queryKey: ['model-records'] });
+                                setSelectedRows([]);
+                              } catch (err) {
+                                message.error((err as Error)?.message || 'Delete failed');
+                              }
+                            },
+                          });
+                        },
                       },
-                    });
-                  },
-                },
+                    ]),
                 {
                   key: 'export',
                   label: 'Export CSV',
@@ -352,12 +359,16 @@ export default function ModelListPage({
                     });
                   },
                 },
-                {
-                  key: 'import',
-                  label: 'Import CSV / Excel',
-                  icon: <UploadOutlined />,
-                  onClick: () => setImportModalOpen(true),
-                },
+                ...(readOnly
+                  ? []
+                  : [
+                      {
+                        key: 'import',
+                        label: 'Import CSV / Excel',
+                        icon: <UploadOutlined />,
+                        onClick: () => setImportModalOpen(true),
+                      },
+                    ]),
               ],
             }}
             trigger={['click']}

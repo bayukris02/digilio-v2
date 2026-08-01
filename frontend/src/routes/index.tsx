@@ -41,10 +41,9 @@ export const router = createBrowserRouter([
       { path: 'purchase.product/:recordId', element: <ModelFormPage modelName="inventory.product" basePath="/purchase.product" /> },
       // Project custom routes (coming soon)
       { path: 'project/dashboard', element: <ComingSoon /> },
-      // Project Update = menu alias → konten model project.project (URL tetap /project/registration)
-      { path: 'project/registration', element: <ModelListPage modelName="project.project" basePath="/project/registration" /> },
-      { path: 'project/registration/new', element: <ModelFormPage modelName="project.project" basePath="/project/registration" /> },
-      { path: 'project/registration/:recordId', element: <ModelFormPage modelName="project.project" basePath="/project/registration" /> },
+      // Project Update = menu alias → konten model project.project (URL tetap /project/registration, read-only)
+      { path: 'project/registration', element: <ModelListPage modelName="project.project" basePath="/project/registration" readOnly /> },
+      { path: 'project/registration/:recordId', element: <ModelFormPage modelName="project.project" basePath="/project/registration" readOnly /> },
       { path: 'project/wbs', element: <ComingSoon /> },
       { path: 'project/budgeting', element: <ComingSoon /> },
       { path: 'project/pivot', element: <ComingSoon /> },

@@ -369,7 +369,8 @@ function renderField(
 export default function ModelFormPage({
   modelName: propModelName,
   basePath: propBasePath,
-}: { modelName?: string; basePath?: string } = {}) {
+  readOnly = false,
+}: { modelName?: string; basePath?: string; readOnly?: boolean } = {}) {
   const { modelName: urlModelName, recordId } = useParams<{ modelName: string; recordId?: string }>();
   // modelName bisa di-override via prop (menu alias seperti Project Update);
   // fallback ke param URL = perilaku default tidak berubah
@@ -896,7 +897,8 @@ export default function ModelFormPage({
   // ── Editable / read-only mode ──
   const currentStatus = recordData?.status as string | undefined;
   const stateConfig = currentStatus ? (config?.states as Record<string, {allow_edit?: boolean}> | undefined)?.[currentStatus] : undefined;
-  const isReadOnly = !!currentStatus && stateConfig?.allow_edit === false;
+  // readOnly prop (menu alias seperti Project Update) digabung dengan status config
+  const isReadOnly = readOnly || (!!currentStatus && stateConfig?.allow_edit === false);
 
   // Per-field editable check: field punya editable_statuses sendiri?
   const isFieldDisabled = useCallback((fieldKey: string) => {
