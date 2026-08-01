@@ -20,6 +20,7 @@ import Chatter from '../../components/Chatter';
 import SummaryCard from '../../components/SummaryCard';
 import QuickViewModal from '../../components/QuickViewModal';
 import GenericWizardModal from '../../components/GenericWizardModal';
+import ProgressBar from '../../components/ProgressBar';
 import { AgGridReact } from 'ag-grid-react';
 import type { ColDef, ICellRendererParams, CellValueChangedEvent } from 'ag-grid-community';
 import { AllCommunityModule, ModuleRegistry, themeBalham } from 'ag-grid-community';
@@ -1445,6 +1446,12 @@ export default function ModelFormPage() {
         };
       }
       if (field.type === 'percentage') {
+        // Progress bar 0–100% (merah → hijau) untuk field berflag progress
+        if ((field as Record<string, unknown>).progress) {
+          col.cellRenderer = (params: ICellRendererParams) => (
+            <ProgressBar value={params.value as number | null | undefined} />
+          );
+        }
         col.valueFormatter = (params) => {
           if (params.value == null) return '';
           return `${params.value}%`;

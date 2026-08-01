@@ -1,4 +1,4 @@
-from core.fields import Many2OneField
+from core.fields import Many2OneField, PercentageField
 from core.model_meta import BaseModel
 
 
@@ -19,16 +19,22 @@ class ProjectLine(BaseModel):
             required=True,
             help_text='Pilih milestone dari master Milestone',
         ),
+        'progress': PercentageField(
+            label='Progress (%)',
+            default=0,
+            progress=True,
+            help_text='Progress pengerjaan milestone (0–100%)',
+        ),
     }
 
     _list_view = {
-        'columns': ['milestone_id'],
+        'columns': ['milestone_id', 'progress'],
         'default_sort': ['id'],
     }
 
     _form_view = {
         'header': {
-            'fields': ['milestone_id'],
+            'fields': ['milestone_id', 'progress'],
             'smart_buttons': [],
         },
     }

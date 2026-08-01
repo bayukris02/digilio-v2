@@ -15,6 +15,7 @@ import { modelApi, type ModelConfig, type FieldConfig } from '../../api/models';
 import { formatDate, parseDate } from '../../utils/format';
 import { modelNameToApi } from '../../config/urlModelMap';
 import ImportModal from '../../components/ImportModal';
+import ProgressBar from '../../components/ProgressBar';
 
 ModuleRegistry.registerModules([AllCommunityModule, RowGroupingModule]);
 
@@ -169,6 +170,12 @@ export default function ModelListPage() {
           <span>{params.value ? '✅ Yes' : '❌ No'}</span>
         );
       } else if (field.type === 'integer') {
+        col.filter = 'agNumberColumnFilter';
+      } else if (field.type === 'percentage' && (field as Record<string, unknown>).progress) {
+        // Progress bar 0–100% (merah → hijau), hanya untuk field berflag progress
+        col.cellRenderer = (params: ICellRendererParams) => (
+          <ProgressBar value={params.value as number | null | undefined} />
+        );
         col.filter = 'agNumberColumnFilter';
       } else if (field.type === 'many2one') {
         col.valueGetter = (params: Record<string, unknown>) => {

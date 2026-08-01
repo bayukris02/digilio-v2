@@ -155,9 +155,17 @@ class PercentageField(BaseField):
     field_type = 'percentage'
     django_field_class = dj_models.FloatField
 
-    def __init__(self, **kwargs):
-        kwargs.setdefault('default', 0)
-        super().__init__(**kwargs)
+    def __init__(self, label='', required=False, default=None, help_text='', progress=False, **kwargs):
+        if default is None:
+            default = 0  # pertahankan perilaku lama: default 0
+        super().__init__(label, required, default, help_text, **kwargs)
+        self.progress = progress
+
+    def to_config(self):
+        cfg = super().to_config()
+        if self.progress:
+            cfg['progress'] = True
+        return cfg
 
     def to_django_field(self):
         return dj_models.FloatField(

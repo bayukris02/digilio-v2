@@ -74,7 +74,7 @@ class Project(BaseModel):
                 'key': 'lines',
                 'label': 'Project Milestones',
                 'relation': 'lines',
-                'columns': ['milestone_id'],
+                'columns': ['milestone_id', 'progress'],
             },
         ],
     }
