@@ -46,7 +46,7 @@ const menuItems = [
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
         { key: '/purchase.vendor', label: 'Vendor' },
-        { key: '/inventory.product', label: 'Product' },
+        { key: '/purchase.product', label: 'Product' },
         { key: '/purchase.order_template', label: 'Order Template' },
         { key: '/purchase.vendor_pricelist', label: 'Vendor Pricelist' },
       ]},
