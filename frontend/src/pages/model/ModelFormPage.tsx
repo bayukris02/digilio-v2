@@ -892,7 +892,7 @@ export default function ModelFormPage({
       if (!states || states.length === 0) return true;
       return states.includes(currentStatus);
     });
-  }, [config, recordData?.status]);
+  }, [config, recordData]);
 
   // ── Editable / read-only mode ──
   const currentStatus = recordData?.status as string | undefined;

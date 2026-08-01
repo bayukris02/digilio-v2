@@ -45,6 +45,7 @@ interface LineSelectionConfig {
   show_for_modes: string[];
   qty_label?: string;
   editable_columns?: EditableColumnConfig[];
+  default_selected?: boolean;
 }
 
 export interface WizardConfig {
@@ -270,7 +271,9 @@ export default function GenericWizardModal({
 }: GenericWizardModalProps) {
   const [selectedMode, setSelectedMode] = useState<string>(config.modes[0]?.value || '');
   const [selectedIds, setSelectedIds] = useState<number[]>(
-    items.filter((item) => item.id != null).map((item) => Number(item.id))
+    config.line_selection?.default_selected === false
+      ? []
+      : items.filter((item) => item.id != null).map((item) => Number(item.id))
   );
   const [qtys, setQtys] = useState<Record<number, number>>(() => {
     const q: Record<number, number> = {};
@@ -312,7 +315,7 @@ export default function GenericWizardModal({
       itemsFingerprintRef.current = itemsFingerprint;
       setSelectedMode(config.modes[0]?.value || '');
       const allIds = items.filter((item) => item.id != null).map((item) => Number(item.id));
-      setSelectedIds(allIds);
+      setSelectedIds(config.line_selection?.default_selected === false ? [] : allIds);
       const defaultQtys: Record<number, number> = {};
       items.forEach((item) => {
         if (item.id != null) defaultQtys[Number(item.id)] = Number(item.remaining_bill_qty ?? item.remaining_qty ?? item.qty ?? 0);
