@@ -91,6 +91,7 @@ const menuItems = [
         { key: '/project.project', label: 'Project' },
         { key: '/project.unit', label: 'Units' },
         { key: '/project.dokumen', label: 'Dokumen' },
+        { key: '/project.milestone', label: 'Milestone' },
       ]},
       { type: 'group', label: 'REPORT', children: [
         { key: '/project/pivot', label: 'Project Progress Pivot' },
