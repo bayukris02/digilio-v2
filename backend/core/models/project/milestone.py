@@ -1,5 +1,5 @@
 from core.fields import (
-    CharField, TextField,
+    CharField, TextField, One2ManyField,
 )
 from core.model_meta import BaseModel
 
@@ -20,6 +20,11 @@ class Milestone(BaseModel):
             label='Syarat Klaim / Kelengkapan Dokumen',
             help_text='Syarat kelengkapan dokumen atau syarat klaim pembayaran milestone',
         ),
+        'lines': One2ManyField(
+            label='Milestone Lines',
+            relation='project.milestone_line',
+            inverse_field='milestone_id',
+        ),
     }
 
     _list_view = {
@@ -38,6 +43,14 @@ class Milestone(BaseModel):
             ],
             'smart_buttons': [],
         },
+        'notebook': [
+            {
+                'key': 'lines',
+                'label': 'Milestone Lines',
+                'relation': 'lines',
+                'columns': ['type', 'name', 'weight'],
+            },
+        ],
     }
 
     class Meta(BaseModel.Meta):

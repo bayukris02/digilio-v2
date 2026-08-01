@@ -30,6 +30,7 @@ from core.models.project.project import Project
 from core.models.project.unit import Unit
 from core.models.project.dokumen import Dokumen
 from core.models.project.milestone import Milestone
+from core.models.project.milestone_line import MilestoneLine
 from core.models.project.project_category import ProjectCategory
 
 __all__ = [
@@ -44,5 +45,5 @@ __all__ = [
     'VendorBill', 'VendorBillLine',
     'CustomerInvoice', 'CustomerInvoiceLine',
     'PurchaseRequest', 'PurchaseRequestLine',
-    'Project', 'Unit', 'Dokumen', 'Milestone', 'ProjectCategory',
+    'Project', 'Unit', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory',
 ]
