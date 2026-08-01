@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   Typography, Card, Input, Select, DatePicker, Space, Button, Dropdown, Checkbox, message, Spin, Popover, Radio, Modal, Tag,
 } from 'antd';
@@ -27,49 +28,60 @@ export default function ModelListPage() {
 
   const [config, setConfig] = useState<ModelConfig | null>(null);
   const [records, setRecords] = useState<Record<string, unknown>[]>([]);
-  const [loading, setLoading] = useState(true);
   const [quickFilter, setQuickFilter] = useState('');
   const [selectedRows, setSelectedRows] = useState<Record<string, unknown>[]>([]);
   const [filterValues, setFilterValues] = useState<Record<string, string | null>>({});
   const [groupByField, setGroupByField] = useState<string | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
   // ── AG Grid handles pagination & search client-side (all records loaded) ──
 
-  // ── Fetch config + all records ──
-  // Load all records once — AG Grid handles pagination & search client-side
-  useEffect(() => {
-    if (!apiModelName) return;
-    setLoading(true);
+  // ── Fetch config + all records via React Query (cached per model) ──
+  // Config is static per model → long staleTime (no refetch when switching menus).
+  // Records are cached 30s → revisiting a menu within 30s is instant.
+  const configQuery = useQuery({
+    queryKey: ['model-config', apiModelName],
+    queryFn: () => modelApi.getConfig(apiModelName),
+    enabled: !!apiModelName,
+    staleTime: 10 * 60 * 1000,  // config jarang berubah → cache 10 menit
+  });
+  const recordsQuery = useQuery({
+    queryKey: ['model-records', apiModelName],
+    queryFn: () => modelApi.listRecords(apiModelName, 1, 0),  // page_size=0 = all records
+    enabled: !!apiModelName,
+    staleTime: 30 * 1000,  // records cache 30 detik → pindah menu bolak-balik = instan
+  });
 
-    Promise.all([
-      modelApi.getConfig(apiModelName),
-      modelApi.listRecords(apiModelName, 1, 0),  // page_size=0 = all records
-    ])
-      .then(([cfg, resp]) => {
-        setConfig(cfg);
-        setRecords(resp.results);
-      })
-      .catch((err) => {
-        message.error('Failed to load model: ' + (err?.message || 'Unknown error'));
-      })
-      .finally(() => setLoading(false));
-  }, [apiModelName]);
+  // Sync query results into existing state (AG Grid rowData, column build, etc.)
+  useEffect(() => {
+    if (configQuery.data) setConfig(configQuery.data);
+  }, [configQuery.data]);
+  useEffect(() => {
+    if (recordsQuery.data) setRecords(recordsQuery.data.results);
+  }, [recordsQuery.data]);
+
+  // Loading = first load only (no data yet). Refetch keeps old data → grid stays mounted.
+  const loading = configQuery.isLoading || recordsQuery.isLoading;
+  // Refreshing = background refetch (refresh button spinner, grid NOT unmounted)
+  const refreshing = recordsQuery.isFetching && !recordsQuery.isLoading;
+
+  // Surface errors via toast (React Query retries once internally)
+  useEffect(() => {
+    if (configQuery.isError) {
+      message.error('Failed to load model: ' + ((configQuery.error as Error)?.message || 'Unknown error'));
+    }
+  }, [configQuery.isError, configQuery.error]);
+  useEffect(() => {
+    if (recordsQuery.isError) {
+      message.error('Failed to load model: ' + ((recordsQuery.error as Error)?.message || 'Unknown error'));
+    }
+  }, [recordsQuery.isError, recordsQuery.error]);
 
   // ── Refresh data without resetting grid state (filter/search/group preserved) ──
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(() => {
     if (!apiModelName) return;
-    setRefreshing(true);
-    try {
-      const resp = await modelApi.listRecords(apiModelName, 1, 0);
-      setRecords(resp.results);
-    } catch (err) {
-      message.error('Failed to refresh: ' + (err?.message || 'Unknown error'));
-    } finally {
-      setRefreshing(false);
-    }
-  }, [apiModelName]);
+    recordsQuery.refetch();
+  }, [apiModelName, recordsQuery]);
 
   // ── Build AG Grid columns from field config ──
   const fieldList = useMemo(() => {

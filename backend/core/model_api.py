@@ -258,6 +258,22 @@ class ModelRecordView(APIView):
         else:
             # List records — use lightweight to_list_record() for performance
             objs = model_cls.objects.filter(is_deleted=False)
+            # Generic eager-loading: select_related semua Many2One di list_view.columns
+            # (1 query per relasi, bukan N+1 per record) — berlaku untuk SEMUA model
+            list_columns = getattr(model_cls, '_list_view', {}).get('columns', [])
+            m2o_select = []
+            for col in list_columns:
+                if not isinstance(col, str):
+                    continue
+                fd = model_cls._field_descriptors.get(col)
+                if (
+                    fd
+                    and getattr(fd, 'field_type', None) == 'many2one'
+                    and not getattr(fd, 'virtual', False)
+                ):
+                    m2o_select.append(col)
+            if m2o_select:
+                objs = objs.select_related(*m2o_select)
             # Support query param filtering: ?model_ref=purchase.order
             model_ref = request.query_params.get('model_ref')
             if model_ref and hasattr(model_cls, 'model_ref'):
