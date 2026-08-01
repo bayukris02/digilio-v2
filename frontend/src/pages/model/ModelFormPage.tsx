@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Typography, Card, Row, Col, Form, Input, Select, DatePicker, Switch,
   InputNumber, Button, Space, Spin, message, Breadcrumb, Steps, Tabs,
@@ -368,6 +369,7 @@ export default function ModelFormPage() {
   const { modelName, recordId } = useParams<{ modelName: string; recordId?: string }>();
   const apiModelName = modelName ? modelNameToApi(modelName) : '';
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const fromModel = searchParams.get('from');
   const fromId = searchParams.get('fromId');
@@ -1015,6 +1017,7 @@ export default function ModelFormPage() {
           await modelApi.updateRecord(apiModelName, currentRecordId!, prepared);
         }
         setChatterKey((prev) => prev + 1);
+        queryClient.invalidateQueries({ queryKey: ['model-records'] });
         message.success({ content: 'Data saved', key: saveKey, duration: 1 });
         syncSaveSnapshot();
       } catch {
@@ -1165,6 +1168,7 @@ export default function ModelFormPage() {
 
       // Sukses — tutup wizard
       setActionWizardVisible(false);
+      queryClient.invalidateQueries({ queryKey: ['model-records'] });
 
       // Handle response
       if (result._action_type === 'open_record') {
@@ -1670,6 +1674,7 @@ export default function ModelFormPage() {
         syncSaveSnapshot();
         message.success('Saved successfully');
       }
+      queryClient.invalidateQueries({ queryKey: ['model-records'] });
       setChatterKey((prev) => prev + 1); // refresh chatter logs
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'errorFields' in err) {

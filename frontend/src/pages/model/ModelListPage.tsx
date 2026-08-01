@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Typography, Card, Input, Select, DatePicker, Space, Button, Dropdown, Checkbox, message, Spin, Popover, Radio, Modal, Tag,
 } from 'antd';
@@ -51,6 +51,7 @@ export default function ModelListPage() {
     enabled: !!apiModelName,
     staleTime: 30 * 1000,  // records cache 30 detik → pindah menu bolak-balik = instan
   });
+  const queryClient = useQueryClient();
 
   // Sync query results into existing state (AG Grid rowData, column build, etc.)
   useEffect(() => {
@@ -309,9 +310,7 @@ export default function ModelListPage() {
                             await modelApi.deleteRecord(apiModelName, row.id as number);
                           }
                           message.success(`${selectedRows.length} record(s) deleted`);
-                          // Refresh list
-                          const resp = await modelApi.listRecords(apiModelName, 1, 0);
-                          setRecords(resp.results);
+                          queryClient.invalidateQueries({ queryKey: ['model-records'] });
                           setSelectedRows([]);
                         } catch (err) {
                           message.error((err as Error)?.message || 'Delete failed');
@@ -474,8 +473,7 @@ export default function ModelListPage() {
         apiModelName={apiModelName}
         onClose={() => setImportModalOpen(false)}
         onSuccess={async () => {
-          const resp = await modelApi.listRecords(apiModelName, 1, 0);
-          setRecords(resp.results);
+          queryClient.invalidateQueries({ queryKey: ['model-records'] });
         }}
       />
     </div>
