@@ -86,6 +86,7 @@ class Project(BaseModel):
                         'line_selection': {
                             'relation': 'lines',
                             'columns': ['milestone_id', 'progress'],
+                            'progress_columns': ['progress'],
                             'show_for_modes': ['update'],
                             'qty_label': 'Progress (%)',
                             'default_selected': False,

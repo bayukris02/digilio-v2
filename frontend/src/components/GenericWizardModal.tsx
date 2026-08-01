@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select } from 'antd';
+import ProgressBar from './ProgressBar';
 
 const { Text } = Typography;
 
@@ -46,6 +47,9 @@ interface LineSelectionConfig {
   qty_label?: string;
   editable_columns?: EditableColumnConfig[];
   default_selected?: boolean;
+  // Kolom yang dirender sebagai progress bar (ProgressBar) — config-driven,
+  // default kosong → wizard lain (PO/SO/PR) tidak berubah
+  progress_columns?: string[];
 }
 
 export interface WizardConfig {
@@ -143,6 +147,7 @@ interface LineSelectorProps {
   editableColumns: EditableColumnConfig[];
   editableValues: Record<number, Record<string, unknown>>;
   many2oneOptions: Record<string, { value: number; label: string }[]>;
+  progressColumns?: string[];
   onToggle: (id: number) => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
@@ -153,7 +158,7 @@ interface LineSelectorProps {
 
 function LineSelector({
   items, selectedIds, columns, qtys, qtyLabel,
-  editableColumns, editableValues, many2oneOptions,
+  editableColumns, editableValues, many2oneOptions, progressColumns = [],
   onToggle, onSelectAll, onDeselectAll, onQtyChange,
   onEditableChange, onFetchMany2One,
 }: LineSelectorProps) {
@@ -204,7 +209,11 @@ function LineSelector({
                 </td>
                 <td style={{ padding: '6px 8px' }}>{idx + 1}</td>
                 {columns.map((col) => (
-                  <td key={col} style={{ padding: '6px 8px' }}>{displayValue(item, col)}</td>
+                  <td key={col} style={{ padding: '6px 8px' }}>
+                    {progressColumns.includes(col)
+                      ? <ProgressBar value={Number(item[col])} />
+                      : displayValue(item, col)}
+                  </td>
                 ))}
                 {editableColumns.map((ec) => {
                   const val = editableValues[numId]?.[ec.key];
@@ -336,6 +345,7 @@ export default function GenericWizardModal({
   const columns = config.line_selection?.columns || [];
   const qtyLabel = config.line_selection?.qty_label || 'Receive Qty';
   const editableColumns = config.line_selection?.editable_columns || [];
+  const progressColumns = config.line_selection?.progress_columns || [];
   const currentMode = config.modes.find((m) => m.value === selectedMode);
   const extraInputs = currentMode?.inputs || [];
 
@@ -497,6 +507,7 @@ export default function GenericWizardModal({
               editableColumns={editableColumns}
               editableValues={editableValues}
               many2oneOptions={many2oneOptions}
+              progressColumns={progressColumns}
               onToggle={handleToggle}
               onSelectAll={handleSelectAll}
               onDeselectAll={handleDeselectAll}
