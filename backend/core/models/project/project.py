@@ -12,16 +12,11 @@ class Project(BaseModel):
 
     _fields = {
         'name': CharField(label='Nama Proyek', required=True),
-        'category': SelectionField(
+        'category': Many2OneField(
             label='Kategori',
-            options=[
-                ('konstruksi', 'Konstruksi'),
-                ('infrastruktur', 'Infrastruktur'),
-                ('interior', 'Interior'),
-                ('renovasi', 'Renovasi'),
-                ('lainnya', 'Lainnya'),
-            ],
-            default='konstruksi',
+            relation='project.project_category',
+            required=False,
+            help_text='Kategori proyek dari master Project Categories',
         ),
         'date_start': DateField(label='Tanggal Mulai'),
         'date_end': DateField(label='Tanggal Selesai'),

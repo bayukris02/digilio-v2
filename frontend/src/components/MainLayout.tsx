@@ -89,6 +89,7 @@ const menuItems = [
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
         { key: '/project.project', label: 'Project' },
+        { key: '/project.project_category', label: 'Project Categories' },
         { key: '/project.unit', label: 'Units' },
         { key: '/project.dokumen', label: 'Dokumen' },
         { key: '/project.milestone', label: 'Milestone' },
