@@ -21,8 +21,16 @@ ModuleRegistry.registerModules([AllCommunityModule, RowGroupingModule]);
 
 const { Title } = Typography;
 
-export default function ModelListPage() {
-  const { modelName } = useParams<{ modelName: string }>();
+export default function ModelListPage({
+  modelName: propModelName,
+  basePath: propBasePath,
+}: { modelName?: string; basePath?: string } = {}) {
+  const { modelName: urlModelName } = useParams<{ modelName: string }>();
+  // modelName bisa di-override via prop (menu alias seperti Project Update);
+  // fallback ke param URL = perilaku default tidak berubah
+  const modelName = propModelName ?? urlModelName ?? '';
+  // basePath: URL navigasi internal; default = /modelName (perilaku lama)
+  const basePath = propBasePath ?? `/${modelName}`;
   const apiModelName = modelName ? modelNameToApi(modelName) : '';
   const navigate = useNavigate();
   const gridRef = useRef<AgGridReact>(null);
@@ -283,7 +291,7 @@ export default function ModelListPage() {
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={() => navigate(`/${modelName}/new`)}
+          onClick={() => navigate(`${basePath}/new`)}
         >
           New
         </Button>
@@ -468,7 +476,7 @@ export default function ModelListPage() {
             theme={themeBalham}
             onRowDoubleClicked={(e) => {
               if (e.data?.id) {
-                navigate(`/${modelName}/${e.data.id}`);
+                navigate(`${basePath}/${e.data.id}`);
               }
             }}
           />

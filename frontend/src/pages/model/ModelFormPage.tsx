@@ -366,8 +366,16 @@ function renderField(
   );
 }
 
-export default function ModelFormPage() {
-  const { modelName, recordId } = useParams<{ modelName: string; recordId?: string }>();
+export default function ModelFormPage({
+  modelName: propModelName,
+  basePath: propBasePath,
+}: { modelName?: string; basePath?: string } = {}) {
+  const { modelName: urlModelName, recordId } = useParams<{ modelName: string; recordId?: string }>();
+  // modelName bisa di-override via prop (menu alias seperti Project Update);
+  // fallback ke param URL = perilaku default tidak berubah
+  const modelName = propModelName ?? urlModelName ?? '';
+  // basePath: URL navigasi self (list/new/detail); default = /modelName (perilaku lama)
+  const basePath = propBasePath ?? `/${modelName}`;
   const apiModelName = modelName ? modelNameToApi(modelName) : '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -1088,7 +1096,7 @@ export default function ModelFormPage() {
       syncSaveSnapshot();
       // Navigate to the new ID if this was a new record
       if (isNew && currentRecordId) {
-        navigate(`/${modelName}/${currentRecordId}`, { replace: true });
+        navigate(`${basePath}/${currentRecordId}`, { replace: true });
       }
       // Update stepper step from response status
       if (recordData.status && config?.fields?.status?.options) {
@@ -1179,22 +1187,22 @@ export default function ModelFormPage() {
           navigate(`/${apiToUrlName(targetModel)}/${targetId}?from=${apiModelName}&fromId=${recordId}`);
         }
       } else {
-        navigate(`/${modelName}/${currentRecordId}`, { replace: isNew });
+        navigate(`${basePath}/${currentRecordId}`, { replace: isNew });
       }
       if (result.message) message.success(result.message as string);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || (err as Error)?.message || 'Action failed';
       message.error(msg);
     }
-  }, [actionWizardBtn, apiModelName, config, form, isNew, lineItems, modelName, navigate, recordData, recordId]);
+  }, [actionWizardBtn, apiModelName, config, form, isNew, lineItems, basePath, navigate, recordData, recordId]);
 
   // ── Prev/Next navigation ──
   const goPrev = useCallback(() => {
-    if (currentIdx > 0) navigate(`/${modelName}/${recordIds[currentIdx - 1]}`);
-  }, [currentIdx, recordIds, modelName, navigate]);
+    if (currentIdx > 0) navigate(`${basePath}/${recordIds[currentIdx - 1]}`);
+  }, [currentIdx, recordIds, basePath, navigate]);
   const goNext = useCallback(() => {
-    if (currentIdx < recordIds.length - 1) navigate(`/${modelName}/${recordIds[currentIdx + 1]}`);
-  }, [currentIdx, recordIds, modelName, navigate]);
+    if (currentIdx < recordIds.length - 1) navigate(`${basePath}/${recordIds[currentIdx + 1]}`);
+  }, [currentIdx, recordIds, basePath, navigate]);
 
   // ── Fetch parent record for breadcrumb chain ──
   useEffect(() => {
@@ -1662,7 +1670,7 @@ export default function ModelFormPage() {
       if (isNew) {
         const result = await modelApi.createRecord(apiModelName, prepared);
         message.success('Created successfully');
-        navigate(`/${modelName}/${result?.id || recordId}`);
+        navigate(`${basePath}/${result?.id || recordId}`);
       } else {
         const result = await modelApi.updateRecord(apiModelName, Number(recordId), prepared);
         // Normalize response dates & many2one
@@ -2054,9 +2062,9 @@ export default function ModelFormPage() {
               {
                 title: (
                   <a
-                    href={`/${modelName}`}
+                    href={`${basePath}`}
                     style={{ fontSize: 11 }}
-                    onClick={(e) => { e.preventDefault(); navigate(`/${modelName}`); }}
+                    onClick={(e) => { e.preventDefault(); navigate(`${basePath}`); }}
                   >
                     {config.verbose_name_plural}
                   </a>
@@ -2155,7 +2163,7 @@ export default function ModelFormPage() {
               variant="solid"
               color="danger"
               icon={<CloseOutlined />}
-              onClick={() => navigate(`/${modelName}`)}
+              onClick={() => navigate(`${basePath}`)}
             >
               Discard
             </Button>
