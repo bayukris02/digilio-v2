@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   Typography, Card, Row, Col, Form, Input, Select, DatePicker, Switch,
   InputNumber, Button, Space, Spin, message, Breadcrumb, Steps, Tabs,
-  Tag, Modal, List, Radio,
+  Tag, Modal, List, Radio, Dropdown,
 } from 'antd';
 import {
   SaveOutlined, CloseOutlined, ArrowLeftOutlined, ArrowRightOutlined,
@@ -1393,7 +1393,7 @@ export default function ModelFormPage({
   }
 
   /** Build AG Grid column defs from child model config, excluding FK/audit fields */
-  const buildColumns = useCallback((relationField: string, columnFilter?: (string | {name: string; display_field?: string})[], tabReadOnly?: boolean): ColDef[] => {
+  const buildColumns = useCallback((relationField: string, columnFilter?: (string | {name: string; display_field?: string})[], tabReadOnly?: boolean, rowActions?: Array<{label: string; actions?: Array<{label: string; action?: string; wizard?: Record<string, unknown>}>}>): ColDef[] => {
     const childCfg = childConfigs[relationField];
     if (!childCfg?.fields) return [];
     // Build column metadata from mixed columnFilter (string | {name, display_field})
@@ -1597,6 +1597,41 @@ export default function ModelFormPage({
             icon={<DeleteOutlined />}
             onClick={() => deleteLine(relationField, params.data._key)}
           />
+          );
+        },
+        editable: false,
+        sortable: false,
+        resizable: false,
+      });
+    }
+    // ── Row actions column — config-driven dari notebook tab (row_actions) ──
+    if (rowActions && rowActions.length > 0) {
+      cols.push({
+        headerName: 'Action',
+        field: '_row_actions',
+        width: 170,
+        minWidth: 170,
+        flex: 0,
+        cellRenderer: (params: ICellRendererParams) => {
+          if (params.data?._isAddButton || params.node?.rowPinned) return null;
+          return (
+            <Dropdown
+              trigger={['click']}
+              menu={{
+                items: (rowActions[0]?.actions || []).map((a) => ({
+                  key: a.label,
+                  label: a.label,
+                  onClick: () => {
+                    setActionWizardBtn({ label: a.label, action: a.action || '', wizard: a.wizard as Record<string, unknown> });
+                    setActionWizardVisible(true);
+                  },
+                })),
+              }}
+            >
+              <Button size="small" type="primary" ghost style={{ fontSize: 11, padding: '0 8px', height: 22, lineHeight: '20px' }}>
+                {rowActions[0]?.label || 'Action'}
+              </Button>
+            </Dropdown>
           );
         },
         editable: false,
@@ -1837,7 +1872,7 @@ export default function ModelFormPage({
             <AgGridReact
               key={`grid-${JSON.stringify(columnFieldValues)}`}
               rowData={(isReadOnly || tab.read_only) ? items : [...items, { _key: '_add_button', _isAddButton: true }]}
-              columnDefs={buildColumns(tab.relation!, tab.columns, tab.read_only)}
+              columnDefs={buildColumns(tab.relation!, tab.columns, tab.read_only, (tab as any).row_actions)}
               getRowId={(params) => params.data._key}
               onRowClicked={(params) => {
                 if (params.data?._isAddButton && !isReadOnly && !tab.read_only) {

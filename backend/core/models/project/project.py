@@ -96,6 +96,15 @@ class Project(BaseModel):
                 'label': 'Project Milestones',
                 'relation': 'lines',
                 'columns': ['milestone_id', 'progress'],
+                'row_actions': [
+                    {
+                        'label': 'Update Progress',
+                        'actions': [
+                            {'label': 'Buat Tagihan', 'action': 'buat_tagihan', 'wizard': {'title': 'Buat Tagihan', 'modes': []}},
+                            {'label': 'Input Expenses', 'action': 'input_expenses', 'wizard': {'title': 'Input Expenses', 'modes': []}},
+                        ],
+                    },
+                ],
             },
             {
                 'key': 'units',
