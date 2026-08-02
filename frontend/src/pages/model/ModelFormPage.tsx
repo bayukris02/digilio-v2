@@ -1606,6 +1606,7 @@ export default function ModelFormPage({
     }
     // ── Row actions column — config-driven dari notebook tab (row_actions) ──
     if (rowActions && rowActions.length > 0) {
+      const actions = rowActions[0]?.actions || [];
       cols.push({
         headerName: 'Action',
         field: '_row_actions',
@@ -1614,17 +1615,32 @@ export default function ModelFormPage({
         flex: 0,
         cellRenderer: (params: ICellRendererParams) => {
           if (params.data?._isAddButton || params.node?.rowPinned) return null;
+          const openAction = (a: { label: string; action?: string; wizard?: Record<string, unknown> }) => {
+            setActionWizardBtn({ label: a.label, action: a.action || '', wizard: a.wizard as Record<string, unknown> });
+            setActionWizardVisible(true);
+          };
+          // 1 action → button langsung (wizard multi-mode); >1 → dropdown
+          if (actions.length === 1) {
+            return (
+              <Button
+                size="small"
+                type="primary"
+                ghost
+                style={{ fontSize: 11, padding: '0 8px', height: 22, lineHeight: '20px' }}
+                onClick={() => openAction(actions[0])}
+              >
+                {rowActions[0]?.label || 'Action'}
+              </Button>
+            );
+          }
           return (
             <Dropdown
               trigger={['click']}
               menu={{
-                items: (rowActions[0]?.actions || []).map((a) => ({
+                items: actions.map((a) => ({
                   key: a.label,
                   label: a.label,
-                  onClick: () => {
-                    setActionWizardBtn({ label: a.label, action: a.action || '', wizard: a.wizard as Record<string, unknown> });
-                    setActionWizardVisible(true);
-                  },
+                  onClick: () => openAction(a),
                 })),
               }}
             >

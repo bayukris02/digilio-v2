@@ -101,15 +101,15 @@ class Project(BaseModel):
                         'label': 'Update Progress',
                         'actions': [
                             {
-                                'label': 'Buat Tagihan',
-                                'action': 'buat_tagihan',
+                                'label': 'Update Progress',
+                                'action': 'update_progress',
                                 'wizard': {
-                                    'title': 'Buat Tagihan',
+                                    'title': 'Update Progress',
                                     'modes': [
                                         {
-                                            'value': 'create',
-                                            'label': '✅ Buat Tagihan',
-                                            'icon': 'CheckCircleOutlined',
+                                            'value': 'buat_tagihan',
+                                            'label': 'Buat Tagihan',
+                                            'icon': 'FileTextOutlined',
                                             'inputs': [
                                                 {'key': 'vendor', 'label': 'Vendor', 'type': 'many2one', 'relation': 'purchase.vendor'},
                                                 {'key': 'bill_date', 'label': 'Bill Date', 'type': 'date'},
@@ -118,10 +118,14 @@ class Project(BaseModel):
                                                 {'key': 'description', 'label': 'Deskripsi', 'type': 'text'},
                                             ],
                                         },
+                                        {
+                                            'value': 'input_expenses',
+                                            'label': 'Input Expenses',
+                                            'icon': 'SendOutlined',
+                                        },
                                     ],
                                 },
                             },
-                            {'label': 'Input Expenses', 'action': 'input_expenses', 'wizard': {'title': 'Input Expenses', 'modes': []}},
                         ],
                     },
                 ],
@@ -146,7 +150,20 @@ class Project(BaseModel):
     # ── Actions ──
 
     def _action_update_progress(self, data=None):
-        """Update progress milestone lines dari wizard (nilai input = progress baru)."""
+        """Wizard Update Progress per milestone — dispatch by mode.
+
+        mode = buat_tagihan | input_expenses | update (progress lama)
+        """
+        mode = (data or {}).get('mode', '')
+        if mode == 'buat_tagihan':
+            return self._action_buat_tagihan(data)
+        if mode == 'input_expenses':
+            return {'message': 'Input Expenses belum diimplementasikan.'}
+        # Fallback: mode lama 'update' / tanpa mode → update progress lines
+        return self._update_progress_lines(data)
+
+    def _update_progress_lines(self, data=None):
+        """Update progress milestone lines (nilai input = progress baru)."""
         from core.model_meta import ErpModelBase
 
         selected_lines_raw = (data or {}).get('selected_lines')
