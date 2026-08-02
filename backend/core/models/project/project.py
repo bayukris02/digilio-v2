@@ -100,7 +100,27 @@ class Project(BaseModel):
                     {
                         'label': 'Update Progress',
                         'actions': [
-                            {'label': 'Buat Tagihan', 'action': 'buat_tagihan', 'wizard': {'title': 'Buat Tagihan', 'modes': []}},
+                            {
+                                'label': 'Buat Tagihan',
+                                'action': 'buat_tagihan',
+                                'wizard': {
+                                    'title': 'Buat Tagihan',
+                                    'modes': [
+                                        {
+                                            'value': 'create',
+                                            'label': '✅ Buat Tagihan',
+                                            'icon': 'CheckCircleOutlined',
+                                            'inputs': [
+                                                {'key': 'vendor', 'label': 'Vendor', 'type': 'many2one', 'relation': 'purchase.vendor'},
+                                                {'key': 'bill_date', 'label': 'Bill Date', 'type': 'date'},
+                                                {'key': 'due_date', 'label': 'Due Date', 'type': 'date'},
+                                                {'key': 'amount', 'label': 'Nominal (Rp)', 'type': 'number', 'default': 0},
+                                                {'key': 'description', 'label': 'Deskripsi', 'type': 'text'},
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
                             {'label': 'Input Expenses', 'action': 'input_expenses', 'wizard': {'title': 'Input Expenses', 'modes': []}},
                         ],
                     },
@@ -156,6 +176,61 @@ class Project(BaseModel):
             updated += 1
 
         return {'message': f'Progress diupdate untuk {updated} milestone.'}
+
+    def _action_buat_tagihan(self, data=None):
+        """Buat Vendor Bill draft dari wizard (vendor + nominal), lalu open form bill."""
+        from django.db import transaction
+        from datetime import date
+        from core.model_meta import ErpModelBase
+        from core.models.accounting.vendor_bill import VendorBill
+        from core.models.accounting.vendor_bill_line import VendorBillLine
+        from core.models.settings.sequence import Sequence
+
+        vendor_id = (data or {}).get('vendor')
+        amount = float((data or {}).get('amount', 0) or 0)
+        bill_date = (data or {}).get('bill_date') or None
+        due_date = (data or {}).get('due_date') or None
+        description = ((data or {}).get('description') or '').strip()
+        if not vendor_id:
+            return {'error': 'Vendor wajib diisi.'}
+        if amount <= 0:
+            return {'error': 'Nominal harus lebih dari 0.'}
+
+        vendor_model = ErpModelBase._model_registry.get('purchase.vendor')
+        vendor = vendor_model.objects.filter(pk=int(vendor_id), is_deleted=False).first() if vendor_model else None
+        if not vendor:
+            return {'error': 'Vendor tidak ditemukan.'}
+
+        # Inject sequence aktif (sama seperti get_model_config) biar bill bisa langsung Confirm
+        active_seq = Sequence.objects.filter(
+            model_ref='accounting.vendor_bill', active=True, is_deleted=False
+        ).first()
+
+        with transaction.atomic():
+            bill = VendorBill.objects.create(
+                vendor=vendor,
+                sequence_id=active_seq,
+                status='draft',
+                bill_date=bill_date or date.today(),
+                due_date=due_date,
+            )
+            VendorBillLine.objects.create(
+                bill_id=bill,
+                name=description or f'Tagihan proyek: {self.name or ""}',
+                qty=1,
+                price=amount,
+            )
+            # Compute summary + payment summary
+            bill._compute_summary()
+            bill._compute_payment_summary()
+            bill.save()
+
+        return {
+            '_action_type': 'open_record',
+            'model': 'accounting.vendor_bill',
+            'record_id': bill.pk,
+            'message': f'Vendor Bill berhasil dibuat: Rp {amount:,.0f}',
+        }
 
     def _action_input_sales(self, data=None):
         """Input penjualan unit — set qty_sold (sold_percentage recompute otomatis)."""

@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select } from 'antd';
+import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select, DatePicker, Input } from 'antd';
+import dayjs from 'dayjs';
 import ProgressBar from './ProgressBar';
 
 const { Text } = Typography;
+const { TextArea } = Input;
 
 /** Option for one2many line selection — each row is a record from the parent's relation */
 interface WizardLineItem {
@@ -304,7 +306,12 @@ export default function GenericWizardModal({
   const [extraInputValues, setExtraInputValues] = useState<Record<string, number | string>>(() => {
     const currentMode = config.modes.find((m) => m.value === selectedMode);
     const vals: Record<string, number | string> = {};
-    currentMode?.inputs?.forEach((inp) => { vals[inp.key] = inp.default ?? (inp.type === 'selection' ? (inp.options?.[0]?.value ?? '') : 0); });
+    currentMode?.inputs?.forEach((inp) => {
+      if (inp.default !== undefined) vals[inp.key] = inp.default;
+      else if (inp.type === 'selection') vals[inp.key] = inp.options?.[0]?.value ?? '';
+      else if (inp.type === 'date' || inp.type === 'text') vals[inp.key] = '';
+      else vals[inp.key] = 0;
+    });
     return vals;
   });
 
@@ -312,7 +319,12 @@ export default function GenericWizardModal({
     setSelectedMode(value);
     const newMode = config.modes.find((m) => m.value === value);
     const vals: Record<string, number | string> = {};
-    newMode?.inputs?.forEach((inp) => { vals[inp.key] = inp.default ?? (inp.type === 'selection' ? (inp.options?.[0]?.value ?? '') : 0); });
+    newMode?.inputs?.forEach((inp) => {
+      if (inp.default !== undefined) vals[inp.key] = inp.default;
+      else if (inp.type === 'selection') vals[inp.key] = inp.options?.[0]?.value ?? '';
+      else if (inp.type === 'date' || inp.type === 'text') vals[inp.key] = '';
+      else vals[inp.key] = 0;
+    });
     setExtraInputValues(vals);
   };
 
@@ -469,6 +481,18 @@ export default function GenericWizardModal({
                         onChange={(v) => handleExtraInputChange(inp.key, v)}
                         many2oneOptions={many2oneOptions}
                         onFetch={handleFetchMany2One}
+                      />
+                    ) : inp.type === 'date' ? (
+                      <DatePicker
+                        style={{ width: '100%' }}
+                        value={extraInputValues[inp.key] ? dayjs(extraInputValues[inp.key] as string) : null}
+                        onChange={(d) => handleExtraInputChange(inp.key, d ? d.format('YYYY-MM-DD') : '')}
+                      />
+                    ) : inp.type === 'text' ? (
+                      <TextArea
+                        rows={3}
+                        value={extraInputValues[inp.key] as string ?? ''}
+                        onChange={(e) => handleExtraInputChange(inp.key, e.target.value)}
                       />
                     ) : (() => {
                       const isDpValue = inp.key === 'dp_value';
