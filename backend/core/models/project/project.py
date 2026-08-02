@@ -78,38 +78,14 @@ class Project(BaseModel):
                     'icon': 'EditOutlined',
                     'color': 'primary',
                     'action': 'update_progress',
-                    'wizard': {
-                        'title': 'Update Progress',
-                        'modes': [
-                            {'value': 'update', 'label': '✅ Simpan Progress', 'icon': 'CheckCircleOutlined'},
-                        ],
-                        'line_selection': {
-                            'relation': 'lines',
-                            'columns': ['milestone_id', 'progress'],
-                            'progress_columns': ['progress'],
-                            'show_for_modes': ['update'],
-                            'qty_label': 'Progress (%)',
-                            'default_selected': False,
-                        },
-                    },
+                    'goto_tab': 'lines',
                 },
                 {
                     'label': 'Input Penjualan',
                     'icon': 'SendOutlined',
                     'color': 'primary',
                     'action': 'input_sales',
-                    'wizard': {
-                        'title': 'Input Penjualan',
-                        'modes': [
-                            {'value': 'save', 'label': '✅ Simpan Penjualan', 'icon': 'CheckCircleOutlined'},
-                        ],
-                        'line_selection': {
-                            'relation': 'units',
-                            'columns': ['unit_id', 'qty_available', 'qty_sold', 'sold_percentage'],
-                            'show_for_modes': ['save'],
-                            'qty_label': 'Unit Terjual',
-                        },
-                    },
+                    'goto_tab': 'units',
                 },
             ],
             'smart_buttons': [],

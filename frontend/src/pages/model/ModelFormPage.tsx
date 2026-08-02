@@ -408,6 +408,9 @@ export default function ModelFormPage({
   // ── Action wizard (modal with mode + line selection) ──
   const [actionWizardVisible, setActionWizardVisible] = useState(false);
   const [actionWizardBtn, setActionWizardBtn] = useState<Record<string, unknown> | null>(null);
+  // ── Notebook tab navigation (action button `goto_tab`) ──
+  const [activeNotebookKey, setActiveNotebookKey] = useState<string>();
+  const notebookRef = useRef<HTMLDivElement>(null);
   const wizardItems = useMemo(() => {
     if (!actionWizardBtn) return [];
     const ls = (actionWizardBtn.wizard as any)?.line_selection;
@@ -923,6 +926,18 @@ export default function ModelFormPage({
       return;
     }
     setActionLoading(actionName);
+
+    // ── If action has goto_tab, switch notebook tab instead of wizard/API ──
+    const gotoTab = btn.goto_tab as string | undefined;
+    if (gotoTab) {
+      setActiveNotebookKey(gotoTab);
+      // Scroll notebook card into view after tab switch
+      setTimeout(() => {
+        notebookRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+      setActionLoading(null);
+      return;
+    }
 
     // ── If action has wizard config, show modal instead of calling API directly ──
     const wizardCfg = btn.wizard as Record<string, unknown> | undefined;
@@ -2343,6 +2358,7 @@ export default function ModelFormPage({
       {/* ═══ NOTEBOOK CARD — only for models with line items ═══ */}
       {!printPreviewHtml && notebookTabs.length > 0 && (
       <Card
+        ref={notebookRef}
         styles={{
           header: {
             borderBottom: '1px solid #e8e8e8',
@@ -2353,7 +2369,8 @@ export default function ModelFormPage({
         title={<span>Notebook</span>}
       >
         <Tabs
-          defaultActiveKey={notebookTabs[0]?.key}
+          activeKey={notebookTabs.some((t) => t.key === activeNotebookKey) ? activeNotebookKey : notebookTabs[0]?.key}
+          onChange={(key) => setActiveNotebookKey(key)}
           items={notebookTabs}
         />
       </Card>
