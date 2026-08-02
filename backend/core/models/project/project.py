@@ -213,6 +213,7 @@ class Project(BaseModel):
                 status='draft',
                 bill_date=bill_date or date.today(),
                 due_date=due_date,
+                project=self,
             )
             VendorBillLine.objects.create(
                 bill_id=bill,

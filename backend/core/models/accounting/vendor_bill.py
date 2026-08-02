@@ -68,6 +68,12 @@ class VendorBill(BaseModel):
             relation='purchase.order',
             required=False,
         ),
+        'project': Many2OneField(
+            label='Project',
+            relation='project.project',
+            required=False,
+            help_text='Project asal tagihan (otomatis dari wizard Buat Tagihan)',
+        ),
 
         # ── Down Payment ──
         'is_down_payment': BooleanField(label='DP Bill', default=False),
@@ -106,9 +112,9 @@ class VendorBill(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'purchase_order', 'vendor', 'bill_date', 'due_date', 'status', 'grand_total', 'due_amount', 'payment_status'],
-        'filters': ['status', 'vendor', 'bill_date', 'payment_status'],
-        'group_by': ['status', 'vendor', 'payment_status'],
+        'columns': ['reference', 'project', 'purchase_order', 'vendor', 'bill_date', 'due_date', 'status', 'grand_total', 'due_amount', 'payment_status'],
+        'filters': ['status', 'vendor', 'bill_date', 'payment_status', 'project'],
+        'group_by': ['status', 'vendor', 'payment_status', 'project'],
         'default_sort': ['-updated_at'],
     }
 
@@ -118,7 +124,7 @@ class VendorBill(BaseModel):
                 {
                     'key': 'general',
                     'label': 'General',
-                    'fields': ['reference', 'purchase_order', 'vendor', 'code', 'address',
+                    'fields': ['reference', 'project', 'purchase_order', 'vendor', 'code', 'address',
                                'bill_date', 'due_date', 'status', 'sequence_id',
                                'payment_status'],
                 },
