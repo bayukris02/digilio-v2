@@ -14,7 +14,6 @@ class VendorBill(BaseModel):
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
         'confirmed': {'allow_edit': False, 'allow_delete': False, 'label': 'Confirmed', 'color': 'processing'},
-        'done': {'allow_edit': False, 'allow_delete': False, 'label': 'Done', 'color': 'success'},
         'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Cancelled', 'color': 'error'},
     }
 
@@ -29,15 +28,8 @@ class VendorBill(BaseModel):
             'effect': '_effect_confirm',
         },
         {
-            'name': 'mark_done',
-            'from': ['confirmed'],
-            'to': 'done',
-            'label': 'Mark Done',
-            'icon': 'CheckCircleOutlined',
-        },
-        {
             'name': 'cancel',
-            'from': ['draft', 'confirmed', 'done'],
+            'from': ['draft', 'confirmed'],
             'to': 'cancelled',
             'label': 'Cancel',
             'icon': 'StopOutlined',
@@ -146,7 +138,7 @@ class VendorBill(BaseModel):
         'actions': [
                 {'label': 'Print', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
                 {'label': 'Confirm', 'icon': 'CheckOutlined', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
-                {'label': 'Cancel', 'icon': 'StopOutlined', 'color': 'primary', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
+                {'label': 'Cancel', 'icon': 'StopOutlined', 'color': 'primary', 'action': 'cancel', 'states': ['draft', 'confirmed']},
                 {'label': 'Action', 'icon': 'MoreOutlined', 'color': 'primary'},
             ],
         },
@@ -274,7 +266,7 @@ class VendorBill(BaseModel):
     def _sync_milestone_progress(self):
         """Auto-update progress milestone terkait berdasarkan status bill.
 
-        draft 10% → confirmed 40% → done 50%; paid 100%; cancelled reset 0%.
+        draft 0% → confirmed 50%; paid 100%; cancelled reset 0%.
         Non-cancelled pakai max(current, target) supaya progress manual tidak turun.
         """
         line = self.project_line
@@ -289,11 +281,7 @@ class VendorBill(BaseModel):
 
         if self.payment_status == 'paid':
             target = 100.0
-        elif self.status == 'draft':
-            target = 10.0
         elif self.status == 'confirmed':
-            target = 40.0
-        elif self.status == 'done':
             target = 50.0
         else:
             return
