@@ -41,7 +41,7 @@ export const router = createBrowserRouter([
       { path: 'purchase.product/new', element: <ModelFormPage modelName="inventory.product" basePath="/purchase.product" /> },
       { path: 'purchase.product/:recordId', element: <ModelFormPage modelName="inventory.product" basePath="/purchase.product" /> },
       // Sales custom routes
-      { path: 'sales/dashboard', element: <ComingSoon /> },
+      { path: 'sales/dashboard', element: <GenericDashboardPage dashboardKey="sales" /> },
       { path: 'sales/insight', element: <ComingSoon /> },
       { path: 'sales/quick_sales', element: <ComingSoon /> },
       { path: 'sales/pivot', element: <ComingSoon /> },
