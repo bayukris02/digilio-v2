@@ -122,6 +122,12 @@ class Project(BaseModel):
                                             'value': 'input_expenses',
                                             'label': 'Input Expenses',
                                             'icon': 'SendOutlined',
+                                            'inputs': [
+                                                {'key': 'date', 'label': 'Tanggal', 'type': 'date'},
+                                                {'key': 'payment_method', 'label': 'Payment Method', 'type': 'many2one', 'relation': 'accounting.payment_method'},
+                                                {'key': 'description', 'label': 'Deskripsi', 'type': 'text'},
+                                                {'key': 'amount', 'label': 'Nominal (Rp)', 'type': 'number', 'default': 0},
+                                            ],
                                         },
                                     ],
                                 },
@@ -158,7 +164,7 @@ class Project(BaseModel):
         if mode == 'buat_tagihan':
             return self._action_buat_tagihan(data)
         if mode == 'input_expenses':
-            return {'message': 'Input Expenses belum diimplementasikan.'}
+            return self._action_input_expenses(data)
         # Fallback: mode lama 'update' / tanpa mode → update progress lines
         return self._update_progress_lines(data)
 
@@ -259,6 +265,63 @@ class Project(BaseModel):
             'model': 'accounting.vendor_bill',
             'record_id': bill.pk,
             'message': f'Vendor Bill berhasil dibuat: Rp {amount:,.0f}',
+        }
+
+    def _action_input_expenses(self, data=None):
+        """Wizard Input Expenses — buat accounting.expense draft + 1 line.
+
+        description & nominal dari wizard otomatis mengisi Expense Line.
+        """
+        from django.db import transaction
+        from datetime import date
+        from core.model_meta import ErpModelBase
+        from core.models.accounting.expense import Expense
+        from core.models.accounting.expense_line import ExpenseLine
+        from core.models.settings.sequence import Sequence
+
+        expense_date = (data or {}).get('date') or date.today().isoformat()
+        payment_method_id = (data or {}).get('payment_method')
+        description = ((data or {}).get('description') or '').strip()
+        amount = float((data or {}).get('amount', 0) or 0)
+        if amount <= 0:
+            return {'error': 'Nominal harus lebih dari 0.'}
+
+        payment_method = None
+        if payment_method_id:
+            pm_model = ErpModelBase._model_registry.get('accounting.payment_method')
+            if pm_model:
+                payment_method = pm_model.objects.filter(
+                    pk=int(payment_method_id), is_deleted=False
+                ).first()
+                if not payment_method:
+                    return {'error': 'Payment Method tidak ditemukan.'}
+
+        line_desc = description or f'Biaya proyek: {self.name or ""}'
+
+        # Inject sequence aktif (sama seperti get_model_config) biar bisa langsung Confirm
+        active_seq = Sequence.objects.filter(
+            model_ref='accounting.expense', active=True, is_deleted=False
+        ).first()
+
+        with transaction.atomic():
+            expense = Expense.objects.create(
+                sequence_id=active_seq,
+                status='draft',
+                date=expense_date,
+                payment_method=payment_method,
+                description=line_desc,
+            )
+            ExpenseLine.objects.create(
+                expense_id=expense,
+                description=line_desc,
+                amount=amount,
+            )
+
+        return {
+            '_action_type': 'open_record',
+            'model': 'accounting.expense',
+            'record_id': expense.pk,
+            'message': f'Input Biaya berhasil dibuat: Rp {amount:,.0f}',
         }
 
     def _action_input_sales(self, data=None):
