@@ -53,7 +53,7 @@ export const router = createBrowserRouter([
       // Sales -> Pricelist = coming soon (belum ada model)
       { path: 'sales.pricelist', element: <ComingSoon /> },
       // Inventory custom routes
-      { path: 'inventory/dashboard', element: <ComingSoon /> },
+      { path: 'inventory/dashboard', element: <GenericDashboardPage dashboardKey="inventory" /> },
       { path: 'inventory/insight', element: <ComingSoon /> },
       // Inventory -> Stock Receipt = menu alias → konten model purchase.goods_receipt (URL tetap /inventory.stock_receipt)
       { path: 'inventory.stock_receipt', element: <ModelListPage modelName="purchase.goods_receipt" basePath="/inventory.stock_receipt" /> },
@@ -66,8 +66,8 @@ export const router = createBrowserRouter([
       { path: 'inventory.stock_adjustment', element: <ComingSoon /> },
       { path: 'inventory/pivot', element: <ComingSoon /> },
       { path: 'inventory/detail', element: <ComingSoon /> },
-      // Project custom routes (coming soon)
-      { path: 'project/dashboard', element: <ComingSoon /> },
+      // Project custom routes
+      { path: 'project/dashboard', element: <GenericDashboardPage dashboardKey="project" /> },
       // Project Update = menu alias → konten model project.project (URL tetap /project/progress, read-only)
       { path: 'project/progress', element: <ModelListPage modelName="project.project" basePath="/project/progress" readOnly /> },
       { path: 'project/progress/:recordId', element: <ModelFormPage modelName="project.project" basePath="/project/progress" readOnly /> },
@@ -79,6 +79,7 @@ export const router = createBrowserRouter([
       // Project model routes (coming soon)
       // project.dokumen now uses generic model pages
       // Accounting report routes (coming soon)
+      { path: 'accounting/dashboard', element: <GenericDashboardPage dashboardKey="accounting" /> },
       { path: 'accounting/laba_rugi', element: <ComingSoon /> },
       { path: 'accounting/neraca', element: <ComingSoon /> },
       { path: 'accounting/cashflow', element: <ComingSoon /> },

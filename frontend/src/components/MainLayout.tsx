@@ -132,6 +132,7 @@ const menuItems = [
     icon: <BookOutlined />,
     label: 'Accounting',
     children: [
+      { key: '/accounting/dashboard', label: 'Dashboard' },
       { type: 'group', label: 'OPERATION', children: [
         { key: '/accounting.vendor_bill', label: 'Tagihan' },
         { key: '/accounting.customer_invoice', label: 'Faktur' },
