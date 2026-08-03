@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import MainLayout from '../components/MainLayout';
-import DashboardPage from '../pages/Dashboard';
 import DocumentationPage from '../pages/docs/DocumentationPage';
 import FormPage from '../pages/base/FormPage';
 import ListPage from '../pages/base/ListPage';
@@ -21,7 +20,7 @@ export const router = createBrowserRouter([
     path: '/',
     element: <MainLayout />,
     children: [
-      { index: true, element: <DashboardPage /> },
+      { index: true, element: <GenericDashboardPage dashboardKey="main" /> },
       { path: 'docs', element: <DocumentationPage /> },
       { path: 'form', element: <FormPage /> },
       { path: 'list', element: <ListPage /> },

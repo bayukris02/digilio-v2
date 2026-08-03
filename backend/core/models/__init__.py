@@ -34,6 +34,8 @@ from core.models.project.milestone import Milestone
 from core.models.project.milestone_line import MilestoneLine
 from core.models.project.project_category import ProjectCategory
 from core.models.project.project_unit import ProjectUnit
+# Registrasi dashboard utama (gabungan semua modul) ke registry generic
+from core.models.dashboard import MAIN_DASHBOARD  # noqa: F401
 
 __all__ = [
     'BaseModel', 'ChatterLog', 'PurchaseOrder', 'PurchaseOrderLine', 'GoodsReceipt', 'GoodsReceiptLine',
