@@ -1,7 +1,10 @@
 from django.urls import path, include
 from core.model_api import model_list, model_config, model_compute, ModelRecordView, chatter_logs, model_action, model_create_child
+from core.dashboard_api import dashboard_data
 
 urlpatterns = [
+    # Dashboard (meta-driven, generic)
+    path('dashboards/<str:key>/', dashboard_data, name='dashboard-data'),
     # Model registry
     path('models/', model_list, name='model-list'),
     path('models/<str:model_name>/config/', model_config, name='model-config'),
