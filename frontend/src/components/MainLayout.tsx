@@ -61,9 +61,22 @@ const menuItems = [
     icon: <DollarOutlined />,
     label: 'Sales',
     children: [
-      { key: '/sales.order', label: 'Sales Order' },
-      { key: '/sales.delivery_order', label: 'Delivery Order' },
-      { key: '/sales.customer', label: 'Customers' },
+      { key: '/sales/dashboard', label: 'Dashboard' },
+      { key: '/sales/insight', label: 'Insight' },
+      { type: 'group', label: 'OPERATION', children: [
+        { key: '/sales.order', label: 'Sales Order' },
+        { key: '/sales.delivery_order', label: 'Delivery Order' },
+        { key: '/sales.quick_sales', label: 'Quick Sales' },
+      ]},
+      { type: 'group', label: 'MASTER DATA', children: [
+        { key: '/sales.customer', label: 'Customer' },
+        { key: '/sales.product', label: 'Product' },
+        { key: '/sales.pricelist', label: 'Pricelist' },
+      ]},
+      { type: 'group', label: 'REPORT', children: [
+        { key: '/sales/pivot', label: 'Sales Pivot' },
+        { key: '/sales/detail', label: 'Sales Detail' },
+      ]},
     ],
   },
   {
@@ -106,13 +119,22 @@ const menuItems = [
     icon: <BookOutlined />,
     label: 'Accounting',
     children: [
-      { key: '/accounting.jurnal', label: 'Jurnal' },
-      { key: '/accounting.chart_of_account', label: 'Chart of Account' },
-      { key: '/accounting.vendor_bill', label: 'Tagihan' },
-      { key: '/accounting.vendor_payment', label: 'Pembayaran' },
-      { key: '/accounting.customer_invoice', label: 'Faktur' },
-      { key: '/accounting.customer_receipt', label: 'Penerimaan' },
-      { key: '/accounting.payment_method', label: 'Payment Methods' },
+      { type: 'group', label: 'OPERATION', children: [
+        { key: '/accounting.vendor_bill', label: 'Tagihan' },
+        { key: '/accounting.customer_invoice', label: 'Faktur' },
+        { key: '/accounting.vendor_payment', label: 'Pembayaran' },
+        { key: '/accounting.customer_receipt', label: 'Penerimaan' },
+        { key: '/accounting.jurnal', label: 'Jurnal' },
+      ]},
+      { type: 'group', label: 'MASTER DATA', children: [
+        { key: '/accounting.chart_of_account', label: 'COA' },
+        { key: '/accounting.payment_method', label: 'Payment Method' },
+      ]},
+      { type: 'group', label: 'REPORT', children: [
+        { key: '/accounting/laba_rugi', label: 'Laba Rugi' },
+        { key: '/accounting/neraca', label: 'Neraca' },
+        { key: '/accounting/cashflow', label: 'Cashflow' },
+      ]},
     ],
   },
   {
@@ -134,10 +156,10 @@ const topLevelItems = menuItems.map(({ key, icon, label }) => ({ key, icon, labe
 function getModuleKey(pathname: string): string {
   if (pathname === '/') return '/';
   if (pathname.startsWith('/purchase.') || pathname.startsWith('/purchase/')) return 'purchase';
-  if (pathname.startsWith('/sales.')) return 'sales';
+  if (pathname.startsWith('/sales.') || pathname.startsWith('/sales/')) return 'sales';
   if (pathname.startsWith('/inventory.')) return 'inventory';
   if (pathname.startsWith('/project.') || pathname.startsWith('/project/')) return 'project';
-  if (pathname.startsWith('/accounting.')) return 'accounting';
+  if (pathname.startsWith('/accounting.') || pathname.startsWith('/accounting/')) return 'accounting';
   if (pathname.startsWith('/settings.')) return 'settings';
   return '/';
 }
@@ -262,10 +284,11 @@ export default function MainLayout() {
             if (key === '/') {
               navigate('/');
             } else {
-              // Navigate to first child of selected module
+              // Navigate to first child of selected module (skip group headers)
               const module = menuItems.find((m) => m.key === key);
-              if (module?.children?.[0]) {
-                navigate(module.children[0].key);
+              const firstChild = module?.children?.find((c) => c && (c as { key?: string }).key);
+              if (firstChild) {
+                navigate((firstChild as { key: string }).key);
               }
             }
           }}

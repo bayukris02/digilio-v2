@@ -39,6 +39,18 @@ export const router = createBrowserRouter([
       { path: 'purchase.product', element: <ModelListPage modelName="inventory.product" basePath="/purchase.product" /> },
       { path: 'purchase.product/new', element: <ModelFormPage modelName="inventory.product" basePath="/purchase.product" /> },
       { path: 'purchase.product/:recordId', element: <ModelFormPage modelName="inventory.product" basePath="/purchase.product" /> },
+      // Sales custom routes
+      { path: 'sales/dashboard', element: <ComingSoon /> },
+      { path: 'sales/insight', element: <ComingSoon /> },
+      { path: 'sales/quick_sales', element: <ComingSoon /> },
+      { path: 'sales/pivot', element: <ComingSoon /> },
+      { path: 'sales/detail', element: <ComingSoon /> },
+      // Sales -> Product = menu alias → konten model inventory.product (URL tetap /sales.product)
+      { path: 'sales.product', element: <ModelListPage modelName="inventory.product" basePath="/sales.product" /> },
+      { path: 'sales.product/new', element: <ModelFormPage modelName="inventory.product" basePath="/sales.product" /> },
+      { path: 'sales.product/:recordId', element: <ModelFormPage modelName="inventory.product" basePath="/sales.product" /> },
+      // Sales -> Pricelist = coming soon (belum ada model)
+      { path: 'sales.pricelist', element: <ComingSoon /> },
       // Project custom routes (coming soon)
       { path: 'project/dashboard', element: <ComingSoon /> },
       // Project Update = menu alias → konten model project.project (URL tetap /project/progress, read-only)
@@ -51,6 +63,10 @@ export const router = createBrowserRouter([
       { path: 'project/cashflow', element: <ComingSoon /> },
       // Project model routes (coming soon)
       // project.dokumen now uses generic model pages
+      // Accounting report routes (coming soon)
+      { path: 'accounting/laba_rugi', element: <ComingSoon /> },
+      { path: 'accounting/neraca', element: <ComingSoon /> },
+      { path: 'accounting/cashflow', element: <ComingSoon /> },
       // Generic model pages — e.g., /purchase-order, /purchase-order/new, /purchase-order/1
       { path: ':modelName', element: <ModelListPage /> },
       { path: ':modelName/new', element: <ModelFormPage /> },
