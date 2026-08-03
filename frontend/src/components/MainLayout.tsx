@@ -136,6 +136,7 @@ const menuItems = [
       { type: 'group', label: 'OPERATION', children: [
         { key: '/accounting.vendor_bill', label: 'Tagihan' },
         { key: '/accounting.customer_invoice', label: 'Faktur' },
+        { key: '/accounting.expense', label: 'Input Biaya' },
         { key: '/accounting.vendor_payment', label: 'Pembayaran' },
         { key: '/accounting.customer_receipt', label: 'Penerimaan' },
         { key: '/accounting.jurnal', label: 'Jurnal' },

@@ -9,3 +9,5 @@ from core.models.accounting.vendor_payment import VendorPayment
 from core.models.accounting.vendor_payment_line import VendorPaymentLine
 from core.models.accounting.customer_receipt import CustomerReceipt
 from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+from core.models.accounting.expense import Expense
+from core.models.accounting.expense_line import ExpenseLine

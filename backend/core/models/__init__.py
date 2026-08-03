@@ -26,6 +26,8 @@ from core.models.accounting.vendor_bill import VendorBill
 from core.models.accounting.vendor_bill_line import VendorBillLine
 from core.models.accounting.customer_invoice import CustomerInvoice
 from core.models.accounting.customer_invoice_line import CustomerInvoiceLine
+from core.models.accounting.expense import Expense
+from core.models.accounting.expense_line import ExpenseLine
 from core.models.project.project import Project
 from core.models.project.project_line import ProjectLine
 from core.models.project.unit import Unit
@@ -48,6 +50,7 @@ __all__ = [
     'ChartOfAccount', 'Jurnal', 'JurnalLine',
     'VendorBill', 'VendorBillLine',
     'CustomerInvoice', 'CustomerInvoiceLine',
+    'Expense', 'ExpenseLine',
     'PurchaseRequest', 'PurchaseRequestLine',
     'Project', 'ProjectLine', 'Unit', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory', 'ProjectUnit',
 ]
