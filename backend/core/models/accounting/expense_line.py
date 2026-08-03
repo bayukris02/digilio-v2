@@ -21,7 +21,8 @@ class ExpenseLine(BaseModel):
         'account': Many2OneField(
             label='Account',
             relation='accounting.chart_of_account',
-            required=True,
+            required=False,
+            help_text='Wajib diisi saat POST',
         ),
     }
 
