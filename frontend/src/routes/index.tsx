@@ -51,6 +51,20 @@ export const router = createBrowserRouter([
       { path: 'sales.product/:recordId', element: <ModelFormPage modelName="inventory.product" basePath="/sales.product" /> },
       // Sales -> Pricelist = coming soon (belum ada model)
       { path: 'sales.pricelist', element: <ComingSoon /> },
+      // Inventory custom routes
+      { path: 'inventory/dashboard', element: <ComingSoon /> },
+      { path: 'inventory/insight', element: <ComingSoon /> },
+      // Inventory -> Stock Receipt = menu alias → konten model purchase.goods_receipt (URL tetap /inventory.stock_receipt)
+      { path: 'inventory.stock_receipt', element: <ModelListPage modelName="purchase.goods_receipt" basePath="/inventory.stock_receipt" /> },
+      { path: 'inventory.stock_receipt/new', element: <ModelFormPage modelName="purchase.goods_receipt" basePath="/inventory.stock_receipt" /> },
+      { path: 'inventory.stock_receipt/:recordId', element: <ModelFormPage modelName="purchase.goods_receipt" basePath="/inventory.stock_receipt" /> },
+      // Inventory -> Stock Delivery = menu alias → konten model sales.delivery_order (URL tetap /inventory.stock_delivery)
+      { path: 'inventory.stock_delivery', element: <ModelListPage modelName="sales.delivery_order" basePath="/inventory.stock_delivery" /> },
+      { path: 'inventory.stock_delivery/new', element: <ModelFormPage modelName="sales.delivery_order" basePath="/inventory.stock_delivery" /> },
+      { path: 'inventory.stock_delivery/:recordId', element: <ModelFormPage modelName="sales.delivery_order" basePath="/inventory.stock_delivery" /> },
+      { path: 'inventory.stock_adjustment', element: <ComingSoon /> },
+      { path: 'inventory/pivot', element: <ComingSoon /> },
+      { path: 'inventory/detail', element: <ComingSoon /> },
       // Project custom routes (coming soon)
       { path: 'project/dashboard', element: <ComingSoon /> },
       // Project Update = menu alias → konten model project.project (URL tetap /project/progress, read-only)

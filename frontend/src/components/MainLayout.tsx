@@ -84,9 +84,22 @@ const menuItems = [
     icon: <AppstoreOutlined />,
     label: 'Inventory',
     children: [
-      { key: '/inventory.product', label: 'Products' },
-      { key: '/inventory.product_category', label: 'Categories' },
-      { key: '/inventory.warehouse', label: 'Warehouses' },
+      { key: '/inventory/dashboard', label: 'Dashboard' },
+      { key: '/inventory/insight', label: 'Insight' },
+      { type: 'group', label: 'OPERATION', children: [
+        { key: '/inventory.stock_receipt', label: 'Stock Receipt' },
+        { key: '/inventory.stock_delivery', label: 'Stock Delivery' },
+        { key: '/inventory.stock_adjustment', label: 'Stock Adjustment' },
+      ]},
+      { type: 'group', label: 'MASTER DATA', children: [
+        { key: '/inventory.product', label: 'Product' },
+        { key: '/inventory.product_category', label: 'Product Category' },
+        { key: '/inventory.warehouse', label: 'Warehouse' },
+      ]},
+      { type: 'group', label: 'REPORT', children: [
+        { key: '/inventory/pivot', label: 'Inventory Pivot' },
+        { key: '/inventory/detail', label: 'Inventory Detail' },
+      ]},
     ],
   },
   {
@@ -157,7 +170,7 @@ function getModuleKey(pathname: string): string {
   if (pathname === '/') return '/';
   if (pathname.startsWith('/purchase.') || pathname.startsWith('/purchase/')) return 'purchase';
   if (pathname.startsWith('/sales.') || pathname.startsWith('/sales/')) return 'sales';
-  if (pathname.startsWith('/inventory.')) return 'inventory';
+  if (pathname.startsWith('/inventory.') || pathname.startsWith('/inventory/')) return 'inventory';
   if (pathname.startsWith('/project.') || pathname.startsWith('/project/')) return 'project';
   if (pathname.startsWith('/accounting.') || pathname.startsWith('/accounting/')) return 'accounting';
   if (pathname.startsWith('/settings.')) return 'settings';
