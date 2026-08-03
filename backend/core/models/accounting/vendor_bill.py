@@ -266,7 +266,7 @@ class VendorBill(BaseModel):
     def _sync_milestone_progress(self):
         """Auto-update progress milestone = rata-rata kontribusi semua dokumen aktif.
 
-        Kontribusi per bill: draft 0% / confirmed 50% / paid 100%.
+        Kontribusi per bill: draft 10% / confirmed 50% / paid 100%.
         Bill cancelled di-exclude; kalau tidak ada dokumen aktif → progress 0.
         """
         line = self.project_line
@@ -284,7 +284,7 @@ class VendorBill(BaseModel):
         total = sum(
             100.0 if b.payment_status == 'paid'
             else 50.0 if b.status == 'confirmed'
-            else 0.0
+            else 10.0
             for b in bills
         )
         avg = total / bills.count()
