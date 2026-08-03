@@ -57,6 +57,12 @@ class Expense(BaseModel):
             relation='accounting.payment_method',
             required=False,
         ),
+        'project_line': Many2OneField(
+            label='Milestone',
+            relation='project.project_line',
+            required=False,
+            help_text='Milestone terkait (otomatis dari wizard Input Expenses)',
+        ),
         'expense_lines': One2ManyField(
             label='Expense Lines',
             relation='accounting.expense_line',

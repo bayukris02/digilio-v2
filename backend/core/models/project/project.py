@@ -129,6 +129,20 @@ class Project(BaseModel):
                                                 {'key': 'amount', 'label': 'Nominal (Rp)', 'type': 'number', 'default': 0},
                                             ],
                                         },
+                                        {
+                                            'value': 'progress',
+                                            'label': 'Progress',
+                                            'icon': 'BarChartOutlined',
+                                            'table': {
+                                                'title': 'Progress Dokumen',
+                                                'columns': [
+                                                    {'key': 'reference', 'label': 'Reference'},
+                                                    {'key': 'status', 'label': 'Status'},
+                                                    {'key': 'amount', 'label': 'Amount'},
+                                                    {'key': 'progress', 'label': 'Progress'},
+                                                ],
+                                            },
+                                        },
                                     ],
                                 },
                             },
@@ -165,6 +179,8 @@ class Project(BaseModel):
             return self._action_buat_tagihan(data)
         if mode == 'input_expenses':
             return self._action_input_expenses(data)
+        if mode == 'progress':
+            return self._action_progress_table(data)
         # Fallback: mode lama 'update' / tanpa mode → update progress lines
         return self._update_progress_lines(data)
 
@@ -298,6 +314,16 @@ class Project(BaseModel):
 
         line_desc = description or f'Biaya proyek: {self.name or ""}'
 
+        # Milestone tujuan (dari row action — line_id baris yang diklik)
+        line_id = (data or {}).get('line_id')
+        project_line = None
+        if line_id:
+            pl_model = ErpModelBase._model_registry.get('project.project_line')
+            if pl_model:
+                project_line = pl_model.objects.filter(
+                    pk=int(line_id), project_id=self.pk, is_deleted=False
+                ).first()
+
         # Inject sequence aktif (sama seperti get_model_config) biar bisa langsung Confirm
         active_seq = Sequence.objects.filter(
             model_ref='accounting.expense', active=True, is_deleted=False
@@ -310,6 +336,7 @@ class Project(BaseModel):
                 date=expense_date,
                 payment_method=payment_method,
                 description=line_desc,
+                project_line=project_line,
             )
             ExpenseLine.objects.create(
                 expense_id=expense,
@@ -323,6 +350,65 @@ class Project(BaseModel):
             'record_id': expense.pk,
             'message': f'Input Biaya berhasil dibuat: Rp {amount:,.0f}',
         }
+
+    def _action_progress_table(self, data=None):
+        """Mode Progress — tabel dokumen (tagihan + expenses) per milestone.
+
+        Kolom: Reference / Status / Amount / Progress per dokumen.
+        Kontribusi progress sama dengan _sync_milestone_progress:
+        draft 10% / confirmed 50% / paid|posted 100%.
+        """
+        from core.models.accounting.vendor_bill import VendorBill
+        from core.models.accounting.expense import Expense
+        from core.models.accounting.expense_line import ExpenseLine
+
+        line_id = (data or {}).get('line_id')
+        if not line_id:
+            return {'error': 'Pilih milestone terlebih dahulu.'}
+
+        rows = []
+
+        # ── Vendor Bills ──
+        bills = VendorBill.objects.filter(
+            project_line_id=int(line_id), is_deleted=False
+        ).exclude(status='cancelled')
+        for b in bills:
+            if b.payment_status == 'paid':
+                status_label, prog = 'Paid', 100.0
+            elif b.status == 'confirmed':
+                status_label, prog = 'Confirmed', 50.0
+            else:
+                status_label, prog = 'Draft', 10.0
+            rows.append({
+                'reference': b.reference or f'#{b.pk}',
+                'status': status_label,
+                'amount': f'Rp {float(b.grand_total or 0):,.0f}',
+                'progress': f'{prog:.0f}%',
+            })
+
+        # ── Expenses ──
+        expenses = Expense.objects.filter(
+            project_line_id=int(line_id), is_deleted=False
+        )
+        for e in expenses:
+            if e.status == 'posted':
+                status_label, prog = 'Posted', 100.0
+            elif e.status == 'confirmed':
+                status_label, prog = 'Confirmed', 50.0
+            else:
+                status_label, prog = 'Draft', 10.0
+            total = sum(
+                float(l.amount or 0)
+                for l in ExpenseLine.objects.filter(expense_id=e, is_deleted=False)
+            )
+            rows.append({
+                'reference': e.reference or f'#{e.pk}',
+                'status': status_label,
+                'amount': f'Rp {total:,.0f}',
+                'progress': f'{prog:.0f}%',
+            })
+
+        return {'_action_type': 'table', 'rows': rows}
 
     def _action_input_sales(self, data=None):
         """Input penjualan unit — set qty_sold (sold_percentage recompute otomatis)."""

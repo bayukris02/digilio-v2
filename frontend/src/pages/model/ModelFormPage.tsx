@@ -1213,6 +1213,22 @@ export default function ModelFormPage({
     }
   }, [actionWizardBtn, apiModelName, config, form, isNew, lineItems, basePath, navigate, recordData, recordId]);
 
+  // ── Fetch data tabel untuk mode wizard bertipe `table` (read-only view) ──
+  const handleFetchWizardTable = useCallback(async (mode: string) => {
+    if (!actionWizardBtn) return { rows: [] };
+    const actionName = actionWizardBtn.action as string;
+    if (!actionName) return { rows: [] };
+    const currentRecordId = recordId ? Number(recordId) : null;
+    if (!currentRecordId) return { rows: [] };
+    const extraData: Record<string, unknown> = {
+      mode,
+      line_id: (actionWizardBtn as any)?.rowId ?? null,
+    };
+    const result = await modelApi.postAction(apiModelName, currentRecordId, actionName, extraData);
+    if (result.error) throw new Error(result.error as string);
+    return { rows: ((result as Record<string, unknown>).rows as Record<string, unknown>[]) || [] };
+  }, [actionWizardBtn, apiModelName, recordId]);
+
   // ── Prev/Next navigation ──
   const goPrev = useCallback(() => {
     if (currentIdx > 0) navigate(`${basePath}/${recordIds[currentIdx - 1]}`);
@@ -2502,6 +2518,7 @@ export default function ModelFormPage({
           config={actionWizardBtn.wizard as any}
           items={wizardItems}
           onConfirm={handleWizardConfirm}
+          onFetchTable={handleFetchWizardTable}
           onCancel={() => { setActionWizardVisible(false); setActionWizardBtn(null); }}
         />
       )}

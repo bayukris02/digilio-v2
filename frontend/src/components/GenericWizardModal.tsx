@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select, DatePicker, Input } from 'antd';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select, DatePicker, Input, Spin } from 'antd';
 import dayjs from 'dayjs';
 import ProgressBar from './ProgressBar';
 
@@ -17,11 +17,20 @@ interface WizardLineItem {
   [key: string]: unknown;
 }
 
+interface WizardTableColumn {
+  key: string;
+  label: string;
+}
+
 interface WizardMode {
   value: string;
   label: string;
   icon?: string;
   inputs?: WizardInput[];
+  table?: {
+    title?: string;
+    columns: WizardTableColumn[];
+  };
 }
 
 interface WizardInput {
@@ -72,6 +81,8 @@ interface GenericWizardModalProps {
   items: WizardLineItem[];
   onConfirm: (mode: string, selectedLines: SelectedLine[], extraInputs?: Record<string, number | string>) => void;
   onCancel: () => void;
+  /** Optional — untuk mode bertipe `table`: fetch data dari backend saat mode dipilih */
+  onFetchTable?: (mode: string) => Promise<{ rows: Record<string, unknown>[] }>;
 }
 
 function ModeCards({
@@ -279,6 +290,7 @@ export default function GenericWizardModal({
   items,
   onConfirm,
   onCancel,
+  onFetchTable,
 }: GenericWizardModalProps) {
   const [selectedMode, setSelectedMode] = useState<string>(config.modes[0]?.value || '');
   const [selectedIds, setSelectedIds] = useState<number[]>(
@@ -303,6 +315,8 @@ export default function GenericWizardModal({
     return ev;
   });
   const [many2oneOptions, setMany2oneOptions] = useState<Record<string, { value: number; label: string }[]>>({});
+  // State untuk mode bertipe `table` (read-only view)
+  const [tableData, setTableData] = useState<{ rows: Record<string, unknown>[]; loading: boolean; error?: string }>({ rows: [], loading: false });
   const [extraInputValues, setExtraInputValues] = useState<Record<string, number | string>>(() => {
     const currentMode = config.modes.find((m) => m.value === selectedMode);
     const vals: Record<string, number | string> = {};
@@ -360,6 +374,11 @@ export default function GenericWizardModal({
   const progressColumns = config.line_selection?.progress_columns || [];
   const currentMode = config.modes.find((m) => m.value === selectedMode);
   const extraInputs = currentMode?.inputs || [];
+  // Konfigurasi mode tabel (read-only view) — di-capture ke const lokal agar
+  // narrowing TypeScript tetap berlaku di dalam closure JSX
+  const tableCfg = currentMode?.table;
+  const tableTitle = tableCfg?.title || 'Data';
+  const tableColumns = tableCfg?.columns || [];
 
   const handleExtraInputChange = (key: string, value: number | string | null) => {
     setExtraInputValues((prev) => ({ ...prev, [key]: value ?? 0 }));
@@ -412,6 +431,8 @@ export default function GenericWizardModal({
 
   const handleConfirm = (mode?: string) => {
     const m = mode || selectedMode;
+    const modeCfg = config.modes.find((x) => x.value === m);
+    if (modeCfg?.table) return; // mode tampilan tabel — read-only, tidak ada aksi
     const selectedLines = selectedIds.map((id) => ({
       id,
       qty: qtys[id] ?? 0,
@@ -420,8 +441,32 @@ export default function GenericWizardModal({
     onConfirm(m, selectedLines, extraInputValues);
   };
 
+  // ── Mode tabel: fetch data dari backend via onFetchTable ──
+  const loadTable = useCallback((modeValue: string) => {
+    if (!onFetchTable) return;
+    setTableData({ rows: [], loading: true, error: undefined });
+    onFetchTable(modeValue)
+      .then((res) => setTableData({ rows: res.rows || [], loading: false }))
+      .catch(() => setTableData({ rows: [], loading: false, error: 'Gagal memuat data' }));
+  }, [onFetchTable]);
+
+  useEffect(() => {
+    if (!visible || !currentMode?.table) return;
+    loadTable(selectedMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMode, visible]);
+
   // Footer buttons
   const renderFooter = () => {
+    if (currentMode?.table) {
+      // Mode tampilan tabel — hanya Refresh + Cancel
+      return (
+        <Space>
+          <Button onClick={() => loadTable(selectedMode)} disabled={tableData.loading}>Refresh</Button>
+          <Button onClick={onCancel}>Cancel</Button>
+        </Space>
+      );
+    }
     if (allModesShowTable) {
       return (
         <Space>
@@ -539,6 +584,53 @@ export default function GenericWizardModal({
               onEditableChange={handleEditableChange}
               onFetchMany2One={handleFetchMany2One}
             />
+          </div>
+        )}
+
+        {tableCfg && (
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+              {tableTitle}
+            </Text>
+            {tableData.loading ? (
+              <div style={{ textAlign: 'center', padding: 24 }}>
+                <Spin />
+              </div>
+            ) : (
+              <div style={{ maxHeight: 350, overflowY: 'auto', border: '1px solid #e8e8e8', borderRadius: 6 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#fafafa', borderBottom: '1px solid #e8e8e8' }}>
+                      {tableColumns.map((c) => (
+                        <th key={c.key} style={{ padding: '8px 10px', textAlign: 'left' }}>{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableData.rows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={tableColumns.length}
+                          style={{ padding: 16, textAlign: 'center', color: '#999' }}
+                        >
+                          {tableData.error || 'Tidak ada dokumen untuk milestone ini'}
+                        </td>
+                      </tr>
+                    ) : (
+                      tableData.rows.map((row, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                          {tableColumns.map((c) => (
+                            <td key={c.key} style={{ padding: '8px 10px' }}>
+                              {String(row[c.key] ?? '')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </Space>
