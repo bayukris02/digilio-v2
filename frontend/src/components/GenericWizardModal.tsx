@@ -1,10 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select, DatePicker, Input, Spin } from 'antd';
+import { HomeOutlined, FileTextOutlined, SendOutlined, BarChartOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ProgressBar from './ProgressBar';
 
 const { Text } = Typography;
 const { TextArea } = Input;
+
+/** Icon name (dari config backend) → komponen antd — generic, tanpa nama model */
+const MODE_ICONS: Record<string, React.ReactNode> = {
+  HomeOutlined: <HomeOutlined />,
+  FileTextOutlined: <FileTextOutlined />,
+  SendOutlined: <SendOutlined />,
+  BarChartOutlined: <BarChartOutlined />,
+};
 
 /** Option for one2many line selection — each row is a record from the parent's relation */
 interface WizardLineItem {
@@ -110,7 +119,10 @@ function ModeCards({
             }}
           >
             <Radio value={mode.value}>
-              <Text strong>{mode.label}</Text>
+              {mode.icon && MODE_ICONS[mode.icon]}
+              {mode.label && (
+                <Text strong style={{ marginLeft: mode.icon ? 6 : 0 }}>{mode.label}</Text>
+              )}
             </Radio>
           </Card>
         ))}

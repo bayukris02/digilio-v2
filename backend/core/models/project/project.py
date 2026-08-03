@@ -107,9 +107,23 @@ class Project(BaseModel):
                                     'title': 'Update Progress',
                                     'modes': [
                                         {
+                                            # Summary dokumen milestone — bukan option aksi (icon Home)
+                                            'value': 'progress',
+                                            'label': '',
+                                            'icon': 'HomeOutlined',
+                                            'table': {
+                                                'title': 'Progress Dokumen',
+                                                'columns': [
+                                                    {'key': 'reference', 'label': 'Reference'},
+                                                    {'key': 'status', 'label': 'Status'},
+                                                    {'key': 'amount', 'label': 'Amount'},
+                                                    {'key': 'progress', 'label': 'Progress'},
+                                                ],
+                                            },
+                                        },
+                                        {
                                             'value': 'buat_tagihan',
                                             'label': 'Buat Tagihan',
-                                            'icon': 'FileTextOutlined',
                                             'inputs': [
                                                 {'key': 'vendor', 'label': 'Vendor', 'type': 'many2one', 'relation': 'purchase.vendor'},
                                                 {'key': 'bill_date', 'label': 'Bill Date', 'type': 'date'},
@@ -121,27 +135,12 @@ class Project(BaseModel):
                                         {
                                             'value': 'input_expenses',
                                             'label': 'Input Expenses',
-                                            'icon': 'SendOutlined',
                                             'inputs': [
                                                 {'key': 'date', 'label': 'Tanggal', 'type': 'date'},
                                                 {'key': 'payment_method', 'label': 'Payment Method', 'type': 'many2one', 'relation': 'accounting.payment_method'},
                                                 {'key': 'description', 'label': 'Deskripsi', 'type': 'text'},
                                                 {'key': 'amount', 'label': 'Nominal (Rp)', 'type': 'number', 'default': 0},
                                             ],
-                                        },
-                                        {
-                                            'value': 'progress',
-                                            'label': 'Progress',
-                                            'icon': 'BarChartOutlined',
-                                            'table': {
-                                                'title': 'Progress Dokumen',
-                                                'columns': [
-                                                    {'key': 'reference', 'label': 'Reference'},
-                                                    {'key': 'status', 'label': 'Status'},
-                                                    {'key': 'amount', 'label': 'Amount'},
-                                                    {'key': 'progress', 'label': 'Progress'},
-                                                ],
-                                            },
                                         },
                                     ],
                                 },
