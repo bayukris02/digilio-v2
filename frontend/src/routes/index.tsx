@@ -43,7 +43,7 @@ export const router = createBrowserRouter([
       // Sales custom routes
       { path: 'sales/dashboard', element: <GenericDashboardPage dashboardKey="sales" /> },
       { path: 'sales/insight', element: <ComingSoon /> },
-      { path: 'sales/quick_sales', element: <ComingSoon /> },
+      { path: 'sales.quick_sales', element: <ComingSoon /> },
       { path: 'sales/pivot', element: <ComingSoon /> },
       { path: 'sales/detail', element: <ComingSoon /> },
       // Sales -> Product = menu alias → konten model inventory.product (URL tetap /sales.product)
