@@ -264,31 +264,32 @@ class VendorBill(BaseModel):
         self._sync_milestone_progress()
 
     def _sync_milestone_progress(self):
-        """Auto-update progress milestone terkait berdasarkan status bill.
+        """Auto-update progress milestone = rata-rata kontribusi semua dokumen aktif.
 
-        draft 0% → confirmed 50%; paid 100%; cancelled reset 0%.
-        Non-cancelled pakai max(current, target) supaya progress manual tidak turun.
+        Kontribusi per bill: draft 0% / confirmed 50% / paid 100%.
+        Bill cancelled di-exclude; kalau tidak ada dokumen aktif → progress 0.
         """
         line = self.project_line
         if not line:
             return
-        current = float(line.progress or 0)
 
-        if self.status == 'cancelled':
+        bills = self.__class__.objects.filter(
+            project_line=line, is_deleted=False
+        ).exclude(status='cancelled')
+        if not bills.exists():
             line.progress = 0.0
             line.save(update_fields=['progress'])
             return
 
-        if self.payment_status == 'paid':
-            target = 100.0
-        elif self.status == 'confirmed':
-            target = 50.0
-        else:
-            return
-
-        if target > current:
-            line.progress = target
-            line.save(update_fields=['progress'])
+        total = sum(
+            100.0 if b.payment_status == 'paid'
+            else 50.0 if b.status == 'confirmed'
+            else 0.0
+            for b in bills
+        )
+        avg = total / bills.count()
+        line.progress = round(avg, 1)
+        line.save(update_fields=['progress'])
 
     # ── Legacy Actions ──
 
