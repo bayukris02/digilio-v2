@@ -1183,7 +1183,7 @@ export default function ModelFormPage({
       }
 
       // Execute action with wizard data
-      const extraData: Record<string, unknown> = { mode, selected_lines: selectedLines, ...(extraInputs || {}) };
+      const extraData: Record<string, unknown> = { mode, selected_lines: selectedLines, line_id: (actionWizardBtn as any)?.rowId ?? null, ...(extraInputs || {}) };
       const result = await modelApi.postAction(apiModelName, currentRecordId!, actionName, extraData);
 
       // Handle error response
@@ -1616,7 +1616,7 @@ export default function ModelFormPage({
         cellRenderer: (params: ICellRendererParams) => {
           if (params.data?._isAddButton || params.node?.rowPinned) return null;
           const openAction = (a: { label: string; action?: string; wizard?: Record<string, unknown> }) => {
-            setActionWizardBtn({ label: a.label, action: a.action || '', wizard: a.wizard as Record<string, unknown> });
+            setActionWizardBtn({ label: a.label, action: a.action || '', wizard: a.wizard as Record<string, unknown>, rowId: params.data?.id ?? null });
             setActionWizardVisible(true);
           };
           // 1 action → button langsung (wizard multi-mode); >1 → dropdown

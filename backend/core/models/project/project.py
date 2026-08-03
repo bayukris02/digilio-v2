@@ -213,6 +213,16 @@ class Project(BaseModel):
         if amount <= 0:
             return {'error': 'Nominal harus lebih dari 0.'}
 
+        # Milestone tujuan (dari row action — line_id baris yang diklik)
+        line_id = (data or {}).get('line_id')
+        project_line = None
+        if line_id:
+            line_model = ErpModelBase._model_registry.get('project.project_line')
+            if line_model:
+                project_line = line_model.objects.filter(
+                    pk=int(line_id), project_id=self.pk, is_deleted=False
+                ).first()
+
         vendor_model = ErpModelBase._model_registry.get('purchase.vendor')
         vendor = vendor_model.objects.filter(pk=int(vendor_id), is_deleted=False).first() if vendor_model else None
         if not vendor:
@@ -231,6 +241,7 @@ class Project(BaseModel):
                 bill_date=bill_date or date.today(),
                 due_date=due_date,
                 project=self,
+                project_line=project_line,
             )
             VendorBillLine.objects.create(
                 bill_id=bill,

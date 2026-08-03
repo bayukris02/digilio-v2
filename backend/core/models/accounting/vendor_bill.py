@@ -74,6 +74,12 @@ class VendorBill(BaseModel):
             required=False,
             help_text='Project asal tagihan (otomatis dari wizard Buat Tagihan)',
         ),
+        'project_line': Many2OneField(
+            label='Milestone',
+            relation='project.project_line',
+            required=False,
+            help_text='Milestone terkait (otomatis dari wizard Buat Tagihan)',
+        ),
 
         # ── Down Payment ──
         'is_down_payment': BooleanField(label='DP Bill', default=False),
@@ -112,9 +118,9 @@ class VendorBill(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'project', 'purchase_order', 'vendor', 'bill_date', 'due_date', 'status', 'grand_total', 'due_amount', 'payment_status'],
-        'filters': ['status', 'vendor', 'bill_date', 'payment_status', 'project'],
-        'group_by': ['status', 'vendor', 'payment_status', 'project'],
+        'columns': ['reference', 'project', 'project_line', 'purchase_order', 'vendor', 'bill_date', 'due_date', 'status', 'grand_total', 'due_amount', 'payment_status'],
+        'filters': ['status', 'vendor', 'bill_date', 'payment_status', 'project', 'project_line'],
+        'group_by': ['status', 'vendor', 'payment_status', 'project', 'project_line'],
         'default_sort': ['-updated_at'],
     }
 
@@ -124,7 +130,7 @@ class VendorBill(BaseModel):
                 {
                     'key': 'general',
                     'label': 'General',
-                    'fields': ['reference', 'project', 'purchase_order', 'vendor', 'code', 'address',
+                    'fields': ['reference', 'project', 'project_line', 'purchase_order', 'vendor', 'code', 'address',
                                'bill_date', 'due_date', 'status', 'sequence_id',
                                'payment_status'],
                 },
@@ -258,6 +264,43 @@ class VendorBill(BaseModel):
             self.payment_status = 'paid'
         else:
             self.payment_status = 'partial'
+
+    # ── Auto Progress Milestone ──
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self._sync_milestone_progress()
+
+    def _sync_milestone_progress(self):
+        """Auto-update progress milestone terkait berdasarkan status bill.
+
+        draft 10% → confirmed 40% → done 50%; paid 100%; cancelled reset 0%.
+        Non-cancelled pakai max(current, target) supaya progress manual tidak turun.
+        """
+        line = self.project_line
+        if not line:
+            return
+        current = float(line.progress or 0)
+
+        if self.status == 'cancelled':
+            line.progress = 0.0
+            line.save(update_fields=['progress'])
+            return
+
+        if self.payment_status == 'paid':
+            target = 100.0
+        elif self.status == 'draft':
+            target = 10.0
+        elif self.status == 'confirmed':
+            target = 40.0
+        elif self.status == 'done':
+            target = 50.0
+        else:
+            return
+
+        if target > current:
+            line.progress = target
+            line.save(update_fields=['progress'])
 
     # ── Legacy Actions ──
 
