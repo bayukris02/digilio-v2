@@ -45,13 +45,13 @@ class ProjectUnitDetail(BaseModel):
     }
 
     _list_view = {
-        'columns': ['name', 'unit_id'],
+        'columns': ['project_id', 'name', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
         'default_sort': ['id'],
     }
 
     _form_view = {
         'header': {
-            'fields': ['name', 'unit_id'],
+            'fields': ['project_id', 'name', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
             'smart_buttons': [],
         },
     }
