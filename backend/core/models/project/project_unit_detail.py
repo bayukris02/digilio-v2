@@ -1,4 +1,4 @@
-from core.fields import CharField, Many2OneField
+from core.fields import CharField, Many2OneField, MonetaryField
 from core.model_meta import BaseModel
 
 
@@ -28,6 +28,20 @@ class ProjectUnitDetail(BaseModel):
             required=True,
             help_text='Contoh: Unit 01, Blok A1',
         ),
+        'selling_price': MonetaryField(
+            label='Harga Jual',
+            currency='IDR',
+        ),
+        'est_cost': MonetaryField(
+            label='Est. Biaya Konstruksi',
+            currency='IDR',
+        ),
+        'est_margin': MonetaryField(
+            label='Est. Margin',
+            currency='IDR',
+            compute='_compute_margin',
+            depends=['selling_price', 'est_cost'],
+        ),
     }
 
     _list_view = {
@@ -46,6 +60,12 @@ class ProjectUnitDetail(BaseModel):
         app_label = 'core'
         verbose_name = 'Unit Detail'
         verbose_name_plural = 'Unit Details'
+
+    def _compute_margin(self):
+        """Est. Margin = Harga Jual - Est. Biaya Konstruksi."""
+        selling_price = float(self.selling_price or 0)
+        est_cost = float(self.est_cost or 0)
+        self.est_margin = round(selling_price - est_cost, 2)
 
     def __str__(self):
         return self.name or ''

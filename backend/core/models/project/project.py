@@ -164,7 +164,7 @@ class Project(BaseModel):
                 'key': 'unit_details',
                 'label': 'Unit Detail',
                 'relation': 'unit_details',
-                'columns': ['name', 'unit_id'],
+                'columns': ['name', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
             },
         ],
     }
