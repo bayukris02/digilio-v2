@@ -70,7 +70,6 @@ export const router = createBrowserRouter([
       // Project Update = menu alias → konten model project.project (URL tetap /project/progress, read-only)
       { path: 'project/progress', element: <ModelListPage modelName="project.project" basePath="/project/progress" readOnly /> },
       { path: 'project/progress/:recordId', element: <ModelFormPage modelName="project.project" basePath="/project/progress" readOnly /> },
-      { path: 'project/wbs', element: <ComingSoon /> },
       { path: 'project/budgeting', element: <ComingSoon /> },
       { path: 'project/pivot', element: <ComingSoon /> },
       { path: 'project/pnl', element: <ComingSoon /> },

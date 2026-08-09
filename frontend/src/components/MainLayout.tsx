@@ -110,7 +110,7 @@ const menuItems = [
       { key: '/project/dashboard', label: 'Dashboard' },
       { type: 'group', label: 'OPERATION', children: [
         { key: '/project/progress', label: 'Project Update' },
-        { key: '/project/wbs', label: 'WBS & Task Assignment' },
+        { key: '/project.project_unit_detail', label: 'Unit Update' },
         { key: '/project/budgeting', label: 'Project Budgeting (RAB)' },
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
