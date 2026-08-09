@@ -1532,6 +1532,8 @@ export default function ModelFormPage({
         col.cellEditor = 'agRichSelectCellEditor';
         col.cellEditorParams = {
           values: (many2oneOptions[`${relationField}.${key}`] || []).filter((opt) => {
+            // Field dengan allow_duplicate=True → boleh pilih nilai yang sama di baris lain
+            if (field.allow_duplicate) return true;
             // Hide options already selected in other lines of the same relation
             const record = opt as Record<string, unknown>;
             const selectedIds = new Set(

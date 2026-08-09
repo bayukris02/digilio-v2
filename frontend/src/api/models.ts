@@ -14,6 +14,7 @@ export interface FieldConfig {
   chatter_show?: boolean;
   virtual?: boolean;
   autofill?: Record<string, string>;
+  allow_duplicate?: boolean;
   onchange?: Record<string, unknown>;
 }
 

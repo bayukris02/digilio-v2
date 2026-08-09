@@ -332,11 +332,12 @@ class Many2OneField(BaseField):
     field_type = 'many2one'
     django_field_class = dj_models.ForeignKey
 
-    def __init__(self, label='', required=False, relation=None, help_text='', autofill=None, domain=None, **kwargs):
+    def __init__(self, label='', required=False, relation=None, help_text='', autofill=None, domain=None, allow_duplicate=False, **kwargs):
         super().__init__(label, required, help_text=help_text, **kwargs)
         self.relation = relation  # e.g., 'res.partner' or PartnerModel class
         self.autofill = autofill or {}
         self.domain = domain or {}  # {related_field: header_field} — filter options by header field
+        self.allow_duplicate = allow_duplicate  # True = boleh pilih nilai m2o yang sama di beberapa baris notebook
 
     def to_config(self):
         cfg = super().to_config()
@@ -345,6 +346,8 @@ class Many2OneField(BaseField):
             cfg['autofill'] = self.autofill
         if self.domain:
             cfg['domain'] = self.domain
+        if self.allow_duplicate:
+            cfg['allow_duplicate'] = True
         return cfg
 
     def to_python(self, value):

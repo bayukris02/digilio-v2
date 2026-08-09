@@ -20,6 +20,7 @@ class ProjectUnitDetail(BaseModel):
             label='Tipe Unit',
             relation='project.unit',
             required=True,
+            allow_duplicate=True,
             help_text='Pilih tipe unit dari master Unit',
         ),
         'name': CharField(
