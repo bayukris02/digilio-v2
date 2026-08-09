@@ -34,7 +34,7 @@ const menuItems = [
   {
     key: 'purchase',
     icon: <ShoppingCartOutlined />,
-    label: 'Purchase',
+    label: 'Pembelian',
     children: [
       { key: '/purchase/dashboard', label: 'Dashboard' },
       { key: '/purchase/insight', label: 'Insight' },

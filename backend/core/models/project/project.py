@@ -156,7 +156,7 @@ class Project(BaseModel):
             },
             {
                 'key': 'units',
-                'label': 'Unit',
+                'label': 'Progress Penjualan',
                 'relation': 'units',
                 'columns': ['unit_id', 'qty_available', 'qty_sold', 'sold_percentage'],
             },
