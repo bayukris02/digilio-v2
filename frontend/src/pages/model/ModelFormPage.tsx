@@ -14,7 +14,7 @@ import {
   StopOutlined, UndoOutlined, LinkOutlined,
 } from '@ant-design/icons';
 import { modelApi, type ModelConfig } from '../../api/models';
-import { DATE_FORMAT, parseDate, formatLastUpdate } from '../../utils/format';
+import { DATE_FORMAT, parseDate, formatDate, formatLastUpdate } from '../../utils/format';
 import { modelNameToApi, apiToUrlName } from '../../config/urlModelMap';
 import Chatter from '../../components/Chatter';
 import SummaryCard from '../../components/SummaryCard';
@@ -1502,6 +1502,22 @@ export default function ModelFormPage({
           const val = parseFloat(String(params.newValue).replace(/[^0-9.]/g, ''));
           if (isNaN(val)) return 0;
           return Math.min(100, val);
+        };
+      }
+      // Date: tampilkan DD-MMM-YYYY, editor pakai date picker bawaan (string-safe)
+      if (field.type === 'date') {
+        col.cellDataType = 'dateString';
+        col.valueFormatter = (params) => {
+          if (!params.value) return '';
+          return formatDate(params.value);
+        };
+        col.cellEditor = 'agDateStringCellEditor';
+        col.cellEditorParams = {
+          parseValue: (value: string) => {
+            if (!value) return null;
+            const d = parseDate(value);
+            return d ? d.format('YYYY-MM-DD') : value;
+          },
         };
       }
       // Selection: colored Tag badge (only when colors defined)
