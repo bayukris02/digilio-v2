@@ -1,4 +1,4 @@
-from core.fields import CharField, Many2OneField, MonetaryField
+from core.fields import CharField, Many2OneField, MonetaryField, One2ManyField
 from core.model_meta import BaseModel
 
 
@@ -42,6 +42,16 @@ class ProjectUnitDetail(BaseModel):
             compute='_compute_margin',
             depends=['selling_price', 'est_cost'],
         ),
+        'payments': One2ManyField(
+            label='Payments',
+            relation='project.unit_detail_payment',
+            inverse_field='unit_detail_id',
+        ),
+        'progress_lines': One2ManyField(
+            label='Progress',
+            relation='project.unit_detail_progress',
+            inverse_field='unit_detail_id',
+        ),
     }
 
     _list_view = {
@@ -54,6 +64,20 @@ class ProjectUnitDetail(BaseModel):
             'fields': ['project_id', 'name', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
             'smart_buttons': [],
         },
+        'notebook': [
+            {
+                'key': 'payments',
+                'label': 'Payments',
+                'relation': 'payments',
+                'columns': ['name', 'amount', 'payment_date'],
+            },
+            {
+                'key': 'progress_lines',
+                'label': 'Progress',
+                'relation': 'progress_lines',
+                'columns': ['name', 'progress', 'date'],
+            },
+        ],
     }
 
     class Meta(BaseModel.Meta):
