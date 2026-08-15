@@ -90,6 +90,7 @@ const menuItems = [
         { key: '/inventory.stock_receipt', label: 'Stock Receipt' },
         { key: '/inventory.stock_delivery', label: 'Stock Delivery' },
         { key: '/inventory.stock_adjustment', label: 'Stock Adjustment' },
+        { key: '/inventory.uom', label: 'Satuan' },
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
         { key: '/inventory.product', label: 'Product' },

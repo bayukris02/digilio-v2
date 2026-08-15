@@ -19,6 +19,7 @@ from core.models.settings.branch import Branch
 from core.models.inventory.product import Product
 from core.models.inventory.product_category import ProductCategory
 from core.models.inventory.warehouse import Warehouse
+from core.models.inventory.uom import Uom
 from core.models.accounting.chart_of_account import ChartOfAccount
 from core.models.accounting.jurnal import Jurnal
 from core.models.accounting.jurnal_line import JurnalLine
@@ -47,6 +48,7 @@ __all__ = [
     'Vendor', 'Customer', 'SalesOrder', 'SalesOrderLine', 'DeliveryOrder', 'DeliveryOrderLine', 'Product',
     'ProductCategory',
     'Warehouse',
+    'Uom',
     'Company', 'Branch',
     'User',
     'Sequence', 'SequenceDateRange',
