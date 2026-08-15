@@ -72,6 +72,12 @@ class VendorBill(BaseModel):
             required=False,
             help_text='Milestone terkait (otomatis dari wizard Buat Tagihan)',
         ),
+        'milestone_line': Many2OneField(
+            label='Milestone Line',
+            relation='project.milestone_line',
+            required=False,
+            help_text='Sub-line milestone terkait (dari wizard Buat Tagihan)',
+        ),
 
         # ── Down Payment ──
         'is_down_payment': BooleanField(label='DP Bill', default=False),

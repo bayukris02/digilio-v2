@@ -133,6 +133,7 @@ class Project(BaseModel):
                                                 {'key': 'vendor', 'label': 'Vendor', 'type': 'many2one', 'relation': 'purchase.vendor'},
                                                 {'key': 'bill_date', 'label': 'Bill Date', 'type': 'date'},
                                                 {'key': 'due_date', 'label': 'Due Date', 'type': 'date'},
+                                                {'key': 'milestone_line', 'label': 'Milestone Line', 'type': 'many2one', 'relation': 'project.milestone_line'},
                                                 {'key': 'amount', 'label': 'Nominal (Rp)', 'type': 'number', 'default': 0},
                                                 {'key': 'description', 'label': 'Deskripsi', 'type': 'text'},
                                             ],
@@ -143,6 +144,7 @@ class Project(BaseModel):
                                             'inputs': [
                                                 {'key': 'date', 'label': 'Tanggal', 'type': 'date'},
                                                 {'key': 'payment_method', 'label': 'Payment Method', 'type': 'many2one', 'relation': 'accounting.payment_method'},
+                                                {'key': 'milestone_line', 'label': 'Milestone Line', 'type': 'many2one', 'relation': 'project.milestone_line'},
                                                 {'key': 'description', 'label': 'Deskripsi', 'type': 'text'},
                                                 {'key': 'amount', 'label': 'Nominal (Rp)', 'type': 'number', 'default': 0},
                                             ],
@@ -255,6 +257,16 @@ class Project(BaseModel):
                     pk=int(line_id), project_id=self.pk, is_deleted=False
                 ).first()
 
+        # Milestone Line tujuan (dari wizard — sub-line milestone)
+        milestone_line_id = (data or {}).get('milestone_line')
+        milestone_line = None
+        if milestone_line_id:
+            ml_model = ErpModelBase._model_registry.get('project.milestone_line')
+            if ml_model:
+                milestone_line = ml_model.objects.filter(
+                    pk=int(milestone_line_id), is_deleted=False
+                ).first()
+
         vendor_model = ErpModelBase._model_registry.get('purchase.vendor')
         vendor = vendor_model.objects.filter(pk=int(vendor_id), is_deleted=False).first() if vendor_model else None
         if not vendor:
@@ -274,6 +286,7 @@ class Project(BaseModel):
                 due_date=due_date,
                 project=self,
                 project_line=project_line,
+                milestone_line=milestone_line,
             )
             VendorBillLine.objects.create(
                 bill_id=bill,
@@ -334,6 +347,16 @@ class Project(BaseModel):
                     pk=int(line_id), project_id=self.pk, is_deleted=False
                 ).first()
 
+        # Milestone Line tujuan (dari wizard — sub-line milestone)
+        milestone_line_id = (data or {}).get('milestone_line')
+        milestone_line = None
+        if milestone_line_id:
+            ml_model = ErpModelBase._model_registry.get('project.milestone_line')
+            if ml_model:
+                milestone_line = ml_model.objects.filter(
+                    pk=int(milestone_line_id), is_deleted=False
+                ).first()
+
         # Inject sequence aktif (sama seperti get_model_config) biar bisa langsung Confirm
         active_seq = Sequence.objects.filter(
             model_ref='accounting.expense', active=True, is_deleted=False
@@ -347,6 +370,7 @@ class Project(BaseModel):
                 payment_method=payment_method,
                 description=line_desc,
                 project_line=project_line,
+                milestone_line=milestone_line,
             )
             ExpenseLine.objects.create(
                 expense_id=expense,
