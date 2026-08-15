@@ -9,6 +9,7 @@ import LoginPage from '../pages/Login';
 import ModelListPage from '../pages/model/ModelListPage';
 import ModelFormPage from '../pages/model/ModelFormPage';
 import GenericDashboardPage from '../pages/dashboard/DashboardPage';
+import FinancialReportPage from '../pages/base/FinancialReportPage';
 import ComingSoon from '../pages/ComingSoon';
 
 export const router = createBrowserRouter([
@@ -78,7 +79,7 @@ export const router = createBrowserRouter([
       // project.dokumen now uses generic model pages
       // Accounting report routes (coming soon)
       { path: 'accounting/dashboard', element: <GenericDashboardPage dashboardKey="accounting" /> },
-      { path: 'accounting/laba_rugi', element: <ComingSoon /> },
+      { path: 'accounting/laba_rugi', element: <FinancialReportPage reportKey="profit_loss" /> },
       { path: 'accounting/neraca', element: <ComingSoon /> },
       { path: 'accounting/cashflow', element: <ComingSoon /> },
       // Generic model pages — e.g., /purchase-order, /purchase-order/new, /purchase-order/1
