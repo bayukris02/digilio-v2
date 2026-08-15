@@ -11,7 +11,7 @@ import {
   PlusOutlined, DeleteOutlined, FileTextOutlined, MailOutlined,
   MoreOutlined, InboxOutlined, CheckOutlined, PrinterOutlined,
   DownloadOutlined, SendOutlined, EditOutlined, CopyOutlined,
-  StopOutlined, UndoOutlined, LinkOutlined,
+  StopOutlined, UndoOutlined, LinkOutlined, HolderOutlined,
 } from '@ant-design/icons';
 import { modelApi, type ModelConfig } from '../../api/models';
 import { DATE_FORMAT, parseDate, formatDate, formatLastUpdate } from '../../utils/format';
@@ -1425,6 +1425,27 @@ export default function ModelFormPage({
       });
     }
     const cols: ColDef[] = [];
+    // Drag handle column — pindah urutan baris via drag & drop
+    // Nomor # dihitung dari posisi ARRAY (lineItems) supaya recompute
+    // mengikuti urutan data setelah drag (sync di onRowDragEnd).
+    if (!(isReadOnly || tabReadOnly)) {
+      cols.push({
+        headerName: '',
+        field: '_drag',
+        width: 40,
+        minWidth: 40,
+        maxWidth: 40,
+        flex: 0,
+        sortable: false,
+        resizable: false,
+        editable: false,
+        rowDrag: true,
+        cellRenderer: (params: ICellRendererParams) => {
+          if (params.data?._isAddButton || params.node?.rowPinned) return null;
+          return <HolderOutlined style={{ color: '#999', cursor: 'grab' }} />;
+        },
+      });
+    }
     // Row number column — atau tombol "+ Add" untuk baris add-button
     cols.push({
       headerName: '#',
@@ -1435,7 +1456,9 @@ export default function ModelFormPage({
           return <Button type="dashed" size="small" icon={<PlusOutlined />} style={{ width: '100%', border: 'none', color: '#1890ff', fontWeight: 500 }}>Add</Button>;
         }
         if (params.node?.rowPinned) return <span style={{ fontWeight: 'bold' }}>{params.data?._rowNum ?? ''}</span>;
-        return <span style={{ fontWeight: 'bold' }}>{(params.node?.rowIndex ?? 0) + 1}</span>;
+        const items = (lineItems[relationField] || []) as Record<string, unknown>[];
+        const idx = items.findIndex((it) => it._key === params.data._key);
+        return <span style={{ fontWeight: 'bold' }}>{(idx >= 0 ? idx : (params.node?.rowIndex ?? 0)) + 1}</span>;
       },
       editable: false,
       sortable: false,
@@ -1924,6 +1947,25 @@ export default function ModelFormPage({
               rowData={(isReadOnly || tab.read_only) ? items : [...items, { _key: '_add_button', _isAddButton: true }]}
               columnDefs={buildColumns(tab.relation!, tab.columns, tab.read_only, (tab as any).row_actions)}
               getRowId={(params) => params.data._key}
+              animateRows
+              rowDragManaged
+              onRowDragEnd={(params) => {
+                // Sync state lineItems mengikuti urutan visual grid setelah drag
+                const relationField = tab.relation!;
+                const orderedKeys: string[] = [];
+                params.api.forEachNode((node) => {
+                  const k = (node.data as Record<string, unknown> | undefined)?._key;
+                  if (k && k !== '_add_button') orderedKeys.push(k as string);
+                });
+                setLineItems((prev) => {
+                  const items = prev[relationField] || [];
+                  const byKey = new Map(items.map((it) => [it._key, it]));
+                  const reordered = orderedKeys
+                    .map((k) => byKey.get(k))
+                    .filter((it): it is Record<string, unknown> => !!it);
+                  return { ...prev, [relationField]: reordered };
+                });
+              }}
               onRowClicked={(params) => {
                 if (params.data?._isAddButton && !isReadOnly && !tab.read_only) {
                   addLine(tab.relation!);
