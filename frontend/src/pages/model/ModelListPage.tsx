@@ -295,7 +295,7 @@ export default function ModelListPage({
           icon={<PlusOutlined />}
           onClick={() => navigate(`${basePath}/new`)}
         >
-          New
+          Buat {config.verbose_name}
         </Button>
         )}
       </div>

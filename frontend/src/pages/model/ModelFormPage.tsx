@@ -2217,7 +2217,7 @@ export default function ModelFormPage({
               {
                 title: (
                   <span style={{ fontSize: 11, fontWeight: 500 }}>
-                    {isNew ? 'New' : (recordData?.display_name as string) || `#${recordId}`}
+                    {isNew ? `Buat ${config.verbose_name}` : (recordData?.display_name as string) || `#${recordId}`}
                   </span>
                 ),
               },
@@ -2292,10 +2292,14 @@ export default function ModelFormPage({
           }}
         >
           <Title level={4} style={{ margin: 0, lineHeight: 1.4 }}>
-            {config.verbose_name} — {isNew ? 'New' : (
-              typeof displayValue === 'object' && displayValue
-                ? (displayValue as Record<string, unknown>)?.name as string || `#${recordId}`
-                : displayValue || `#${recordId}`
+            {isNew ? (
+              <>Buat {config.verbose_name}</>
+            ) : (
+              <>
+                {config.verbose_name} — {typeof displayValue === 'object' && displayValue
+                  ? (displayValue as Record<string, unknown>)?.name as string || `#${recordId}`
+                  : displayValue || `#${recordId}`}
+              </>
             )}
           </Title>
           {!isReadOnly && (

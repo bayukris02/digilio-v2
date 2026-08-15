@@ -365,7 +365,7 @@ export default function FormPage() {
               {
                 title: (
                   <span style={{ fontSize: 11, fontWeight: 500 }}>
-                    {isNew ? 'New' : 'PO-2024-0001'}
+                    {isNew ? 'Buat Purchase Order' : 'PO-2024-0001'}
                   </span>
                 ),
               },
