@@ -329,6 +329,8 @@ export default function GenericWizardModal({
   const [many2oneOptions, setMany2oneOptions] = useState<Record<string, { value: number; label: string }[]>>({});
   // State untuk mode bertipe `table` (read-only view)
   const [tableData, setTableData] = useState<{ rows: Record<string, unknown>[]; loading: boolean; error?: string }>({ rows: [], loading: false });
+  // Loading state tombol confirm — dicegah double-click selama onConfirm async berjalan
+  const [confirming, setConfirming] = useState(false);
   const [extraInputValues, setExtraInputValues] = useState<Record<string, number | string>>(() => {
     const currentMode = config.modes.find((m) => m.value === selectedMode);
     const vals: Record<string, number | string> = {};
@@ -441,7 +443,7 @@ export default function GenericWizardModal({
     }
   };
 
-  const handleConfirm = (mode?: string) => {
+  const handleConfirm = async (mode?: string) => {
     const m = mode || selectedMode;
     const modeCfg = config.modes.find((x) => x.value === m);
     if (modeCfg?.table) return; // mode tampilan tabel — read-only, tidak ada aksi
@@ -450,7 +452,12 @@ export default function GenericWizardModal({
       qty: qtys[id] ?? 0,
       ...(editableValues[id] || {}),
     }));
-    onConfirm(m, selectedLines, extraInputValues);
+    setConfirming(true);
+    try {
+      await onConfirm(m, selectedLines, extraInputValues);
+    } finally {
+      setConfirming(false);
+    }
   };
 
   // ── Mode tabel: fetch data dari backend via onFetchTable ──
@@ -474,7 +481,7 @@ export default function GenericWizardModal({
       // Mode tampilan tabel — hanya Refresh + Cancel
       return (
         <Space>
-          <Button onClick={() => loadTable(selectedMode)} disabled={tableData.loading}>Refresh</Button>
+          <Button onClick={() => loadTable(selectedMode)} loading={tableData.loading} disabled={tableData.loading}>Refresh</Button>
           <Button onClick={onCancel}>Cancel</Button>
         </Space>
       );
@@ -483,11 +490,11 @@ export default function GenericWizardModal({
       return (
         <Space>
           {config.modes.map((mode) => (
-            <Button key={mode.value} type="primary" onClick={() => handleConfirm(mode.value)}>
+            <Button key={mode.value} type="primary" loading={confirming} disabled={confirming} onClick={() => handleConfirm(mode.value)}>
               {mode.label}
             </Button>
           ))}
-          <Button onClick={onCancel}>Cancel</Button>
+          <Button onClick={onCancel} disabled={confirming}>Cancel</Button>
         </Space>
       );
     }
@@ -505,6 +512,8 @@ export default function GenericWizardModal({
       cancelText="Cancel"
       width={640}
       destroyOnClose
+      confirmLoading={confirming}
+      cancelButtonProps={{ disabled: confirming }}
       footer={renderFooter()}
     >
       <Space direction="vertical" style={{ width: '100%' }}>

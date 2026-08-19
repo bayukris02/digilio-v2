@@ -389,6 +389,9 @@ export default function ModelFormPage({
   const [config, setConfig] = useState<ModelConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const [addingLine, setAddingLine] = useState(false);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [recordData, setRecordData] = useState<Record<string, unknown> | null>(null);
   const [lineItems, setLineItems] = useState<Record<string, Record<string, unknown>[]>>({});
@@ -1453,7 +1456,7 @@ export default function ModelFormPage({
       width: 60,
       cellRenderer: (params: ICellRendererParams) => {
         if (params.data?._isAddButton) {
-          return <Button type="dashed" size="small" icon={<PlusOutlined />} style={{ width: '100%', border: 'none', color: '#1890ff', fontWeight: 500 }}>Add</Button>;
+          return <Button type="dashed" size="small" icon={<PlusOutlined />} loading={addingLine} style={{ width: '100%', border: 'none', color: '#1890ff', fontWeight: 500 }}>Add</Button>;
         }
         if (params.node?.rowPinned) return <span style={{ fontWeight: 'bold' }}>{params.data?._rowNum ?? ''}</span>;
         const items = (lineItems[relationField] || []) as Record<string, unknown>[];
@@ -1652,7 +1655,8 @@ export default function ModelFormPage({
             size="small"
             danger
             icon={<DeleteOutlined />}
-            onClick={() => deleteLine(relationField, params.data._key)}
+            loading={deletingKey === params.data._key}
+            onClick={() => { setDeletingKey(params.data._key); deleteLine(relationField, params.data._key); setDeletingKey(null); }}
           />
           );
         },
@@ -1968,7 +1972,9 @@ export default function ModelFormPage({
               }}
               onRowClicked={(params) => {
                 if (params.data?._isAddButton && !isReadOnly && !tab.read_only) {
+                  setAddingLine(true);
                   addLine(tab.relation!);
+                  setAddingLine(false);
                 }
               }}
               onCellClicked={(params) => {
@@ -2311,7 +2317,8 @@ export default function ModelFormPage({
               variant="solid"
               color="danger"
               icon={<CloseOutlined />}
-              onClick={() => navigate(`${basePath}`)}
+              loading={discarding}
+              onClick={() => { setDiscarding(true); navigate(`${basePath}`); }}
             >
               Discard
             </Button>
