@@ -59,7 +59,7 @@ const menuItems = [
   {
     key: 'sales',
     icon: <DollarOutlined />,
-    label: 'Sales',
+    label: 'Penjualan',
     children: [
       { key: '/sales/dashboard', label: 'Dashboard' },
       { key: '/sales/insight', label: 'Insight' },
@@ -82,7 +82,7 @@ const menuItems = [
   {
     key: 'inventory',
     icon: <AppstoreOutlined />,
-    label: 'Inventory',
+    label: 'Stock',
     children: [
       { key: '/inventory/dashboard', label: 'Dashboard' },
       { key: '/inventory/insight', label: 'Insight' },
@@ -131,7 +131,7 @@ const menuItems = [
   {
     key: 'accounting',
     icon: <BookOutlined />,
-    label: 'Accounting',
+    label: 'Akunting',
     children: [
       { key: '/accounting/dashboard', label: 'Dashboard' },
       { type: 'group', label: 'OPERATION', children: [
@@ -156,7 +156,7 @@ const menuItems = [
   {
     key: 'settings',
     icon: <SettingOutlined />,
-    label: 'Settings',
+    label: 'Pengaturan',
     children: [
       { key: '/settings.sequence', label: 'Sequences' },
       { key: '/settings.company', label: 'Companies' },
