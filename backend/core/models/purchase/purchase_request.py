@@ -92,14 +92,12 @@ class PurchaseRequest(BaseModel):
             'actions': [
                 {
                     'label': 'Konfirmasi',
-                    'icon': 'CheckOutlined',
                     'color': 'primary',
                     'action': 'confirm',
                     'states': ['draft'],
                 },
                 {
                     'label': 'Buat Purchase Order',
-                    'icon': 'ShoppingCartOutlined',
                     'color': 'primary',
                     'action': 'create_po',
                     'states': ['confirmed'],
@@ -125,7 +123,6 @@ class PurchaseRequest(BaseModel):
                 },
                 {
                     'label': 'Batal',
-                    'icon': 'StopOutlined',
                     'color': 'red',
                     'action': 'cancel',
                     'states': ['draft', 'confirmed'],

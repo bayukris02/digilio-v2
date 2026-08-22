@@ -87,10 +87,10 @@ class GoodsReceipt(BaseModel):
                 },
             ],
             'actions': [
-                {'label': 'Print', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
-                {'label': 'Proses Penerimaan', 'icon': 'InboxOutlined', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
-                {'label': 'Konfirm', 'icon': 'CheckOutlined', 'color': 'primary', 'action': 'mark_done', 'states': ['waiting']},
-                {'label': 'Cancel', 'icon': 'StopOutlined', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'waiting', 'done']},
+                {'label': 'Print', 'color': 'green', 'action': 'print'},
+                {'label': 'Proses Penerimaan', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
+                {'label': 'Konfirm', 'color': 'primary', 'action': 'mark_done', 'states': ['waiting']},
+                {'label': 'Cancel', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'waiting', 'done']},
             ],
             'smart_buttons': [
                 {'label': 'Purchase Order', 'model': 'purchase.order', 'icon': 'FileTextOutlined'},

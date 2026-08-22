@@ -205,11 +205,10 @@ class PurchaseOrder(BaseModel):
                 },
             ],
             'actions': [
-                {'label': 'Print', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
-                {'label': 'Confirm', 'icon': 'CheckOutlined', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
+                {'label': 'Print', 'color': 'green', 'action': 'print'},
+                {'label': 'Confirm', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {
                     'label': 'Terima Barang',
-                    'icon': 'InboxOutlined',
                     'color': 'primary',
                     'action': 'receive_goods',
                     'states': ['confirmed'],
@@ -228,7 +227,6 @@ class PurchaseOrder(BaseModel):
                 },
                 {
                     'label': 'Buat Tagihan',
-                    'icon': 'FileTextOutlined',
                     'color': 'primary',
                     'action': 'create_bill',
                     'states': ['confirmed', 'done'],
@@ -252,7 +250,7 @@ class PurchaseOrder(BaseModel):
                         },
                     },
                 },
-                {'label': 'Cancel', 'icon': 'StopOutlined', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed']},
+                {'label': 'Cancel', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed']},
             ],
             'smart_buttons': [
                 {'label': 'Receipt', 'model': 'purchase.goods_receipt', 'icon': 'InboxOutlined'},

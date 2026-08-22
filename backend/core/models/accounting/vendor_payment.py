@@ -114,10 +114,10 @@ class VendorPayment(BaseModel):
             ],
             'smart_buttons': [],
             'actions': [
-                {'label': 'Print', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
-                {'label': 'Confirm', 'icon': 'CheckOutlined', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
-                {'label': 'Cancel', 'icon': 'StopOutlined', 'color': 'primary', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
-                {'label': 'Action', 'icon': 'MoreOutlined', 'color': 'primary'},
+                {'label': 'Print', 'color': 'green', 'action': 'print'},
+                {'label': 'Confirm', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
+                {'label': 'Cancel', 'color': 'primary', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
+                {'label': 'Action', 'color': 'primary'},
             ],
         },
         'notebook': [
