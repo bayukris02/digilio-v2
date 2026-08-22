@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, useRef, type ReactNode } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef, forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation, useBlocker } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -365,6 +365,115 @@ function renderField(
     </Form.Item>
   );
 }
+
+// ─── Many2One Cell Editor (AG Grid) ────────────────
+// Dropdown pakai Ant Design Select: search bar selalu tampil,
+// maksimal 5 opsi + footer hint untuk mencari data lain.
+interface Many2OneEditorProps {
+  value?: Record<string, unknown> | null;
+  values?: Array<{ value: number; label?: string; name?: string }>;
+  stopEditing?: () => void;
+  // AG Grid React v35: nilai editor disinkronkan ke grid VIA prop ini
+  // (proxy punya getValue() sendiri yang baca this.value — useImperativeHandle
+  // TIDAK dipakai untuk commit)
+  onValueChange?: (value: Record<string, unknown> | null) => void;
+}
+
+const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, unknown> | null }, Many2OneEditorProps>(
+  ({ value, values, stopEditing, onValueChange }, ref) => {
+    const allValues = values || [];
+    const currentId = value && (value.value ?? value.id);
+    const currentLabel = value && (value.label ?? value.name);
+    // Simpan SELURUH object option (bukan cuma {value,label}) — autofill di
+    // onCellValueChanged membaca field lain (mis. name → description) dari
+    // object ini. Cari option penuh dari values kalau ada, fallback id/label.
+    const currentOption = allValues.find((o) => o.value === Number(currentId));
+    const [selected, setSelected] = useState<Record<string, unknown> | null>(
+      currentOption ?? (currentId != null
+        ? { value: Number(currentId), label: String(currentLabel ?? '') }
+        : null),
+    );
+    // getValue baca dari ref — state React async, tidak bisa dibaca
+    // langsung setelah setSelected (bug: klik tidak kepilih)
+    const selectedRef = useRef(selected);
+    const [search, setSearch] = useState('');
+    const [open, setOpen] = useState(true);
+    const selectRef = useRef<any>(null);
+
+    // AG Grid mencuri fokus setelah editor mount → search box tidak kebagian
+    // ketikan. Fokuskan input Select secara eksplisit.
+    useEffect(() => {
+      const t = setTimeout(() => selectRef.current?.focus(), 60);
+      return () => clearTimeout(t);
+    }, []);
+
+    const commit = (next: Record<string, unknown>) => {
+      selectedRef.current = next;
+      setSelected(next);
+      // Sinkronkan nilai ke grid VIA onValueChange — ini satu-satunya cara
+      // proxy AG Grid React v35 membaca nilai editor (getValue proxy = this.value)
+      onValueChange?.(next);
+      stopEditing?.();
+    };
+
+    useImperativeHandle(ref, () => ({
+      getValue: () => selectedRef.current,
+    }));
+
+    const filtered = useMemo(() => {
+      const q = search.trim().toLowerCase();
+      if (!q) return allValues;
+      return allValues.filter((o) =>
+        String(o.label ?? o.name ?? '').toLowerCase().includes(q),
+      );
+    }, [allValues, search]);
+
+    const visible = filtered.slice(0, 5);
+    const hasMore = filtered.length > 5;
+    // Pilihan saat ini WAJIB ada di daftar options — kalau tidak, Ant Select
+    // tidak menemukan label-nya dan menampilkan ID mentah (placeholder ID)
+    const options = selected && !visible.some((o) => o.value === Number(selected.value))
+      ? [selected, ...visible]
+      : visible;
+
+    return (
+      <Select
+        ref={selectRef}
+        autoFocus
+        showSearch
+        filterOption={false}
+        open={open}
+        onDropdownVisibleChange={(o) => setOpen(o)}
+        style={{ width: '100%' }}
+        placeholder="Ketik untuk mencari..."
+        value={selected ? Number(selected.value) : undefined}
+        options={options.map((o) => ({ ...o, value: Number(o.value), label: String(o.label ?? o.name ?? '') }))}
+        onSearch={(v) => setSearch(v)}
+        onChange={(val, opt) => {
+          const o = (Array.isArray(opt) ? opt[0] : opt) as Record<string, unknown> | undefined;
+          if (o) commit({ ...o, value: Number(val) });
+        }}
+        notFoundContent={search ? 'Data tidak ditemukan' : 'Ketik untuk mencari data lain...'}
+        dropdownRender={(menu) => (
+          <div
+            // Klik option di portal dropdown jangan sampai melepas fokus dari
+            // input — kalau blur, AG Grid (stopEditingWhenCellsLoseFocus) stop
+            // editing duluan dengan nilai lama → pilihan tidak masuk cell.
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {menu}
+            {hasMore && (
+              <div style={{ padding: '6px 12px', color: '#999', fontSize: 12, borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
+                Ketik untuk mencari data lain...
+              </div>
+            )}
+          </div>
+        )}
+      />
+    );
+  },
+);
+Many2OneCellEditor.displayName = 'Many2OneCellEditor';
 
 export default function ModelFormPage({
   modelName: propModelName,
@@ -1678,7 +1787,7 @@ export default function ModelFormPage({
           };
           return name(a).localeCompare(name(b), 'id');
         };
-        col.cellEditor = 'agRichSelectCellEditor';
+        col.cellEditor = Many2OneCellEditor;
         col.cellEditorParams = {
           values: (many2oneOptions[`${relationField}.${key}`] || []).filter((opt) => {
             // Field dengan allow_duplicate=True → boleh pilih nilai yang sama di baris lain
@@ -1692,10 +1801,6 @@ export default function ModelFormPage({
             );
             return !selectedIds.has(record.value as number);
           }),
-          formatValue: (v: { value: number; label?: string; name?: string }) => v?.label || v?.name || '',
-          allowTyping: true,
-          filterList: true,
-          searchType: 'fuzzy',
         };
         // Store display_field from notebook column config
         const colMeta = columnMeta[key];
