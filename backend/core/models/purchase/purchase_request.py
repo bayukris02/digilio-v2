@@ -97,13 +97,13 @@ class PurchaseRequest(BaseModel):
                     'states': ['draft'],
                 },
                 {
-                    'label': 'Buat PO',
+                    'label': 'Buat Purchase Order',
                     'icon': 'ShoppingCartOutlined',
                     'color': 'primary',
                     'action': 'create_po',
                     'states': ['confirmed'],
                     'wizard': {
-                        'title': 'Buat PO',
+                        'title': 'Buat Purchase Order',
                         'modes': [
                             {
                                 'value': 'save_draft',
@@ -131,7 +131,7 @@ class PurchaseRequest(BaseModel):
                 },
             ],
             'smart_buttons': [
-                {'label': 'PO', 'model': 'purchase.order', 'icon': 'ShoppingCartOutlined'},
+                {'label': 'Purchase Order', 'model': 'purchase.order', 'icon': 'ShoppingCartOutlined'},
             ],
         },
         'notebook': [
@@ -273,6 +273,13 @@ class PurchaseRequest(BaseModel):
                 vname = po.vendor.name if po.vendor else '-'
                 po_infos.append(f'{po.reference} ({vname})')
             warning_msg = 'Catatan: PR ini juga memiliki PO yang sudah dikonfirmasi: ' + ', '.join(po_infos) + '.'
+
+        # 2b) Konfirmasi user dulu sebelum buat PO (ada PO confirmed vendor lain)
+        if diff_confirmed.exists() and not (data or {}).get('confirmed'):
+            return {
+                '_action_type': 'confirm',
+                'confirm_message': warning_msg,
+            }
 
         # Ambil sequence untuk PO
         po_seq = Sequence.objects.filter(

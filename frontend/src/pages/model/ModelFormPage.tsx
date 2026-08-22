@@ -1219,29 +1219,47 @@ export default function ModelFormPage({
 
       // Execute action with wizard data
       const extraData: Record<string, unknown> = { mode, selected_lines: selectedLines, line_id: (actionWizardBtn as any)?.rowId ?? null, ...(extraInputs || {}) };
+
+      // Helper: handle response sukses setelah action berhasil
+      const finishWizardAction = (res: Record<string, unknown>) => {
+        if (res.error) {
+          message.error(res.error as string);
+          return;
+        }
+        // Sukses — tutup wizard
+        setActionWizardVisible(false);
+        queryClient.invalidateQueries({ queryKey: ['model-records'] });
+        // Handle response
+        if (res._action_type === 'open_record') {
+          const targetModel = res.model as string;
+          const targetId = res.record_id as number;
+          if (targetModel && targetId) {
+            navigate(`/${apiToUrlName(targetModel)}/${targetId}?from=${apiModelName}&fromId=${recordId}`);
+          }
+        } else {
+          navigate(`${basePath}/${currentRecordId}`, { replace: isNew });
+        }
+        if (res.message) message.success(res.message as string);
+      };
+
       const result = await modelApi.postAction(apiModelName, currentRecordId!, actionName, extraData);
 
-      // Handle error response
-      if (result.error) {
-        message.error(result.error as string);
+      // Konfirmasi dialog: backend minta user pilih Lanjut/Tidak sebelum action dijalankan
+      if (result._action_type === 'confirm' && result.confirm_message) {
+        Modal.confirm({
+          title: 'Konfirmasi',
+          content: result.confirm_message as string,
+          okText: 'Lanjut',
+          cancelText: 'Tidak',
+          onOk: async () => {
+            const res2 = await modelApi.postAction(apiModelName, currentRecordId!, actionName, { ...extraData, confirmed: true });
+            finishWizardAction(res2);
+          },
+        });
         return;
       }
 
-      // Sukses — tutup wizard
-      setActionWizardVisible(false);
-      queryClient.invalidateQueries({ queryKey: ['model-records'] });
-
-      // Handle response
-      if (result._action_type === 'open_record') {
-        const targetModel = result.model as string;
-        const targetId = result.record_id as number;
-        if (targetModel && targetId) {
-          navigate(`/${apiToUrlName(targetModel)}/${targetId}?from=${apiModelName}&fromId=${recordId}`);
-        }
-      } else {
-        navigate(`${basePath}/${currentRecordId}`, { replace: isNew });
-      }
-      if (result.message) message.success(result.message as string);
+      finishWizardAction(result);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || (err as Error)?.message || 'Action failed';
       message.error(msg);
