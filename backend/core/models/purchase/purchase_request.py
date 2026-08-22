@@ -44,6 +44,7 @@ class PurchaseRequest(BaseModel):
             'to': 'cancelled',
             'label': 'Batal',
             'icon': 'StopOutlined',
+            'guard': '_guard_cancel',
         },
     ]
 
@@ -73,7 +74,7 @@ class PurchaseRequest(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'sequence_id', 'requested_by', 'request_date', 'estimated_receipt_date', 'status'],
+        'columns': ['reference', 'requested_by', 'status', 'request_date', 'estimated_receipt_date'],
         'filters': ['status', 'request_date'],
         'default_sort': ['-updated_at'],
     }
@@ -192,6 +193,38 @@ class PurchaseRequest(BaseModel):
         from core.sequence_engine import SequenceEngine
         if (self.reference or '').startswith('Draft#'):
             self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
+    def _guard_cancel(self):
+        """PR tidak boleh dicancel selama masih ada PO (draft/confirmed) yang belum dicancel."""
+        if not self.pk:
+            return
+        from core.models.purchase.purchase_order import PurchaseOrder
+        from core.models.purchase.purchase_order_line import PurchaseOrderLine
+        from core.models.purchase.purchase_request_line import PurchaseRequestLine
+
+        pr_line_ids = list(PurchaseRequestLine.objects.filter(
+            request_id=self, is_deleted=False
+        ).values_list('pk', flat=True))
+
+        active_po_ids = PurchaseOrderLine.objects.filter(
+            purchase_request_line_id__in=pr_line_ids,
+            is_deleted=False,
+            order_id__is_deleted=False,
+        ).exclude(
+            order_id__status='cancelled',
+        ).values_list('order_id', flat=True).distinct()
+
+        active_pos = PurchaseOrder.objects.filter(
+            pk__in=active_po_ids,
+            is_deleted=False,
+        ).exclude(status='cancelled')
+
+        if active_pos.exists():
+            refs = ', '.join(active_pos.values_list('reference', flat=True))
+            raise ValueError(
+                f'PR tidak bisa dibatalkan: masih ada PO yang belum dicancel ({refs}). '
+                'Cancel PO tersebut terlebih dahulu.'
+            )
 
     @classmethod
     def get_model_config(cls):
