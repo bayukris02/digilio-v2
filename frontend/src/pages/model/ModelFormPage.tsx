@@ -445,6 +445,8 @@ const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, unknown> 
         open={open}
         onDropdownVisibleChange={(o) => setOpen(o)}
         style={{ width: '100%' }}
+        popupMatchSelectWidth={false}
+        dropdownStyle={{ minWidth: 300 }}
         placeholder="Ketik untuk mencari..."
         value={selected ? Number(selected.value) : undefined}
         options={options.map((o) => ({ ...o, value: Number(o.value), label: String(o.label ?? o.name ?? '') }))}
