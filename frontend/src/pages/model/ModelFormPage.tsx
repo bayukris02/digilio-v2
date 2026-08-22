@@ -31,6 +31,9 @@ ModuleRegistry.registerModules([AllCommunityModule, RichSelectModule]);
 const { TextArea } = Input;
 const { Title } = Typography;
 
+// Many2one dropdown pagination: fetch bertahap 25 per halaman
+const M2O_PAGE_SIZE = 25;
+
 // ─── Smart Button Component ────────────────
 interface SmartBtnProps {
   icon: React.ReactNode;
@@ -377,10 +380,13 @@ interface Many2OneEditorProps {
   // (proxy punya getValue() sendiri yang baca this.value — useImperativeHandle
   // TIDAK dipakai untuk commit)
   onValueChange?: (value: Record<string, unknown> | null) => void;
+  // Infinite scroll: total record dari server + pemuat halaman berikutnya
+  total?: number;
+  onLoadMore?: () => Promise<Record<string, unknown>[]>;
 }
 
 const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, unknown> | null }, Many2OneEditorProps>(
-  ({ value, values, stopEditing, onValueChange }, ref) => {
+  ({ value, values, stopEditing, onValueChange, total, onLoadMore }, ref) => {
     const allValues = values || [];
     const currentId = value && (value.value ?? value.id);
     const currentLabel = value && (value.label ?? value.name);
@@ -393,12 +399,16 @@ const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, unknown> 
         ? { value: Number(currentId), label: String(currentLabel ?? '') }
         : null),
     );
+    // List lokal editor — AG Grid tidak re-render editor aktif saat props
+    // berubah, jadi hasil onLoadMore di-append ke sini (bukan andalkan values)
+    const [items, setItems] = useState<Record<string, unknown>[]>(allValues);
     // getValue baca dari ref — state React async, tidak bisa dibaca
     // langsung setelah setSelected (bug: klik tidak kepilih)
     const selectedRef = useRef(selected);
     const [search, setSearch] = useState('');
     const [open, setOpen] = useState(true);
     const selectRef = useRef<any>(null);
+    const loadingRef = useRef(false);
 
     // AG Grid mencuri fokus setelah editor mount → search box tidak kebagian
     // ketikan. Fokuskan input Select secara eksplisit.
@@ -406,6 +416,19 @@ const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, unknown> 
       const t = setTimeout(() => selectRef.current?.focus(), 60);
       return () => clearTimeout(t);
     }, []);
+
+    const loadMore = async () => {
+      if (loadingRef.current || !onLoadMore) return;
+      loadingRef.current = true;
+      const newOpts = await onLoadMore();
+      loadingRef.current = false;
+      if (newOpts.length) {
+        setItems((prev) => {
+          const seen = new Set(prev.map((o) => o.value));
+          return [...prev, ...newOpts.filter((o) => !seen.has(o.value))];
+        });
+      }
+    };
 
     const commit = (next: Record<string, unknown>) => {
       selectedRef.current = next;
@@ -422,14 +445,16 @@ const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, unknown> 
 
     const filtered = useMemo(() => {
       const q = search.trim().toLowerCase();
-      if (!q) return allValues;
-      return allValues.filter((o) =>
+      if (!q) return items;
+      return items.filter((o) =>
         String(o.label ?? o.name ?? '').toLowerCase().includes(q),
       );
-    }, [allValues, search]);
+    }, [items, search]);
 
-    const visible = filtered.slice(0, 5);
-    const hasMore = filtered.length > 5;
+    // Semua item yang sudah di-load ditampilkan; tinggi dropdown dibatasi
+    // listHeight (≈5 baris) supaya bisa scroll, bukan slice 5.
+    const visible = filtered;
+    const hasMore = items.length < (total ?? items.length);
     // Pilihan saat ini WAJIB ada di daftar options — kalau tidak, Ant Select
     // tidak menemukan label-nya dan menampilkan ID mentah (placeholder ID)
     const options = selected && !visible.some((o) => o.value === Number(selected.value))
@@ -447,10 +472,16 @@ const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, unknown> 
         style={{ width: '100%' }}
         popupMatchSelectWidth={false}
         dropdownStyle={{ minWidth: 300 }}
+        listHeight={160}
         placeholder="Ketik untuk mencari..."
         value={selected ? Number(selected.value) : undefined}
         options={options.map((o) => ({ ...o, value: Number(o.value), label: String(o.label ?? o.name ?? '') }))}
         onSearch={(v) => setSearch(v)}
+        onPopupScroll={(e) => {
+          const el = e.target as HTMLElement;
+          // Mentok di bawah → load halaman berikutnya
+          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) loadMore();
+        }}
         onChange={(val, opt) => {
           const o = (Array.isArray(opt) ? opt[0] : opt) as Record<string, unknown> | undefined;
           if (o) commit({ ...o, value: Number(val) });
@@ -510,6 +541,8 @@ export default function ModelFormPage({
   const [summaryRevision, setSummaryRevision] = useState(0);
   const [childConfigs, setChildConfigs] = useState<Record<string, ModelConfig>>({});
   const [many2oneOptions, setMany2oneOptions] = useState<Record<string, { value: number; label: string; uom?: string }[]>>({});
+  // Pagination state per many2one option list: page terakhir, total, loading
+  const [many2oneMeta, setMany2oneMeta] = useState<Record<string, { page: number; total: number; loading: boolean; params: Record<string, string> }>>({});
   const [chatterKey, setChatterKey] = useState(0);
   const [recordIds, setRecordIds] = useState<number[]>([]);
   const [currentIdx, setCurrentIdx] = useState(-1);
@@ -1614,6 +1647,59 @@ export default function ModelFormPage({
     return errors;
   }
 
+  /**
+   * Load halaman berikutnya options many2one (infinite scroll).
+   * Mengembalikan options baru agar editor bisa append ke list lokalnya.
+   */
+  const loadMoreMany2one = useCallback(async (
+    relationField: string,
+    fieldName: string,
+    displayField?: string,
+    allowDuplicate?: boolean,
+  ): Promise<Record<string, unknown>[]> => {
+    const key = `${relationField}.${fieldName}`;
+    const meta = many2oneMeta[key];
+    const childCfg = childConfigs[relationField];
+    const fieldMeta = childCfg?.fields?.[fieldName];
+    if (!meta || !fieldMeta?.relation || meta.loading) return [];
+    if (meta.page * M2O_PAGE_SIZE >= meta.total) return [];
+    setMany2oneMeta((prev) => ({ ...prev, [key]: { ...prev[key], loading: true } }));
+    try {
+      const response = await modelApi.listRecords(fieldMeta.relation, meta.page + 1, M2O_PAGE_SIZE, meta.params);
+      let opts: Record<string, unknown>[] = response.results.map((r) => ({
+        ...r,
+        value: r.id as number,
+        label: displayField
+          ? ((r[displayField] as string) || `#${r.id}`)
+          : ((r.name as string) || `#${r.id}`),
+      }));
+      // Filter: sembunyikan yang sudah dipilih di baris lain (sama seperti awal)
+      if (!allowDuplicate) {
+        const selectedIds = new Set(
+          (lineItems[relationField] || [])
+            .filter((item) => !item._isAddButton && item[fieldName]?.id)
+            .map((item) => (item[fieldName] as Record<string, unknown>).id as number),
+        );
+        opts = opts.filter((o) => !selectedIds.has(o.value as number));
+      }
+      // Merge ke state parent (dedupe by value)
+      setMany2oneOptions((prev) => {
+        const existing = prev[key] || [];
+        const seen = new Set(existing.map((o) => o.value));
+        const merged = [...existing, ...opts.filter((o) => !seen.has(o.value as number))];
+        return { ...prev, [key]: merged as { value: number; label: string; uom?: string }[] };
+      });
+      setMany2oneMeta((prev) => ({
+        ...prev,
+        [key]: { ...prev[key], page: meta.page + 1, total: response.count, loading: false },
+      }));
+      return opts;
+    } catch {
+      setMany2oneMeta((prev) => ({ ...prev, [key]: { ...prev[key], loading: false } }));
+      return [];
+    }
+  }, [many2oneMeta, childConfigs, lineItems]);
+
   /** Build AG Grid column defs from child model config, excluding FK/audit fields */
   const buildColumns = useCallback((relationField: string, columnFilter?: (string | {name: string; display_field?: string})[], tabReadOnly?: boolean, rowActions?: Array<{label: string; actions?: Array<{label: string; action?: string; wizard?: Record<string, unknown>}>}>): ColDef[] => {
     const childCfg = childConfigs[relationField];
@@ -1765,6 +1851,11 @@ export default function ModelFormPage({
       }
       // Many2One: show display name, rich select editor with search
       if (field.type === 'many2one') {
+        // Store display_field from notebook column config (dipakai juga di onLoadMore)
+        const colMeta = columnMeta[key];
+        if (colMeta?.display_field) {
+          (col as any).displayField = colMeta.display_field;
+        }
         col.editable = (params: any) => {
           if (params.data?._isAddButton) return false;
           return !isReadOnly;
@@ -1803,12 +1894,15 @@ export default function ModelFormPage({
             );
             return !selectedIds.has(record.value as number);
           }),
+          // Infinite scroll: total dari server + pemuat halaman berikutnya
+          total: many2oneMeta[`${relationField}.${key}`]?.total,
+          onLoadMore: () => loadMoreMany2one(
+            relationField,
+            key,
+            (colMeta?.display_field as string) || undefined,
+            !!field.allow_duplicate,
+          ),
         };
-        // Store display_field from notebook column config
-        const colMeta = columnMeta[key];
-        if (colMeta?.display_field) {
-          (col as any).displayField = colMeta.display_field;
-        }
       }
       // ── Generic: column config rules dari backend ──
       // column_config_rules mendefinikan hide/readonly berdasarkan field value
@@ -1931,7 +2025,7 @@ export default function ModelFormPage({
       });
     }
     return cols;
-  }, [childConfigs, config, deleteLine, many2oneOptions, isReadOnly, columnFieldValues, lineItems]);
+  }, [childConfigs, config, deleteLine, many2oneOptions, many2oneMeta, loadMoreMany2one, isReadOnly, columnFieldValues, lineItems]);
 
   // ── Save handler ──
   const onSave = async () => {
@@ -2229,7 +2323,7 @@ export default function ModelFormPage({
                         }
                       });
                     }
-                    modelApi.listRecords(fieldMeta.relation, undefined, undefined, extraParams)
+                    modelApi.listRecords(fieldMeta.relation, 1, M2O_PAGE_SIZE, extraParams)
                       .then((response) => {
                         const opts = response.results.map((r) => ({
                           ...r,
@@ -2238,9 +2332,14 @@ export default function ModelFormPage({
                             ? ((r[displayField] as string) || `#${r.id}`)
                             : ((r.name as string) || `#${r.id}`),
                         }));
+                        const optKey = `${tab.relation!}.${fieldName}`;
                         setMany2oneOptions((prev) => ({
                           ...prev,
-                          [`${tab.relation!}.${fieldName}`]: opts,
+                          [optKey]: opts,
+                        }));
+                        setMany2oneMeta((prev) => ({
+                          ...prev,
+                          [optKey]: { page: 1, total: response.count, loading: false, params: extraParams },
                         }));
                       })
                       .catch(() => {});
