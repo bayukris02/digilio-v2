@@ -420,6 +420,22 @@ export default function ModelFormPage({
     const rel = ls?.relation;
     return rel ? ((recordData as any)?.[rel] as any[]) || [] : [];
   }, [actionWizardBtn, recordData]);
+  // Label kolom line_selection (key → label) dari config child model — dipakai
+  // LineSelector sebagai header kolom (fallback: key mentah).
+  const wizardColumnLabels = useMemo(() => {
+    if (!actionWizardBtn) return undefined;
+    const ls = (actionWizardBtn.wizard as any)?.line_selection;
+    const rel = ls?.relation;
+    const cols: string[] = ls?.columns || [];
+    const childCfg = rel ? childConfigs[rel] : undefined;
+    if (!childCfg?.fields) return undefined;
+    const labels: Record<string, string> = {};
+    cols.forEach((col) => {
+      const f = childCfg.fields?.[col];
+      if (f?.label) labels[col] = f.label;
+    });
+    return labels;
+  }, [actionWizardBtn, childConfigs]);
   const printFrameRef = useRef<HTMLIFrameElement>(null);
   const isNew = recordId === 'new' || !recordId;
   // Force form remount on data load — ensures initialValues applied correctly
@@ -2588,6 +2604,7 @@ export default function ModelFormPage({
           visible={actionWizardVisible}
           config={actionWizardBtn.wizard as any}
           items={wizardItems}
+          columnLabels={wizardColumnLabels}
           onConfirm={handleWizardConfirm}
           onFetchTable={handleFetchWizardTable}
           onCancel={() => { setActionWizardVisible(false); setActionWizardBtn(null); }}

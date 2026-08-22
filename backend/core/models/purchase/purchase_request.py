@@ -91,7 +91,7 @@ class PurchaseRequest(BaseModel):
                     'action': 'create_po',
                     'states': ['confirmed'],
                     'wizard': {
-                        'title': 'Buat Purchase Order',
+                        'title': 'Buat PO',
                         'modes': [
                             {
                                 'value': 'save_draft',
@@ -106,7 +106,7 @@ class PurchaseRequest(BaseModel):
                             'relation': 'request_lines',
                             'columns': ['product', 'qty', 'processed_qty', 'remaining_qty'],
                             'show_for_modes': ['save_draft'],
-                            'qty_label': 'Qty Pesanan',
+                            'qty_label': 'Input Qty',
                         },
                     },
                 },
@@ -199,7 +199,7 @@ class PurchaseRequest(BaseModel):
     # ── Buat PO dari PR ──
 
     def _action_create_po(self, data=None):
-        """Buat Purchase Order dari baris PR — semua baris jadi 1 PO dengan vendor terpilih.
+        """Buat PO dari baris PR — semua baris jadi 1 PO dengan vendor terpilih.
 
         data: dict dari frontend wizard — {mode, selected_lines, vendor_id}
           selected_lines = [{id: pr_line_id, qty: order_qty}, ...]
@@ -265,7 +265,7 @@ class PurchaseRequest(BaseModel):
             model_ref='purchase.order', active=True, is_deleted=False
         ).first()
         if not po_seq:
-            return {'error': 'Tidak ada sequence aktif untuk Purchase Order.'}
+            return {'error': 'Tidak ada sequence aktif untuk PO.'}
 
         created_po = None
 
@@ -313,7 +313,7 @@ class PurchaseRequest(BaseModel):
             created_po = po.pk
 
         return {
-            'message': 'Purchase Order berhasil dibuat.' + (' ' + warning_msg if warning_msg else ''),
+            'message': 'PO berhasil dibuat.' + (' ' + warning_msg if warning_msg else ''),
             '_action_type': 'open_record',
             'model': 'purchase.order',
             'record_id': created_po,

@@ -92,6 +92,8 @@ interface GenericWizardModalProps {
   onCancel: () => void;
   /** Optional — untuk mode bertipe `table`: fetch data dari backend saat mode dipilih */
   onFetchTable?: (mode: string) => Promise<{ rows: Record<string, unknown>[] }>;
+  /** Optional — label kolom line_selection (key → label) dari config child model */
+  columnLabels?: Record<string, string>;
 }
 
 function ModeCards({
@@ -173,6 +175,7 @@ interface LineSelectorProps {
   editableValues: Record<number, Record<string, unknown>>;
   many2oneOptions: Record<string, { value: number; label: string }[]>;
   progressColumns?: string[];
+  columnLabels?: Record<string, string>;
   onToggle: (id: number) => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
@@ -183,7 +186,7 @@ interface LineSelectorProps {
 
 function LineSelector({
   items, selectedIds, columns, qtys, qtyLabel,
-  editableColumns, editableValues, many2oneOptions, progressColumns = [],
+  editableColumns, editableValues, many2oneOptions, progressColumns = [], columnLabels = {},
   onToggle, onSelectAll, onDeselectAll, onQtyChange,
   onEditableChange, onFetchMany2One,
 }: LineSelectorProps) {
@@ -208,7 +211,7 @@ function LineSelector({
             </th>
             <th style={{ padding: '6px 8px', textAlign: 'left', width: 28 }}>#</th>
             {columns.map((col) => (
-              <th key={col} style={{ padding: '6px 8px', textAlign: 'left', textTransform: 'capitalize' }}>{col}</th>
+              <th key={col} style={{ padding: '6px 8px', textAlign: 'left', textTransform: 'capitalize' }}>{columnLabels[col] ?? col}</th>
             ))}
             {editableColumns.map((ec) => (
               <th key={ec.key} style={{ padding: '6px 8px', textAlign: 'left', minWidth: 120 }}>{ec.label}</th>
@@ -303,6 +306,7 @@ export default function GenericWizardModal({
   onConfirm,
   onCancel,
   onFetchTable,
+  columnLabels,
 }: GenericWizardModalProps) {
   const [selectedMode, setSelectedMode] = useState<string>(config.modes[0]?.value || '');
   const [selectedIds, setSelectedIds] = useState<number[]>(
@@ -598,6 +602,7 @@ export default function GenericWizardModal({
               editableValues={editableValues}
               many2oneOptions={many2oneOptions}
               progressColumns={progressColumns}
+              columnLabels={columnLabels}
               onToggle={handleToggle}
               onSelectAll={handleSelectAll}
               onDeselectAll={handleDeselectAll}
