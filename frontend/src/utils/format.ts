@@ -54,8 +54,8 @@ export function formatTimeAgo(date: Date | null): string {
 }
 
 /**
- * Format ISO datetime string → "admin - last update 4 jul 16.50"
- * or just "Last update 4 jul 16.50" if updated_by is absent.
+ * Format ISO datetime string → "admin - pembaruan terakhir 4 jul 16.50"
+ * or just "Pembaruan terakhir 4 jul 16.50" if updated_by is absent.
  */
 export function formatLastUpdate(isoStr: string | null | undefined, userName?: string | null): string {
   if (!isoStr) return '';
@@ -63,7 +63,7 @@ export function formatLastUpdate(isoStr: string | null | undefined, userName?: s
   if (!d.isValid()) return '';
   const timeStr = d.format('D MMM HH:mm').toLowerCase().replace(':', '.');
   if (userName) {
-    return `${userName} - last update ${timeStr}`;
+    return `${userName} - pembaruan terakhir ${timeStr}`;
   }
-  return `Last update ${timeStr}`;
+  return `Pembaruan terakhir ${timeStr}`;
 }

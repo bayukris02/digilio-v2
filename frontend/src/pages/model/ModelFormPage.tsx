@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef, type ReactNode } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation, useBlocker } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Typography, Card, Row, Col, Form, Input, Select, DatePicker, Switch,
@@ -533,6 +533,39 @@ export default function ModelFormPage({
       });
     }
   }, [form, config, setLineItems, lineItems, setSummaryRevision]);
+
+  // ── Block navigation when there are unsaved changes ──
+  // useBlocker intercepts route changes (menu, breadcrumb, prev/next, discard)
+  // so we can warn the user before data could be lost.
+  // skipBlockerRef: bypass blocker utk navigasi SAH setelah save sukses
+  // (setDirtyFlag(false) async, jadi blocker harus cek ref, bukan state).
+  const skipBlockerRef = useRef(false);
+  const location = useLocation();
+  const blocker = useBlocker(
+    useCallback(
+      ({ currentLocation, nextLocation }) =>
+        !skipBlockerRef.current && dirtyFlag && currentLocation.pathname !== nextLocation.pathname,
+      [dirtyFlag],
+    ),
+  );
+
+  useEffect(() => {
+    if (blocker.state === 'blocked') {
+      Modal.confirm({
+        title: 'Perubahan Belum Disimpan',
+        content: 'Ada perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini?',
+        okText: 'Ya, Tinggalkan',
+        cancelText: 'Tetap di Sini',
+        onOk: () => blocker.proceed(),
+        onCancel: () => blocker.reset(),
+      });
+    }
+  }, [blocker]);
+
+  // Reset bypass setelah navigasi selesai (pathname berubah)
+  useEffect(() => {
+    skipBlockerRef.current = false;
+  }, [location.pathname]);
 
   // ── Fetch model config (once per model) ──
   useEffect(() => {
@@ -1229,6 +1262,9 @@ export default function ModelFormPage({
         // Sukses — tutup wizard
         setActionWizardVisible(false);
         queryClient.invalidateQueries({ queryKey: ['model-records'] });
+        // Reset dirty flag + bypass blocker sebelum navigate agar navigasi sah tidak ditahan
+        syncSaveSnapshot();
+        skipBlockerRef.current = true;
         // Handle response
         if (res._action_type === 'open_record') {
           const targetModel = res.model as string;
@@ -1852,6 +1888,8 @@ export default function ModelFormPage({
       });
       if (isNew) {
         const result = await modelApi.createRecord(apiModelName, prepared);
+        syncSaveSnapshot();
+        skipBlockerRef.current = true;
         message.success('Berhasil dibuat');
         navigate(`${basePath}/${result?.id || recordId}`);
       } else {
@@ -2301,9 +2339,9 @@ export default function ModelFormPage({
               }}
             >
               {saving || actionLoading ? (
-                <>○ Saving...</>
+                <>○ Menyimpan...</>
               ) : dirtyFlag ? (
-                <>⚠ Unsaved changes</>
+                <>⚠ Perubahan belum disimpan</>
               ) : recordData?.updated_at ? (
                 <>{formatLastUpdate(recordData.updated_at as string, (recordData.updated_by as Record<string, unknown> | undefined)?.name as string)}</>
               ) : (
