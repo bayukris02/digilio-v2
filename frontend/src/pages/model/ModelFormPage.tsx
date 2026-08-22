@@ -826,6 +826,18 @@ export default function ModelFormPage({
     );
   }, [config]);
 
+  // ── Field yang dirender di form (header tabs/fields) ──
+  // Dipakai saat save: many2one yang TIDAK dirender (mis. purchase_request di PO)
+  // tidak boleh di-null-kan — kalau dikirim null, relasi antar dokumen terputus.
+  // null = header tidak didefinisikan → semua formFields dirender.
+  const renderedFormKeys = useMemo(() => {
+    if (!config?.form_view?.header) return null;
+    const keys = config.form_view.header.tabs
+      ? config.form_view.header.tabs.flatMap((tab: { fields?: string[] }) => tab.fields || [])
+      : (config.form_view.header.fields || []);
+    return new Set(keys);
+  }, [config]);
+
   // ── Smart buttons from form_view config ──
   const smartButtons = useMemo(() => {
     if (!config?.form_view?.header?.smart_buttons) return [];
@@ -982,8 +994,11 @@ export default function ModelFormPage({
         const values = await form.validateFields();
         const prepared = { ...values };
         // Convert undefined values from cleared fields → null for API
+        // (hanya field yang dirender di form; field tersembunyi seperti
+        // purchase_request TIDAK dikirim null → relasi antar dokumen terjaga)
         Object.entries(config?.fields || {}).forEach(([key, field]) => {
-          if (field.type === 'many2one' && prepared[key] === undefined) {
+          if (field.type === 'many2one' && prepared[key] === undefined
+              && (renderedFormKeys === null || renderedFormKeys.has(key))) {
             prepared[key] = null;
           }
         });
@@ -993,7 +1008,8 @@ export default function ModelFormPage({
             const v = form.getFieldValue(key);
             if (v !== undefined) {
               prepared[key] = v;
-            } else if (config?.fields?.[key]?.type === 'many2one') {
+            } else if (config?.fields?.[key]?.type === 'many2one'
+                       && (renderedFormKeys === null || renderedFormKeys.has(key))) {
               prepared[key] = null;
             }
           }
@@ -1742,8 +1758,11 @@ export default function ModelFormPage({
       // Convert dayjs objects to YYYY-MM-DD strings before sending
       const prepared = { ...values };
       // Convert undefined values from cleared fields → null for API
+      // (hanya field yang dirender di form; field tersembunyi seperti
+      // purchase_request TIDAK dikirim null → relasi antar dokumen terjaga)
       Object.entries(config?.fields || {}).forEach(([key, field]) => {
-        if (field.type === 'many2one' && prepared[key] === undefined) {
+        if (field.type === 'many2one' && prepared[key] === undefined
+            && (renderedFormKeys === null || renderedFormKeys.has(key))) {
           prepared[key] = null;
         }
       });
@@ -1755,7 +1774,8 @@ export default function ModelFormPage({
             const v = form.getFieldValue(key);
             if (v !== undefined) {
               prepared[key] = v;
-            } else if (config?.fields?.[key]?.type === 'many2one') {
+            } else if (config?.fields?.[key]?.type === 'many2one'
+                       && (renderedFormKeys === null || renderedFormKeys.has(key))) {
               prepared[key] = null;
             }
           }

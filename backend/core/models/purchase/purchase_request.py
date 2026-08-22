@@ -63,7 +63,7 @@ class PurchaseRequest(BaseModel):
             required=False,
         ),
         'request_date': DateField(label='Tanggal Permintaan', required=True),
-        'estimated_receipt_date': DateField(label='Perkiraan Tanggal Terima'),
+        'estimated_receipt_date': DateField(label='Deadline Barang Terima'),
         'notes': TextField(label='Catatan'),
         'request_lines': One2ManyField(
             label='Baris Permintaan',
