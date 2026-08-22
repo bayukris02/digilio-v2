@@ -11,26 +11,26 @@ class PurchaseRequestLine(BaseModel):
 
     _fields = {
         'request_id': Many2OneField(
-            label='Purchase Request',
+            label='Permintaan Pembelian',
             relation='purchase.request',
             required=True,
         ),
         'product': Many2OneField(
-            label='Product',
+            label='Produk',
             relation='inventory.product',
             required=True,
             autofill={'name': 'name'},
         ),
-        'description': TextField(label='Description'),
-        'qty': FloatField(label='Quantity', default=1),
-        'estimated_cost': MonetaryField(label='Estimated Cost', currency='IDR'),
+        'description': TextField(label='Deskripsi'),
+        'qty': FloatField(label='Jumlah', default=1),
+        'estimated_cost': MonetaryField(label='Perkiraan Biaya', currency='IDR'),
         'total': MonetaryField(
             label='Total', currency='IDR',
             compute='_compute_total',
             depends=['qty', 'estimated_cost'],
         ),
-        'processed_qty': FloatField(label='Processed Qty', default=0, virtual=True),
-        'remaining_qty': FloatField(label='Remaining Qty', default=0, virtual=True),
+        'processed_qty': FloatField(label='Qty Diproses', default=0, virtual=True),
+        'remaining_qty': FloatField(label='Qty Sisa', default=0, virtual=True),
     }
 
     _list_view = {
@@ -40,8 +40,8 @@ class PurchaseRequestLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Purchase Request Line'
-        verbose_name_plural = 'Purchase Request Lines'
+        verbose_name = 'Baris Permintaan Pembelian'
+        verbose_name_plural = 'Baris Permintaan Pembelian'
 
     def _compute_total(self):
         qty = float(self.qty or 0)
@@ -49,7 +49,7 @@ class PurchaseRequestLine(BaseModel):
         self.total = round(qty * cost, 2)
 
     def to_record(self):
-        """Override: inject processed_qty + remaining_qty dari PurchaseOrder terkait."""
+        """Override: isi processed_qty + remaining_qty dari PurchaseOrder terkait."""
         data = super().to_record()
 
         from django.db.models import Sum

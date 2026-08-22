@@ -39,7 +39,7 @@ const menuItems = [
       { key: '/purchase/dashboard', label: 'Dashboard' },
       { key: '/purchase/insight', label: 'Insight' },
       { type: 'group', label: 'OPERATION', children: [
-        { key: '/purchase.request', label: 'Purchase Request' },
+        { key: '/purchase.request', label: 'Permintaan Pembelian' },
         { key: '/purchase.order', label: 'Purchase Order' },
         { key: '/purchase.goods_receipt', label: 'Goods Receipt' },
         { key: '/purchase.quick_purchase', label: 'Quick Purchase' },

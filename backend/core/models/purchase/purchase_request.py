@@ -12,8 +12,8 @@ class PurchaseRequest(BaseModel):
 
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
-        'confirmed': {'allow_edit': False, 'allow_delete': False, 'label': 'Confirmed', 'color': 'processing'},
-        'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Cancelled', 'color': 'error'},
+        'confirmed': {'allow_edit': False, 'allow_delete': False, 'label': 'Dikonfirmasi', 'color': 'processing'},
+        'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Dibatalkan', 'color': 'error'},
     }
 
     _transitions = [
@@ -21,7 +21,7 @@ class PurchaseRequest(BaseModel):
             'name': 'confirm',
             'from': ['draft'],
             'to': 'confirmed',
-            'label': 'Confirm',
+            'label': 'Konfirmasi',
             'icon': 'CheckOutlined',
             'guard': '_guard_confirm',
             'effect': '_effect_confirm',
@@ -30,31 +30,31 @@ class PurchaseRequest(BaseModel):
             'name': 'cancel',
             'from': ['draft', 'confirmed'],
             'to': 'cancelled',
-            'label': 'Cancel',
+            'label': 'Batal',
             'icon': 'StopOutlined',
         },
     ]
 
     _fields = {
         'sequence_id': Many2OneField(
-            label='Document Type',
+            label='Tipe Dokumen',
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen (PR, dll)',
         ),
         'reference': CharField(
-            label='Reference', required=True, editable_statuses=[],
-            placeholder='Automatic',
+            label='Referensi', required=True, editable_statuses=[],
+            placeholder='Otomatis',
         ),
         'requested_by': Many2OneField(
-            label='Requested By',
+            label='Diminta Oleh',
             relation='settings.user',
             required=False,
         ),
-        'request_date': DateField(label='Request Date', required=True),
-        'estimated_receipt_date': DateField(label='Estimated Receipt Date'),
-        'notes': TextField(label='Notes'),
+        'request_date': DateField(label='Tanggal Permintaan', required=True),
+        'estimated_receipt_date': DateField(label='Perkiraan Tanggal Terima'),
+        'notes': TextField(label='Catatan'),
         'request_lines': One2ManyField(
-            label='Request Lines',
+            label='Baris Permintaan',
             relation='purchase.request.line',
             inverse_field='request_id',
         ),
@@ -71,14 +71,14 @@ class PurchaseRequest(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['reference', 'sequence_id', 'requested_by', 'request_date',
                                'estimated_receipt_date', 'notes'],
                 },
             ],
             'actions': [
                 {
-                    'label': 'Confirm',
+                    'label': 'Konfirmasi',
                     'icon': 'CheckOutlined',
                     'color': 'primary',
                     'action': 'confirm',
@@ -106,12 +106,12 @@ class PurchaseRequest(BaseModel):
                             'relation': 'request_lines',
                             'columns': ['product', 'qty', 'processed_qty', 'remaining_qty'],
                             'show_for_modes': ['save_draft'],
-                            'qty_label': 'Order Qty',
+                            'qty_label': 'Qty Pesanan',
                         },
                     },
                 },
                 {
-                    'label': 'Cancel',
+                    'label': 'Batal',
                     'icon': 'StopOutlined',
                     'color': 'red',
                     'action': 'cancel',
@@ -123,7 +123,7 @@ class PurchaseRequest(BaseModel):
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Request Lines',
+                'label': 'Baris Permintaan',
                 'relation': 'request_lines',
                 'columns': ['product', 'description', 'qty', 'estimated_cost', 'total'],
                 'summary': {
@@ -135,14 +135,14 @@ class PurchaseRequest(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Purchase Request'
-        verbose_name_plural = 'Purchase Requests'
+        verbose_name = 'Permintaan Pembelian'
+        verbose_name_plural = 'Permintaan Pembelian'
 
     def __str__(self):
         return self.reference or f'PR#{self.pk}'
 
     def save(self, *args, **kwargs):
-        """Auto-fill requested_by (dari user yg buat) & request_date (hari ini)."""
+        """Isi otomatis requested_by (dari user yang membuat) & request_date (hari ini)."""
         is_new = not self.pk
         if is_new:
             if not self.requested_by_id and hasattr(self, 'created_by_id') and self.created_by_id:
@@ -155,9 +155,9 @@ class PurchaseRequest(BaseModel):
     # ── Guards ──
 
     def _guard_confirm(self):
-        """Wajib pilih sequence & minimal 1 line sebelum konfirmasi."""
+        """Wajib pilih sequence & minimal 1 baris sebelum konfirmasi."""
         if not self.sequence_id:
-            raise ValueError('Silakan pilih Sequence (Document Type) terlebih dahulu.')
+            raise ValueError('Silakan pilih Sequence (Tipe Dokumen) terlebih dahulu.')
 
         # Validasi minimal 1 request line
         if not self.pk:
@@ -171,17 +171,17 @@ class PurchaseRequest(BaseModel):
                     **{fd.inverse_field: self.pk, 'is_deleted': False}
                 ).count()
                 if count == 0:
-                    raise ValueError('Minimal harus ada 1 Request Line sebelum konfirmasi.')
+                    raise ValueError('Minimal harus ada 1 Baris Permintaan sebelum konfirmasi.')
 
     def _effect_confirm(self):
-        """Generate reference dari sequence setelah confirm."""
+        """Buat referensi dari sequence setelah konfirmasi."""
         from core.sequence_engine import SequenceEngine
         if (self.reference or '').startswith('Draft#'):
             self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
 
     @classmethod
     def get_model_config(cls):
-        """Override: inject default sequence, request_date (hari ini), & requested_by (user login)."""
+        """Override: isi default sequence, request_date (hari ini), & requested_by (user login)."""
         config = super().get_model_config()
         from core.models.settings.sequence import Sequence
         active_seq = Sequence.objects.filter(
@@ -199,7 +199,7 @@ class PurchaseRequest(BaseModel):
     # ── Buat PO dari PR ──
 
     def _action_create_po(self, data=None):
-        """Buat Purchase Order dari PR lines — semua line 1 PO dengan vendor terpilih.
+        """Buat Purchase Order dari baris PR — semua baris jadi 1 PO dengan vendor terpilih.
 
         data: dict dari frontend wizard — {mode, selected_lines, vendor_id}
           selected_lines = [{id: pr_line_id, qty: order_qty}, ...]
@@ -219,10 +219,10 @@ class PurchaseRequest(BaseModel):
             return {'error': 'Harap pilih Vendor.'}
 
         if not selected_lines_raw or not isinstance(selected_lines_raw, list):
-            return {'error': 'Tidak ada line yang dipilih.'}
+            return {'error': 'Tidak ada baris yang dipilih.'}
 
         if len(selected_lines_raw) == 0:
-            return {'error': 'Tidak ada line yang dipilih.'}
+            return {'error': 'Tidak ada baris yang dipilih.'}
 
         # ── Guard: cek existing PO dari PR ini ──
         from core.models.purchase.purchase_request_line import PurchaseRequestLine
@@ -258,7 +258,7 @@ class PurchaseRequest(BaseModel):
             for po in diff_confirmed:
                 vname = po.vendor.name if po.vendor else '-'
                 po_infos.append(f'{po.reference} ({vname})')
-            warning_msg = 'Catatan: PR ini juga memiliki PO yang sudah confirmed: ' + ', '.join(po_infos) + '.'
+            warning_msg = 'Catatan: PR ini juga memiliki PO yang sudah dikonfirmasi: ' + ', '.join(po_infos) + '.'
 
         # Ambil sequence untuk PO
         po_seq = Sequence.objects.filter(
@@ -305,10 +305,10 @@ class PurchaseRequest(BaseModel):
                             )
                             line_count += 1
                         except child_model.DoesNotExist:
-                            return {'error': f'PR line #{pr_line_id} tidak ditemukan.'}
+                            return {'error': f'Baris PR #{pr_line_id} tidak ditemukan.'}
 
             if line_count == 0:
-                return {'error': 'Tidak ada line dengan qty > 0 untuk dibuat PO.'}
+                return {'error': 'Tidak ada baris dengan qty > 0 untuk dibuat PO.'}
 
             created_po = po.pk
 
@@ -320,7 +320,7 @@ class PurchaseRequest(BaseModel):
         }
 
     def _get_line_model(self, relation_name):
-        """Helper: ambil model class untuk relation."""
+        """Helper: ambil class model untuk relation."""
         from core.model_meta import ErpModelBase
         fd = self._field_descriptors.get(relation_name)
         if fd:
