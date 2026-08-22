@@ -2622,13 +2622,8 @@ export default function ModelFormPage({
       <Card
         ref={notebookRef}
         styles={{
-          header: {
-            borderBottom: '1px solid #e8e8e8',
-            padding: '8px 12px',
-          },
           body: { padding: 16 },
         }}
-        title={<span>Notebook</span>}
       >
         <Tabs
           activeKey={notebookTabs.some((t) => t.key === activeNotebookKey) ? activeNotebookKey : notebookTabs[0]?.key}
