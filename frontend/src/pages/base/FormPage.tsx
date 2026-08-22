@@ -456,14 +456,14 @@ export default function FormPage() {
           </Space>
           <Space size={6}>
             <Button icon={<SaveOutlined />} type="primary">
-              Save
+              Simpan
             </Button>
             <Button
               variant="solid"
               color="danger"
               icon={<CloseOutlined />}
             >
-              Discard
+              Batal
             </Button>
           </Space>
         </div>

@@ -1079,10 +1079,10 @@ export default function ModelFormPage({
         }
         setChatterKey((prev) => prev + 1);
         queryClient.invalidateQueries({ queryKey: ['model-records'] });
-        message.success({ content: 'Data saved', key: saveKey, duration: 1 });
+        message.success({ content: 'Data tersimpan', key: saveKey, duration: 1 });
         syncSaveSnapshot();
       } catch {
-        message.error({ content: 'Save failed, action cancelled', key: saveKey });
+        message.error({ content: 'Gagal menyimpan, aksi dibatalkan', key: saveKey });
         setActionLoading(null);
         return;
       }
@@ -1852,7 +1852,7 @@ export default function ModelFormPage({
       });
       if (isNew) {
         const result = await modelApi.createRecord(apiModelName, prepared);
-        message.success('Created successfully');
+        message.success('Berhasil dibuat');
         navigate(`${basePath}/${result?.id || recordId}`);
       } else {
         const result = await modelApi.updateRecord(apiModelName, Number(recordId), prepared);
@@ -1870,7 +1870,7 @@ export default function ModelFormPage({
         form.setFieldsValue(result);
         setRecordData(result);
         syncSaveSnapshot();
-        message.success('Saved successfully');
+        message.success('Berhasil disimpan');
       }
       queryClient.invalidateQueries({ queryKey: ['model-records'] });
       setChatterKey((prev) => prev + 1); // refresh chatter logs
@@ -1882,7 +1882,7 @@ export default function ModelFormPage({
       const axiosErr = err as Record<string, unknown>;
       const backendMsg = (axiosErr?.response as Record<string, unknown>)?.data as Record<string, unknown>;
       const msg = typeof backendMsg?.error === 'string' ? backendMsg.error : (err as Error)?.message || '';
-      message.error(msg || 'Save failed');
+      message.error(msg || 'Gagal menyimpan');
     } finally {
       setSaving(false);
     }
@@ -2365,7 +2365,7 @@ export default function ModelFormPage({
           {!isReadOnly && (
           <Space size={6} style={{ marginLeft: 'auto' }}>
             <Button icon={<SaveOutlined />} type="primary" onClick={onSave} loading={saving}>
-              Save
+              Simpan
             </Button>
             <Button
               variant="solid"
@@ -2374,7 +2374,7 @@ export default function ModelFormPage({
               loading={discarding}
               onClick={() => { setDiscarding(true); navigate(`${basePath}`); }}
             >
-              Discard
+              Batal
             </Button>
           </Space>
           )}

@@ -19,7 +19,7 @@ class PurchaseRequestLine(BaseModel):
             label='Produk',
             relation='inventory.product',
             required=True,
-            autofill={'name': 'name'},
+            autofill={'description': 'name'},
         ),
         'description': TextField(label='Deskripsi'),
         'qty': FloatField(label='Jumlah', default=1),
