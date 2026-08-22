@@ -1534,7 +1534,8 @@ export default function ModelFormPage({
         sortable: false,
         resizable: false,
         editable: false,
-        rowDrag: true,
+        // rowDrag callback: row +Add tidak draggable → grip default AG Grid tidak dirender
+        rowDrag: (params) => !(params.data as Record<string, unknown> | undefined)?._isAddButton,
         cellRenderer: (params: ICellRendererParams) => {
           if (params.data?._isAddButton || params.node?.rowPinned) return null;
           return <HolderOutlined style={{ color: '#999', cursor: 'grab' }} />;
@@ -1662,6 +1663,20 @@ export default function ModelFormPage({
           if (typeof val === 'object' && val?.name) return val.name;
           if (typeof val === 'object' && val?.label) return val.label;
           return val ?? '';
+        };
+        // Sort berdasarkan nilai yang TAMPIL (name/label), bukan object/id —
+        // defaultComparator AG Grid tidak bisa membandingkan object {id, name}
+        col.comparator = (a: unknown, b: unknown) => {
+          const name = (v: unknown) => {
+            if (typeof v === 'object' && v && 'name' in (v as Record<string, unknown>)) {
+              return String((v as Record<string, unknown>).name);
+            }
+            if (typeof v === 'object' && v && 'label' in (v as Record<string, unknown>)) {
+              return String((v as Record<string, unknown>).label);
+            }
+            return v == null ? '' : String(v);
+          };
+          return name(a).localeCompare(name(b), 'id');
         };
         col.cellEditor = 'agRichSelectCellEditor';
         col.cellEditorParams = {
@@ -2051,6 +2066,17 @@ export default function ModelFormPage({
               getRowId={(params) => params.data._key}
               animateRows
               rowDragManaged
+              postSortRows={(params) => {
+                // +Add selalu di baris paling bawah — tidak ikut sort asc/desc
+                const nodes = params.nodes;
+                const addIdx = nodes.findIndex(
+                  (n) => (n.data as Record<string, unknown> | undefined)?._isAddButton
+                );
+                if (addIdx >= 0) {
+                  const [addNode] = nodes.splice(addIdx, 1);
+                  nodes.push(addNode);
+                }
+              }}
               onRowDragEnd={(params) => {
                 // Sync state lineItems mengikuti urutan visual grid setelah drag
                 const relationField = tab.relation!;
