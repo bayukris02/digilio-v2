@@ -66,7 +66,7 @@ class PurchaseRequest(BaseModel):
         'estimated_receipt_date': DateField(label='Deadline Barang Terima'),
         'notes': TextField(label='Catatan'),
         'request_lines': One2ManyField(
-            label='Baris Permintaan',
+            label='List Product',
             relation='purchase.request.line',
             inverse_field='request_id',
         ),
@@ -84,7 +84,7 @@ class PurchaseRequest(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['reference', 'sequence_id', 'requested_by', 'request_date',
+                    'fields': ['reference', 'requested_by', 'request_date',
                                'estimated_receipt_date', 'notes'],
                 },
             ],
@@ -137,7 +137,7 @@ class PurchaseRequest(BaseModel):
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Baris Permintaan',
+                'label': 'List Product',
                 'relation': 'request_lines',
                 'columns': ['product', 'description', 'qty', 'estimated_cost', 'total'],
                 'summary': {
