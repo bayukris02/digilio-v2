@@ -37,12 +37,12 @@ class Unit(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['name', 'base_price'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['specifications', 'quality_standard'],
                 },
             ],
@@ -53,7 +53,7 @@ class Unit(BaseModel):
     class Meta(BaseModel.Meta):
         app_label = 'core'
         verbose_name = 'Unit'
-        verbose_name_plural = 'Units'
+        verbose_name_plural = 'Unit'
 
     def __str__(self):
         return self.name or ''

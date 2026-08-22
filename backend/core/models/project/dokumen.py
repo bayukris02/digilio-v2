@@ -59,12 +59,12 @@ class Dokumen(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['name', 'doc_type', 'reference'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['rate', 'validity_days', 'description'],
                 },
             ],

@@ -17,7 +17,7 @@ class MilestoneLine(BaseModel):
             required=True,
         ),
         'type': CharField(
-            label='Type',
+            label='Tipe',
             help_text='Tipe aktivitas (bebas), misal: Persiapan, Struktur, Dokumen',
         ),
         'name': CharField(
@@ -45,8 +45,8 @@ class MilestoneLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Milestone Line'
-        verbose_name_plural = 'Milestone Lines'
+        verbose_name = 'Baris Milestone'
+        verbose_name_plural = 'Baris Milestone'
 
     def __str__(self):
         return self.name or ''

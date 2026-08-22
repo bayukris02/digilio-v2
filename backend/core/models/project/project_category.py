@@ -27,7 +27,7 @@ class ProjectCategory(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['name', 'code'],
                 },
             ],
@@ -37,8 +37,8 @@ class ProjectCategory(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Project Category'
-        verbose_name_plural = 'Project Categories'
+        verbose_name = 'Project Kategori'
+        verbose_name_plural = 'Project Kategori'
 
     def __str__(self):
         return self.name or ''

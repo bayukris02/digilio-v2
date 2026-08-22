@@ -43,8 +43,8 @@ class UnitDetailProgress(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Unit Detail Progress'
-        verbose_name_plural = 'Unit Detail Progress'
+        verbose_name = 'Progress Unit'
+        verbose_name_plural = 'Progress Unit'
 
     def __str__(self):
         return self.name or ''

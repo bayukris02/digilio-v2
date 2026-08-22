@@ -16,7 +16,7 @@ class Project(BaseModel):
             label='Kategori',
             relation='project.project_category',
             required=False,
-            help_text='Kategori proyek dari master Project Categories',
+            help_text='Kategori proyek dari master Project Kategori',
         ),
         'date_start': DateField(label='Tanggal Mulai'),
         'date_end': DateField(label='Tanggal Selesai'),
@@ -41,17 +41,17 @@ class Project(BaseModel):
             required=False,
         ),
         'lines': One2ManyField(
-            label='Project Lines',
+            label='Baris Proyek',
             relation='project.project_line',
             inverse_field='project_id',
         ),
         'units': One2ManyField(
-            label='Project Units',
+            label='Unit Proyek',
             relation='project.project_unit',
             inverse_field='project_id',
         ),
         'unit_details': One2ManyField(
-            label='Unit Detail',
+            label='Detail Unit',
             relation='project.project_unit_detail',
             inverse_field='project_id',
         ),
@@ -68,18 +68,18 @@ class Project(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['name', 'category', 'date_start', 'date_end'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['project_manager', 'contract_value', 'client', 'location', 'executing_entity'],
                 },
             ],
             'actions': [
                 {
-                    'label': 'Update Progress',
+                    'label': 'Perbarui Progress',
                     'icon': 'EditOutlined',
                     'color': 'primary',
                     'action': 'update_progress',
@@ -98,18 +98,18 @@ class Project(BaseModel):
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Project Milestones',
+                'label': 'Milestone Proyek',
                 'relation': 'lines',
                 'columns': ['milestone_id', 'progress'],
                 'row_actions': [
                     {
-                        'label': 'Update Progress',
+                        'label': 'Perbarui Progress',
                         'actions': [
                             {
-                                'label': 'Update Progress',
+                                'label': 'Perbarui Progress',
                                 'action': 'update_progress',
                                 'wizard': {
-                                    'title': 'Update Progress',
+                                    'title': 'Perbarui Progress',
                                     'modes': [
                                         {
                                             # Summary dokumen milestone — bukan option aksi (icon Home)
@@ -119,9 +119,9 @@ class Project(BaseModel):
                                             'table': {
                                                 'title': 'Progress Dokumen',
                                                 'columns': [
-                                                    {'key': 'reference', 'label': 'Reference'},
+                                                    {'key': 'reference', 'label': 'Referensi'},
                                                     {'key': 'status', 'label': 'Status'},
-                                                    {'key': 'amount', 'label': 'Amount'},
+                                                    {'key': 'amount', 'label': 'Jumlah'},
                                                     {'key': 'progress', 'label': 'Progress'},
                                                 ],
                                             },
@@ -131,20 +131,20 @@ class Project(BaseModel):
                                             'label': 'Buat Tagihan',
                                             'inputs': [
                                                 {'key': 'vendor', 'label': 'Vendor', 'type': 'many2one', 'relation': 'purchase.vendor'},
-                                                {'key': 'bill_date', 'label': 'Bill Date', 'type': 'date'},
-                                                {'key': 'due_date', 'label': 'Due Date', 'type': 'date'},
-                                                {'key': 'milestone_line', 'label': 'Milestone Line', 'type': 'many2one', 'relation': 'project.milestone_line'},
+                                                {'key': 'bill_date', 'label': 'Tanggal Tagihan', 'type': 'date'},
+                                                {'key': 'due_date', 'label': 'Jatuh Tempo', 'type': 'date'},
+                                                {'key': 'milestone_line', 'label': 'Baris Milestone', 'type': 'many2one', 'relation': 'project.milestone_line'},
                                                 {'key': 'amount', 'label': 'Nominal (Rp)', 'type': 'number', 'default': 0},
                                                 {'key': 'description', 'label': 'Deskripsi', 'type': 'text'},
                                             ],
                                         },
                                         {
                                             'value': 'input_expenses',
-                                            'label': 'Input Expenses',
+                                            'label': 'Input Biaya',
                                             'inputs': [
                                                 {'key': 'date', 'label': 'Tanggal', 'type': 'date'},
-                                                {'key': 'payment_method', 'label': 'Payment Method', 'type': 'many2one', 'relation': 'accounting.payment_method'},
-                                                {'key': 'milestone_line', 'label': 'Milestone Line', 'type': 'many2one', 'relation': 'project.milestone_line'},
+                                                {'key': 'payment_method', 'label': 'Metode Pembayaran', 'type': 'many2one', 'relation': 'accounting.payment_method'},
+                                                {'key': 'milestone_line', 'label': 'Baris Milestone', 'type': 'many2one', 'relation': 'project.milestone_line'},
                                                 {'key': 'description', 'label': 'Deskripsi', 'type': 'text'},
                                                 {'key': 'amount', 'label': 'Nominal (Rp)', 'type': 'number', 'default': 0},
                                             ],
@@ -164,7 +164,7 @@ class Project(BaseModel):
             },
             {
                 'key': 'unit_details',
-                'label': 'Unit Detail',
+                'label': 'Detail Unit',
                 'relation': 'unit_details',
                 'columns': ['name', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
             },
@@ -174,7 +174,7 @@ class Project(BaseModel):
     class Meta(BaseModel.Meta):
         app_label = 'core'
         verbose_name = 'Project'
-        verbose_name_plural = 'Projects'
+        verbose_name_plural = 'Project'
 
     def __str__(self):
         return self.name or ''

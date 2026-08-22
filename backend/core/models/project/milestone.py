@@ -21,7 +21,7 @@ class Milestone(BaseModel):
             help_text='Syarat kelengkapan dokumen atau syarat klaim pembayaran milestone',
         ),
         'lines': One2ManyField(
-            label='Milestone Lines',
+            label='Baris Milestone',
             relation='project.milestone_line',
             inverse_field='milestone_id',
         ),
@@ -37,7 +37,7 @@ class Milestone(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['name', 'claim_requirements'],
                 },
             ],
@@ -46,7 +46,7 @@ class Milestone(BaseModel):
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Milestone Lines',
+                'label': 'Baris Milestone',
                 'relation': 'lines',
                 'columns': ['type', 'name', 'weight'],
             },
@@ -56,7 +56,7 @@ class Milestone(BaseModel):
     class Meta(BaseModel.Meta):
         app_label = 'core'
         verbose_name = 'Milestone'
-        verbose_name_plural = 'Milestones'
+        verbose_name_plural = 'Milestone'
 
     def __str__(self):
         return self.name or ''

@@ -7,33 +7,33 @@ from core.dashboard_api import register_dashboard
 
 PROJECT_DASHBOARD = {
     'key': 'project',
-    'title': 'Project Dashboard',
+    'title': 'Dashboard Proyek',
     'blocks': [
         # ── KPI row ──
         {
             'key': 'total_projects',
-            'title': 'Total Projects',
+            'title': 'Total Proyek',
             'type': 'kpi', 'span': 6,
             'model': 'project.project',
             'aggregate': {'field': 'id', 'func': 'count'},
         },
         {
             'key': 'total_contract',
-            'title': 'Total Contract Value',
+            'title': 'Total Nilai Kontrak',
             'type': 'kpi', 'span': 6,
             'model': 'project.project',
             'aggregate': {'field': 'contract_value', 'func': 'sum'},
         },
         {
             'key': 'avg_progress',
-            'title': 'Avg Milestone Progress',
+            'title': 'Rata-rata Progress Milestone',
             'type': 'kpi', 'span': 6,
             'model': 'project.project_line',
             'aggregate': {'field': 'progress', 'func': 'avg'},
         },
         {
             'key': 'total_milestones',
-            'title': 'Total Milestones',
+            'title': 'Total Milestone',
             'type': 'kpi', 'span': 6,
             'model': 'project.project_line',
             'aggregate': {'field': 'id', 'func': 'count'},
@@ -41,7 +41,7 @@ PROJECT_DASHBOARD = {
         # ── Charts ──
         {
             'key': 'projects_by_category',
-            'title': 'Projects by Category',
+            'title': 'Proyek per Kategori',
             'type': 'pie', 'span': 12,
             'model': 'project.project',
             'aggregate': {'field': 'id', 'func': 'count'},
@@ -49,7 +49,7 @@ PROJECT_DASHBOARD = {
         },
         {
             'key': 'top_projects',
-            'title': 'Top Projects by Contract',
+            'title': 'Proyek Teratas per Kontrak',
             'type': 'bar', 'span': 12,
             'model': 'project.project',
             'aggregate': {'field': 'contract_value', 'func': 'sum'},
@@ -59,7 +59,7 @@ PROJECT_DASHBOARD = {
         # ── Grid ──
         {
             'key': 'recent_projects',
-            'title': 'Projects',
+            'title': 'Proyek',
             'type': 'grid', 'span': 24,
             'model': 'project.project',
             'columns': ['name', 'category', 'client', 'date_start', 'contract_value'],

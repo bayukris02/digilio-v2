@@ -41,8 +41,8 @@ class ProjectLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Project Line'
-        verbose_name_plural = 'Project Lines'
+        verbose_name = 'Baris Proyek'
+        verbose_name_plural = 'Baris Proyek'
 
     def __str__(self):
         return str(self.milestone_id) if self.milestone_id else ''

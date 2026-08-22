@@ -43,7 +43,7 @@ class ProjectUnitDetail(BaseModel):
             depends=['selling_price', 'est_cost'],
         ),
         'payments': One2ManyField(
-            label='Payments',
+            label='Pembayaran',
             relation='project.unit_detail_payment',
             inverse_field='unit_detail_id',
         ),
@@ -67,7 +67,7 @@ class ProjectUnitDetail(BaseModel):
         'notebook': [
             {
                 'key': 'payments',
-                'label': 'Payments',
+                'label': 'Pembayaran',
                 'relation': 'payments',
                 'columns': ['name', 'amount', 'payment_date'],
             },
@@ -82,8 +82,8 @@ class ProjectUnitDetail(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Unit Detail'
-        verbose_name_plural = 'Unit Details'
+        verbose_name = 'Detail Unit'
+        verbose_name_plural = 'Detail Unit'
 
     def _compute_margin(self):
         """Est. Margin = Harga Jual - Est. Biaya Konstruksi."""

@@ -53,8 +53,8 @@ class ProjectUnit(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Project Unit'
-        verbose_name_plural = 'Project Units'
+        verbose_name = 'Unit Proyek'
+        verbose_name_plural = 'Unit Proyek'
 
     def _compute_sold(self):
         """% terjual = qty_sold / qty_available × 100 (clamp 0–100)."""

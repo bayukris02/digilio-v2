@@ -44,8 +44,8 @@ class UnitDetailPayment(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Unit Detail Payment'
-        verbose_name_plural = 'Unit Detail Payments'
+        verbose_name = 'Pembayaran Unit'
+        verbose_name_plural = 'Pembayaran Unit'
 
     def __str__(self):
         return self.name or ''
