@@ -844,8 +844,14 @@ export default function ModelFormPage({
   // ── Stepper steps from status field ──
   const stepperSteps = useMemo(() => {
     if (!config?.fields?.status?.options) return [];
-    return config.fields.status.options.map((o) => ({ title: o.label }));
-  }, [config]);
+    // Status eksplisit per step: hanya step AKTIF yang menyala (process),
+    // step lain non-aktif (wait) — tidak ada centang finish, biar tidak ambigu
+    // posisi dokumen sekarang (mis. draft lewat ≠ centang, tetap terlihat non-aktif).
+    return config.fields.status.options.map((o, idx) => ({
+      title: o.label,
+      status: idx === currentStep ? ('process' as const) : ('wait' as const),
+    }));
+  }, [config, currentStep]);
 
   // ── Form fields (exclude virtual/technical) ──
   const formFields = useMemo(() => {

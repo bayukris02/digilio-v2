@@ -23,7 +23,7 @@ class PurchaseRequestLine(BaseModel):
         ),
         'description': TextField(label='Deskripsi'),
         'qty': FloatField(label='Jumlah', default=1),
-        'estimated_cost': MonetaryField(label='Perkiraan Biaya', currency='IDR'),
+        'estimated_cost': MonetaryField(label='Est. Harga', currency='IDR'),
         'total': MonetaryField(
             label='Total', currency='IDR',
             compute='_compute_total',
