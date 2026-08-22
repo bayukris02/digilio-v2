@@ -10,6 +10,18 @@ class PurchaseRequest(BaseModel):
     _model_name = 'purchase.request'
     _display_name = 'reference'
 
+    # ── Document Flow ──
+    _document_flow = {
+        'children': [
+            {
+                'model': 'purchase.order',
+                'label': 'PO',
+                'icon': 'ShoppingCartOutlined',
+                'source_field_in_child': 'purchase_request',
+            },
+        ],
+    }
+
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
         'confirmed': {'allow_edit': False, 'allow_delete': False, 'label': 'Dikonfirmasi', 'color': 'processing'},
@@ -118,7 +130,9 @@ class PurchaseRequest(BaseModel):
                     'states': ['draft', 'confirmed'],
                 },
             ],
-            'smart_buttons': [],
+            'smart_buttons': [
+                {'label': 'PO', 'model': 'purchase.order', 'icon': 'ShoppingCartOutlined'},
+            ],
         },
         'notebook': [
             {
