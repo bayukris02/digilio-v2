@@ -590,21 +590,44 @@ export default function ModelFormPage({
   const isRevertingRef = useRef(false);
 
   // ── Save status tracking ──
-  const lastSnapshotRef = useRef<string>('');         // JSON form values saat terakhir save
+  // Snapshot mencakup form values DAN line items notebook — perubahan di
+  // notebook (tambah/hapus/edit baris, drag) juga dihitung unsaved.
+  const lastSnapshotRef = useRef<string>('');         // JSON {form, lines} saat terakhir save
   const [dirtyFlag, setDirtyFlag] = useState(false);
 
-  // Helper: sync snapshot dari current form values
-  const syncSaveSnapshot = useCallback(() => {
-    const vals = form.getFieldsValue();
-    lastSnapshotRef.current = JSON.stringify(vals);
+  const makeSnapshot = useCallback(
+    (formVals: Record<string, unknown>, lines: Record<string, Record<string, unknown>[]>) =>
+      JSON.stringify({ form: formVals, lines }),
+    [],
+  );
+
+  // Helper: true kalau form/lineItems berbeda dari snapshot terakhir
+  const computeDirty = useCallback(() => {
+    if (!lastSnapshotRef.current) return false;
+    return makeSnapshot(form.getFieldsValue(), lineItemsRef.current) !== lastSnapshotRef.current;
+  }, [form, makeSnapshot]);
+
+  // Helper: sync snapshot dari current form values (+ lineItems).
+  // overrideLines: untuk kasus load, state lineItems belum ter-update saat
+  // dipanggil (setState async), jadi kirim nilai yang persis diset.
+  const syncSaveSnapshot = useCallback((overrideLines?: Record<string, Record<string, unknown>[]>) => {
+    lastSnapshotRef.current = makeSnapshot(
+      form.getFieldsValue(),
+      overrideLines ?? lineItemsRef.current,
+    );
     setDirtyFlag(false);
-  }, [form]);
+  }, [form, makeSnapshot]);
+
+  // Perubahan lineItems (notebook) → hitung dirty
+  useEffect(() => {
+    if (!lastSnapshotRef.current) return;
+    setDirtyFlag(computeDirty());
+  }, [lineItems, computeDirty]);
 
   /** Callback untuk Form.onValuesChange — deteksi dirty + field onchange */
   const handleFormChange = useCallback((changedValues?: Record<string, unknown>) => {
     if (lastSnapshotRef.current) {
-      const current = JSON.stringify(form.getFieldsValue());
-      setDirtyFlag(current !== lastSnapshotRef.current);
+      setDirtyFlag(computeDirty());
     }
 
     // onchange: reset target fields saat source field berubah
@@ -676,7 +699,7 @@ export default function ModelFormPage({
         });
       });
     }
-  }, [form, config, setLineItems, lineItems, setSummaryRevision]);
+  }, [form, config, setLineItems, lineItems, setSummaryRevision, computeDirty]);
 
   // ── Block navigation when there are unsaved changes ──
   // useBlocker intercepts route changes (menu, breadcrumb, prev/next, discard)
@@ -745,6 +768,9 @@ export default function ModelFormPage({
     setLineItems({});
     setChildConfigs({});
     setMany2oneOptions({});
+    // Snapshot ikut di-reset supaya watcher lineItems tidak salah deteksi
+    // dirty saat pindah record (lineItems dikosongkan dulu sebelum load)
+    syncSaveSnapshot({});
   }, [recordId]);
 
   // ── Init prevFieldValuesRef for confirm_onchange fields when config loads ──
@@ -882,6 +908,9 @@ export default function ModelFormPage({
     const relationTabs = config.form_view.notebook.filter(
       (tab: { relation?: string }) => tab.relation,
     );
+    // Akumulasi line items dari SEMUA tab dulu (hindari closure stale saat
+    // multi-tab: pakai setLineItems sekali di akhir, bukan per tab)
+    const pendingLines: Record<string, Record<string, unknown>[]> = {};
     for (const tab of relationTabs) {
       const fieldMeta = config.fields?.[tab.relation];
       if (fieldMeta?.type === 'one2many' && fieldMeta.relation) {
@@ -932,16 +961,23 @@ export default function ModelFormPage({
       }
       // Init line items if recordData has one2many data
       if (recordData?.[tab.relation] && !lineItems[tab.relation]) {
-        const items = (recordData[tab.relation] as Record<string, unknown>[]).map(
+        pendingLines[tab.relation] = (recordData[tab.relation] as Record<string, unknown>[]).map(
           (item: Record<string, unknown>) => ({
             ...item,
             _key: `line_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           }),
         );
-        setLineItems((prev) => ({ ...prev, [tab.relation]: items }));
       }
     }
-  }, [config, recordData]);
+    // Set semua tab sekaligus + sync snapshot dengan nilai FINAL-nya
+    // (setState async, jadi kirim nilai langsung supaya watcher lineItems
+    // tidak salah deteksi dirty pas load)
+    if (Object.keys(pendingLines).length > 0) {
+      const nextLines = { ...lineItems, ...pendingLines };
+      setLineItems(nextLines);
+      syncSaveSnapshot(nextLines);
+    }
+  }, [config, recordData, lineItems, syncSaveSnapshot]);
 
   // ── Domain refetch: saat header field berubah, refetch many2one options ──
   const headerFieldForDomain = Form.useWatch('vendor', form);
