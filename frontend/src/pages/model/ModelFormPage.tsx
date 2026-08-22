@@ -2504,7 +2504,7 @@ export default function ModelFormPage({
         title={
           <Space size={6}>
             <InboxOutlined style={{ fontSize: 13, color: '#666' }} />
-            <span>{config.verbose_name} Details</span>
+            <span>Data Terkait {config.verbose_name}</span>
           </Space>
         }
         extra={

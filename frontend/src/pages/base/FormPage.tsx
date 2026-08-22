@@ -483,7 +483,7 @@ export default function FormPage() {
         title={
           <Space size={6}>
             <InboxOutlined style={{ fontSize: 13, color: '#666' }} />
-            <span>Purchase Order Details</span>
+            <span>Data Terkait Purchase Order</span>
           </Space>
         }
         extra={
