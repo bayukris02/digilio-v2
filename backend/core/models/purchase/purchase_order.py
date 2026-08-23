@@ -25,7 +25,7 @@ class PurchaseOrder(BaseModel):
             'name': 'confirm',
             'from': ['draft'],
             'to': 'confirmed',
-            'label': 'Confirm',
+            'label': 'Konfirmasi',
             'icon': 'CheckOutlined',
             'guard': '_guard_confirm',
             'effect': '_effect_confirm',
@@ -34,14 +34,14 @@ class PurchaseOrder(BaseModel):
             'name': 'mark_done',
             'from': ['confirmed'],
             'to': 'done',
-            'label': 'Mark Done',
+            'label': 'Tandai Selesai',
             'icon': 'CheckCircleOutlined',
         },
         {
             'name': 'cancel',
             'from': ['draft', 'confirmed'],
             'to': 'cancelled',
-            'label': 'Cancel',
+            'label': 'Batal',
             'icon': 'StopOutlined',
             'guard': '_guard_cancel',
         },
@@ -52,7 +52,7 @@ class PurchaseOrder(BaseModel):
         'children': [
             {
                 'model': 'purchase.goods_receipt',
-                'label': 'Goods Receipt',
+                'label': 'Penerimaan Barang',
                 'icon': 'InboxOutlined',
                 'source_field_in_child': 'purchase_order',
                 'state_conditions': {
@@ -193,20 +193,20 @@ class PurchaseOrder(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': [ 'reference', 'vendor', 'code', 'address', 
                                'source_document', 'order_date', 'expected_date',  'sequence_id',
                                'discount_type', 'discount_method', 'global_discount'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['bill_method', 'notes', 'priority'],
                 },
             ],
             'actions': [
-                {'label': 'Print', 'color': 'green', 'action': 'print'},
-                {'label': 'Confirm', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
+                {'label': 'Cetak', 'color': 'green', 'action': 'print'},
+                {'label': 'Konfirmasi', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {
                     'label': 'Terima Barang',
                     'color': 'primary',
@@ -250,17 +250,17 @@ class PurchaseOrder(BaseModel):
                         },
                     },
                 },
-                {'label': 'Cancel', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed']},
+                {'label': 'Batal', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed']},
             ],
             'smart_buttons': [
-                {'label': 'Receipt', 'model': 'purchase.goods_receipt', 'icon': 'InboxOutlined'},
-                {'label': 'Bill', 'model': 'accounting.vendor_bill', 'icon': 'FileTextOutlined'},
+                {'label': 'Penerimaan Barang', 'model': 'purchase.goods_receipt', 'icon': 'InboxOutlined'},
+                {'label': 'Tagihan', 'model': 'accounting.vendor_bill', 'icon': 'FileTextOutlined'},
             ],
         },
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Order Lines',
+                'label': 'Baris Pesanan',
                 'relation': 'order_lines',
                 'columns': ['product', 'name', 'qty', 'uom', 'price', 'discount_percentage', 'discount_amount', 'tax_percentage', 'tax_amount', 'total'],
                 'summary': {
@@ -271,7 +271,7 @@ class PurchaseOrder(BaseModel):
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],
                     'child_details': {
-                        'label': 'Down Payments & Bills',
+                        'label': 'DP & Tagihan',
                         'data_key': '_bill_details',
                         'model': 'accounting.vendor_bill',
                     },
