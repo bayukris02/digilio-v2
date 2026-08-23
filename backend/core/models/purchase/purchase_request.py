@@ -142,6 +142,13 @@ class PurchaseRequest(BaseModel):
                     'columns': {'qty': 'sum', 'estimated_cost': 'sum', 'total': 'sum'},
                 },
             },
+            {
+                'key': 'produk_status',
+                'label': 'Produk Status',
+                'relation': 'request_lines',
+                'read_only': True,
+                'columns': ['product', 'draft_po_qty', 'confirmed_po_qty', 'received_qty'],
+            },
         ],
     }
 
