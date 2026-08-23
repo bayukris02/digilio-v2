@@ -2687,11 +2687,11 @@ export default function ModelFormPage({
             <Button
               variant="solid"
               color="danger"
-              icon={<CloseOutlined />}
+              icon={<ArrowLeftOutlined />}
               loading={discarding}
               onClick={() => { setDiscarding(true); navigate(`${basePath}`); }}
             >
-              Batal
+              Kembali
             </Button>
           </Space>
           )}

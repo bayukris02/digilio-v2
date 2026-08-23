@@ -22,7 +22,6 @@ import {
   ArrowLeftOutlined,
   ArrowRightOutlined,
   SaveOutlined,
-  CloseOutlined,
   PlusOutlined,
   DeleteOutlined,
   ShoppingCartOutlined,
@@ -461,9 +460,9 @@ export default function FormPage() {
             <Button
               variant="solid"
               color="danger"
-              icon={<CloseOutlined />}
+              icon={<ArrowLeftOutlined />}
             >
-              Batal
+              Kembali
             </Button>
           </Space>
         </div>
