@@ -877,11 +877,16 @@ export default function ModelFormPage({
           }
         });
         form.setFieldsValue(values);
+        // Autofill adalah populasi programmatic (bukan perubahan user) —
+        // sync snapshot supaya tidak memicu false-positive "Perubahan belum
+        // disimpan" (nilai autofill bisa beda dari record tersimpan, mis.
+        // code/bill_method dari vendor vs None di PO).
+        syncSaveSnapshot();
       }).catch(() => {
         // silent fail — autofill is best-effort
       });
     });
-  }, [config, recordData, isNew, form]);
+  }, [config, recordData, isNew, form, syncSaveSnapshot]);
 
   // ── Fetch record IDs for ◀▶ navigation (once per model) ──
   useEffect(() => {
