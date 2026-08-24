@@ -2776,7 +2776,7 @@ export default function ModelFormPage({
         }
       >
         {headerTabsList.length > 0 ? (
-          <Tabs items={headerTabs} />
+          <Tabs items={headerTabs} onChange={() => syncSaveSnapshot()} />
         ) : (
         <Form form={form} layout="vertical" initialValues={initialValues} onValuesChange={handleFormChange} key={`${apiModelName}-${recordId || 'new'}-${loadKey}`}>
           <Row gutter={16}>
