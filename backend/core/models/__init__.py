@@ -9,6 +9,8 @@ from core.models.purchase.purchase_request import PurchaseRequest
 from core.models.purchase.purchase_request_line import PurchaseRequestLine
 from core.models.purchase.quick_purchase import QuickPurchase
 from core.models.purchase.quick_purchase_line import QuickPurchaseLine
+from core.models.purchase.order_template import OrderTemplate
+from core.models.purchase.order_template_line import OrderTemplateLine
 from core.models.sales.customer import Customer
 from core.models.sales.sales_order import SalesOrder
 from core.models.sales.sales_order_line import SalesOrderLine
@@ -60,6 +62,7 @@ __all__ = [
     'Expense', 'ExpenseLine',
     'PurchaseRequest', 'PurchaseRequestLine',
     'QuickPurchase', 'QuickPurchaseLine',
+    'OrderTemplate', 'OrderTemplateLine',
     'Project', 'ProjectLine', 'Unit', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory', 'ProjectUnit', 'ProjectUnitDetail',
     'UnitDetailPayment', 'UnitDetailProgress',
 ]

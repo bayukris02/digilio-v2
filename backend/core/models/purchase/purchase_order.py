@@ -169,6 +169,12 @@ class PurchaseOrder(BaseModel):
             relation='purchase.request',
             required=False,
         ),
+        'order_template': Many2OneField(
+            label='Template PO',
+            relation='purchase.order_template',
+            required=False,
+            help_text='Pilih template untuk mengisi Baris Pesanan secara otomatis',
+        ),
         'source_document': CharField(
             label='Dokumen Sumber',
             required=False,
@@ -196,6 +202,7 @@ class PurchaseOrder(BaseModel):
                     'label': 'Umum',
                     'fields': [ 'reference', 'vendor', 'code', 'address', 
                                'source_document', 'order_date', 'expected_date',  'sequence_id',
+                               'order_template',
                                'discount_type', 'discount_method', 'global_discount'],
                 },
                 {
@@ -476,6 +483,20 @@ class PurchaseOrder(BaseModel):
 
         # -- Field config rules untuk form fields --
         config['field_config_rules'] = {
+            'order_template': {
+                # populate_lines: saat many2one dipilih, isi line items dari
+                # one2many record terkait (generic — diproses frontend)
+                'populate_lines': {
+                    'target': 'order_lines',
+                    'source': 'template_lines',
+                    'mapping': {
+                        'product': 'product',
+                        'name': 'name',
+                        'uom': 'uom',
+                        'qty': 'qty',
+                    },
+                },
+            },
             'global_discount': {
                 'hide_when': {'discount_type': 'per_product'},
                 'field_props': {

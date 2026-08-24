@@ -698,8 +698,71 @@ export default function ModelFormPage({
           },
         });
       });
+      // populate_lines: saat many2one berubah → isi line items dari one2many
+      // record terkait (template & sejenisnya). Konfigurasi generic dari backend:
+      // config.field_config_rules[field].populate_lines = {target, source, mapping}
+      Object.entries(changedValues).forEach(([fieldName, newValue]) => {
+        const populate = config?.field_config_rules?.[fieldName]?.populate_lines as
+          | { target?: string; source?: string; mapping?: Record<string, string> }
+          | undefined;
+        if (!populate?.target || !populate.source || !newValue || isRevertingRef.current) return;
+        const fieldCfg = config.fields?.[fieldName] as { relation?: string } | undefined;
+        const rel = fieldCfg?.relation;
+        if (!rel) return;
+        const target = populate.target;
+        const source = populate.source;
+        const mapping = populate.mapping || {};
+        const doPopulate = () => {
+          modelApi.getRecord(rel, Number(newValue)).then((record: unknown) => {
+            const rec = record as Record<string, unknown>;
+            const srcLines = Array.isArray(rec[source]) ? (rec[source] as Record<string, unknown>[]) : [];
+            const childCfg = childConfigs[target];
+            const items = srcLines.map((src) => {
+              const item: Record<string, unknown> = {
+                _key: `line_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              };
+              Object.entries(mapping).forEach(([srcField, tgtField]) => {
+                item[tgtField] = src[srcField];
+              });
+              // default untuk field child yang tidak di-mapping (numerik → 0, boolean → false)
+              if (childCfg) {
+                Object.entries(childCfg.fields).forEach(([key, field]) => {
+                  if (key === 'id' || key === '_key' || key in item) return;
+                  const ft = (field as { type?: string }).type;
+                  if (['float', 'monetary', 'integer'].includes(ft || '')) item[key] = 0;
+                  else if (ft === 'boolean') item[key] = false;
+                });
+              }
+              return item;
+            });
+            setLineItems((prev) => ({ ...prev, [target]: items }));
+            setSummaryRevision((v) => v + 1);
+            prevFieldValuesRef.current = { ...prevFieldValuesRef.current, [fieldName]: newValue };
+            if (srcLines.length > 0) {
+              message.success(`Baris diisi dari template: ${srcLines.length} item`);
+            }
+          }).catch(() => message.error('Gagal memuat data template'));
+        };
+        // Kalau sudah ada line items → konfirmasi dulu (mencegah data tertimpa)
+        const existing = lineItems[target] || [];
+        const hasReal = existing.filter((item) => !item._isAddButton).length > 0;
+        if (hasReal) {
+          Modal.confirm({
+            title: 'Konfirmasi Perubahan',
+            content: 'Mengganti template akan menimpa baris pesanan saat ini. Lanjutkan?',
+            onOk: doPopulate,
+            onCancel: () => {
+              isRevertingRef.current = true;
+              form.setFieldValue(fieldName, undefined);
+              isRevertingRef.current = false;
+            },
+          });
+        } else {
+          doPopulate();
+        }
+      });
     }
-  }, [form, config, setLineItems, lineItems, setSummaryRevision, computeDirty]);
+  }, [form, config, setLineItems, lineItems, setSummaryRevision, computeDirty, childConfigs]);
 
   // ── Block navigation when there are unsaved changes ──
   // useBlocker intercepts route changes (menu, breadcrumb, prev/next, discard)
