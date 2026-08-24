@@ -7,6 +7,8 @@ from core.models.purchase.goods_receipt_line import GoodsReceiptLine
 from core.models.purchase.vendor import Vendor
 from core.models.purchase.purchase_request import PurchaseRequest
 from core.models.purchase.purchase_request_line import PurchaseRequestLine
+from core.models.purchase.quick_purchase import QuickPurchase
+from core.models.purchase.quick_purchase_line import QuickPurchaseLine
 from core.models.sales.customer import Customer
 from core.models.sales.sales_order import SalesOrder
 from core.models.sales.sales_order_line import SalesOrderLine
@@ -57,6 +59,7 @@ __all__ = [
     'CustomerInvoice', 'CustomerInvoiceLine',
     'Expense', 'ExpenseLine',
     'PurchaseRequest', 'PurchaseRequestLine',
+    'QuickPurchase', 'QuickPurchaseLine',
     'Project', 'ProjectLine', 'Unit', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory', 'ProjectUnit', 'ProjectUnitDetail',
     'UnitDetailPayment', 'UnitDetailProgress',
 ]

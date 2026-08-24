@@ -73,6 +73,11 @@ class VendorPayment(BaseModel):
             required=True,
         ),
         'payment_ref': CharField(label='Payment Reference', placeholder='No. Cek / Transfer / dll'),
+        'quick_purchase': Many2OneField(
+            label='Quick Purchase',
+            relation='purchase.quick_purchase',
+            required=False,
+        ),
         'currency': CharField(label='Currency', default='IDR'),
         'total_amount': MonetaryField(
             label='Total Payment', currency='IDR',

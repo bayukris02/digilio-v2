@@ -54,7 +54,12 @@ class GoodsReceipt(BaseModel):
         'purchase_order': Many2OneField(
             label='Purchase Order',
             relation='purchase.order',
-            required=True,
+            required=False,
+        ),
+        'quick_purchase': Many2OneField(
+            label='Quick Purchase',
+            relation='purchase.quick_purchase',
+            required=False,
         ),
         'receipt_date': DateField(label='Receipt Date', editable_statuses=['draft', 'waiting']),
         'warehouse': CharField(label='Warehouse'),

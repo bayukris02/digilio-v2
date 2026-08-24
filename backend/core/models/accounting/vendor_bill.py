@@ -60,6 +60,11 @@ class VendorBill(BaseModel):
             relation='purchase.order',
             required=False,
         ),
+        'quick_purchase': Many2OneField(
+            label='Quick Purchase',
+            relation='purchase.quick_purchase',
+            required=False,
+        ),
         'project': Many2OneField(
             label='Project',
             relation='project.project',

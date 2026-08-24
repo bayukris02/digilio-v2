@@ -33,7 +33,9 @@ export const router = createBrowserRouter([
       { path: 'purchase/pivot', element: <ComingSoon /> },
       { path: 'purchase/detail', element: <ComingSoon /> },
       // Purchase model routes (coming soon)
-      { path: 'purchase.quick_purchase', element: <ComingSoon /> },
+      { path: 'purchase.quick_purchase', element: <ModelListPage modelName="purchase.quick_purchase" basePath="/purchase.quick_purchase" /> },
+      { path: 'purchase.quick_purchase/new', element: <ModelFormPage modelName="purchase.quick_purchase" basePath="/purchase.quick_purchase" /> },
+      { path: 'purchase.quick_purchase/:recordId', element: <ModelFormPage modelName="purchase.quick_purchase" basePath="/purchase.quick_purchase" /> },
       { path: 'purchase.order_template', element: <ComingSoon /> },
       { path: 'purchase.vendor_pricelist', element: <ComingSoon /> },
       // Purchase -> Product = menu alias → konten model inventory.product (URL tetap /purchase.product)
