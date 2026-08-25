@@ -630,6 +630,18 @@ export default function ModelFormPage({
     setDirtyFlag(computeDirty());
   }, [lineItems, computeDirty]);
 
+  // Re-sync snapshot SETELAH recordData berubah (load/action refresh).
+  // Snapshot yang diambil synchronously di handleAction/handleWizardConfirm
+  // terjadi SEBELUM React re-render — padahal re-render bisa mengubah
+  // set/urutan Form.Item yang ter-register (mis. isReadOnly aktif setelah
+  // konfirmasi, status baru, field rules) sehingga getFieldsValue() berikutnya
+  // berbeda dari snapshot → false-positive "Perubahan belum disimpan".
+  // Effect ini mengambil snapshot ulang saat field sudah ter-render.
+  useEffect(() => {
+    if (!recordData) return;
+    syncSaveSnapshot();
+  }, [recordData, syncSaveSnapshot]);
+
   /** Callback untuk Form.onValuesChange — deteksi dirty + field onchange */
   const handleFormChange = useCallback((changedValues?: Record<string, unknown>) => {
     if (lastSnapshotRef.current) {
