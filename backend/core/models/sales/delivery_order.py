@@ -13,9 +13,9 @@ class DeliveryOrder(BaseModel):
     # ── State Machine (sama seperti Goods Receipt) ──
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
-        'waiting': {'allow_edit': False, 'allow_delete': False, 'label': 'Waiting', 'color': 'processing'},
-        'done': {'allow_edit': False, 'allow_delete': False, 'label': 'Done', 'color': 'success'},
-        'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Cancelled', 'color': 'error'},
+        'waiting': {'allow_edit': False, 'allow_delete': False, 'label': 'Menunggu', 'color': 'processing'},
+        'done': {'allow_edit': False, 'allow_delete': False, 'label': 'Selesai', 'color': 'success'},
+        'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Dibatalkan', 'color': 'error'},
     }
 
     _transitions = [
@@ -23,7 +23,7 @@ class DeliveryOrder(BaseModel):
             'name': 'confirm',
             'from': ['draft'],
             'to': 'waiting',
-            'label': 'Confirm',
+            'label': 'Konfirmasi',
             'icon': 'CheckOutlined',
             'guard': '_guard_confirm',
             'effect': '_effect_confirm',
@@ -32,27 +32,27 @@ class DeliveryOrder(BaseModel):
             'name': 'mark_done',
             'from': ['waiting'],
             'to': 'done',
-            'label': 'Mark Done',
+            'label': 'Tandai Selesai',
             'icon': 'CheckCircleOutlined',
         },
         {
             'name': 'cancel',
             'from': ['draft', 'waiting', 'done'],
             'to': 'cancelled',
-            'label': 'Cancel',
+            'label': 'Batal',
             'icon': 'StopOutlined',
         },
     ]
 
     _fields = {
         'sequence_id': Many2OneField(
-            label='Sequence',
+            label='Tipe Dokumen',
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen pengiriman barang',
         ),
-        'reference': CharField(label='Reference', required=True, editable_statuses=[], placeholder='Automatic'),
+        'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'sales_order': Many2OneField(
-            label='Sales Order',
+            label='SO',
             relation='sales.order',
             required=False,
         ),
@@ -66,12 +66,12 @@ class DeliveryOrder(BaseModel):
             relation='sales.customer',
             required=True,
         ),
-        'delivery_date': DateField(label='Delivery Date'),
-        'warehouse': CharField(label='Warehouse'),
-        'address': TextField(label='Delivery Address'),
-        'notes': TextField(label='Notes'),
+        'delivery_date': DateField(label='Tanggal Kirim'),
+        'warehouse': CharField(label='Gudang'),
+        'address': TextField(label='Alamat Pengiriman'),
+        'notes': TextField(label='Catatan'),
         'delivery_lines': One2ManyField(
-            label='Delivery Lines',
+            label='Baris Pengiriman',
             relation='sales.delivery.order.line',
             inverse_field='delivery_id',
         ),
@@ -88,33 +88,33 @@ class DeliveryOrder(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['status', 'reference', 'sequence_id', 'sales_order', 'customer', 'delivery_date', 'warehouse'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['address', 'notes'],
                 },
             ],
             'actions': [
-                {'label': 'Print', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
+                {'label': 'Cetak', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
                 {
-                    'label': 'Confirm',
+                    'label': 'Konfirmasi',
                     'icon': 'CheckOutlined',
                     'color': 'primary',
                     'action': 'confirm',
                     'states': ['draft'],
                 },
                 {
-                    'label': 'Mark Done',
+                    'label': 'Tandai Selesai',
                     'icon': 'CheckCircleOutlined',
                     'color': 'green',
                     'action': 'mark_done',
                     'states': ['waiting'],
                 },
                 {
-                    'label': 'Cancel',
+                    'label': 'Batal',
                     'icon': 'StopOutlined',
                     'color': 'red',
                     'action': 'cancel',
@@ -123,13 +123,13 @@ class DeliveryOrder(BaseModel):
                 {'label': 'Action', 'icon': 'MoreOutlined', 'color': 'primary'},
             ],
             'smart_buttons': [
-                {'label': 'Sales Order', 'model': 'sales.order', 'icon': 'FileTextOutlined'},
+                {'label': 'SO', 'model': 'sales.order', 'icon': 'FileTextOutlined'},
             ],
         },
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Delivery Lines',
+                'label': 'Baris Pengiriman',
                 'relation': 'delivery_lines',
             },
         ],
@@ -137,8 +137,8 @@ class DeliveryOrder(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Delivery Order'
-        verbose_name_plural = 'Delivery Orders'
+        verbose_name = 'Pengiriman Barang'
+        verbose_name_plural = 'Pengiriman Barang'
 
     @classmethod
     def get_model_config(cls):
@@ -154,7 +154,7 @@ class DeliveryOrder(BaseModel):
 
     def _guard_confirm(self):
         if not self.sequence_id:
-            raise ValueError('Silakan pilih Sequence terlebih dahulu.')
+            raise ValueError('Silakan pilih Tipe Dokumen (Sequence) terlebih dahulu.')
 
     # ── Effects ──
 

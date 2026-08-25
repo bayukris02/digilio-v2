@@ -11,7 +11,7 @@ class DeliveryOrderLine(BaseModel):
 
     _fields = {
         'delivery_id': Many2OneField(
-            label='Delivery Order',
+            label='Pengiriman Barang',
             relation='sales.delivery_order',
             required=True,
         ),
@@ -21,12 +21,12 @@ class DeliveryOrderLine(BaseModel):
             required=True,
             autofill={'uom': 'uom', 'name': 'name', 'price': 'unit_price'},
         ),
-        'name': TextField(label='Description'),
+        'name': TextField(label='Deskripsi'),
         'delivered_qty': FloatField(
-            label='Delivered Qty', default=0,
+            label='Qty Terkirim', default=0,
             editable_statuses=['draft', 'waiting'],
         ),
-        'unit_price': MonetaryField(label='Unit Price', currency='IDR'),
+        'unit_price': MonetaryField(label='Harga Satuan', currency='IDR'),
     }
 
     _list_view = {
@@ -43,5 +43,5 @@ class DeliveryOrderLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Delivery Order Line'
-        verbose_name_plural = 'Delivery Order Lines'
+        verbose_name = 'Baris Pengiriman Barang'
+        verbose_name_plural = 'Baris Pengiriman Barang'

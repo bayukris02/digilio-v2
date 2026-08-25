@@ -17,9 +17,9 @@ class SalesOrder(BaseModel):
     # ── State Machine ──
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
-        'confirmed': {'allow_edit': False, 'allow_delete': False, 'label': 'Confirmed', 'color': 'processing'},
-        'done': {'allow_edit': False, 'allow_delete': False, 'label': 'Done', 'color': 'success'},
-        'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Cancelled', 'color': 'error'},
+        'confirmed': {'allow_edit': False, 'allow_delete': False, 'label': 'Dikonfirmasi', 'color': 'processing'},
+        'done': {'allow_edit': False, 'allow_delete': False, 'label': 'Selesai', 'color': 'success'},
+        'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Dibatalkan', 'color': 'error'},
     }
 
     _transitions = [
@@ -27,7 +27,7 @@ class SalesOrder(BaseModel):
             'name': 'confirm',
             'from': ['draft'],
             'to': 'confirmed',
-            'label': 'Confirm',
+            'label': 'Konfirmasi',
             'icon': 'CheckOutlined',
             'guard': '_guard_confirm',
             'effect': '_effect_confirm',
@@ -36,7 +36,7 @@ class SalesOrder(BaseModel):
             'name': 'cancel',
             'from': ['draft', 'confirmed', 'done'],
             'to': 'cancelled',
-            'label': 'Cancel',
+            'label': 'Batal',
             'icon': 'StopOutlined',
             'guard': '_guard_cancel',
         },
@@ -44,11 +44,11 @@ class SalesOrder(BaseModel):
 
     _fields = {
         'sequence_id': Many2OneField(
-            label='Order Type',
+            label='Tipe Dokumen',
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen (SO Local / SO Online, dll)',
         ),
-        'reference': CharField(label='Reference', required=True, editable_statuses=[], placeholder='Automatic'),
+        'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'customer': Many2OneField(
             label='Customer',
             relation='sales.customer',
@@ -60,49 +60,49 @@ class SalesOrder(BaseModel):
             required=False,
             help_text='Pilih pricelist untuk autofill harga jual sesuai rentang qty',
         ),
-        'order_date': DateField(label='Order Date'),
-        'expected_date': DateField(label='Expected Date'),
-        'notes': TextField(label='Notes'),
+        'order_date': DateField(label='Tanggal Pesanan'),
+        'expected_date': DateField(label='Perkiraan Tanggal Terima'),
+        'notes': TextField(label='Catatan'),
         'sales': CharField(label='Sales'),
         # ── Summary fields ──
         'discount_method': SelectionField(
             label='Metode Diskon',
-            options=[('percentage', 'Discount (%)'), ('nominal', 'Discount (Rp)')],
+            options=[('percentage', 'Diskon (%)'), ('nominal', 'Diskon (Rp)')],
             default='percentage',
             onchange={'global_discount': 0},
             line_onchange={'discount_amount': 0, 'discount_percentage': 0},
         ),
         'discount_type': SelectionField(
             label='Tipe Diskon',
-            options=[('per_product', 'Per Product'), ('global', 'Global Discount')],
+            options=[('per_product', 'Per Produk'), ('global', 'Diskon Global')],
             default='per_product',
             onchange={'global_discount': 0},
             line_onchange={'discount_amount': 0, 'discount_percentage': 0},
         ),
-        'global_discount': FloatField(label='Global Discount', default=0,
+        'global_discount': FloatField(label='Diskon Global', default=0,
             compute='_compute_summary'),
-        'discount': MonetaryField(label='Discount', currency='IDR',
+        'discount': MonetaryField(label='Diskon', currency='IDR',
             compute='_compute_summary', depends=['order_lines', 'discount_type', 'discount_method', 'global_discount']),
-        'tax': MonetaryField(label='Tax', currency='IDR',
+        'tax': MonetaryField(label='Pajak', currency='IDR',
             compute='_compute_summary', depends=['order_lines']),
-        'manual_discount': FloatField(label='Manual Disc (%)', default=0),
+        'manual_discount': FloatField(label='Diskon Manual (%)', default=0),
         'subtotal': MonetaryField(label='Subtotal', currency='IDR', compute='_compute_summary', depends=['order_lines']),
         'grand_total': MonetaryField(label='Grand Total', currency='IDR', compute='_compute_summary', depends=['order_lines', 'manual_discount', 'discount_type', 'discount_method', 'global_discount']),
 
         # ── Down Payment & Invoice Info ──
         'dp_amount': MonetaryField(
-            label='DP Amount', currency='IDR',
+            label='Jumlah DP', currency='IDR',
             compute='_compute_dp_info', depends=[],
             virtual=True,
         ),
         'due_amount': MonetaryField(
-            label='Unbilled Amount', currency='IDR',
+            label='Belum Ditagih', currency='IDR',
             compute='_compute_dp_info', depends=[],
             virtual=True,
         ),
 
         'order_lines': One2ManyField(
-            label='Order Lines',
+            label='Baris Pesanan',
             relation='sales.order.line',
             inverse_field='order_id',
         ),
@@ -113,7 +113,7 @@ class SalesOrder(BaseModel):
         'children': [
             {
                 'model': 'sales.delivery_order',
-                'label': 'Delivery Order',
+                'label': 'DO',
                 'icon': 'CarOutlined',
                 'source_field_in_child': 'sales_order',
                 'state_conditions': {
@@ -131,7 +131,7 @@ class SalesOrder(BaseModel):
             },
             {
                 'model': 'accounting.customer_invoice',
-                'label': 'Customer Invoice',
+                'label': 'Faktur',
                 'icon': 'FileTextOutlined',
                 'source_field_in_child': 'sales_order',
                 'state_conditions': {
@@ -162,19 +162,19 @@ class SalesOrder(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['reference', 'sequence_id', 'customer', 'pricelist', 'order_date', 'expected_date',
                                'discount_method', 'discount_type', 'global_discount'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['notes', 'sales'],
                 },
             ],
             'actions': [
-                {'label': 'Print', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
-                {'label': 'Confirm', 'icon': 'CheckOutlined', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
+                {'label': 'Cetak', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
+                {'label': 'Konfirmasi', 'icon': 'CheckOutlined', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {
                     'label': 'Kirim Barang',
                     'icon': 'CarOutlined',
@@ -216,21 +216,21 @@ class SalesOrder(BaseModel):
                             'relation': 'order_lines',
                             'columns': ['product', 'qty', 'billed_qty', 'remaining_bill_qty'],
                             'show_for_modes': ['bill_all'],
-                            'qty_label': 'Invoice Qty',
+                            'qty_label': 'Qty Faktur',
                         },
                     },
                 },
-                {'label': 'Cancel', 'icon': 'StopOutlined', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
+                {'label': 'Batal', 'icon': 'StopOutlined', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
             ],
             'smart_buttons': [
-                {'label': 'Delivery', 'model': 'sales.delivery_order', 'icon': 'CarOutlined'},
-                {'label': 'Invoice', 'model': 'accounting.customer_invoice', 'icon': 'FileTextOutlined'},
+                {'label': 'DO', 'model': 'sales.delivery_order', 'icon': 'CarOutlined'},
+                {'label': 'Faktur', 'model': 'accounting.customer_invoice', 'icon': 'FileTextOutlined'},
             ],
         },
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Order Lines',
+                'label': 'Baris Pesanan',
                 'relation': 'order_lines',
                 'columns': ['product', 'name', 'qty', 'uom', 'price', 'discount_percentage', 'discount_amount', 'tax_percentage', 'tax_amount', 'total'],
                 'summary': {
@@ -273,7 +273,7 @@ class SalesOrder(BaseModel):
     def _guard_confirm(self):
         """Wajib pilih sequence sebelum konfirmasi."""
         if not self.sequence_id:
-            raise ValueError('Silakan pilih Sequence terlebih dahulu.')
+            raise ValueError('Silakan pilih Tipe Dokumen (Sequence) terlebih dahulu.')
 
         # Validasi minimal 1 order line
         if not self.pk:
@@ -287,7 +287,7 @@ class SalesOrder(BaseModel):
                     **{fd.inverse_field: self.pk, 'is_deleted': False}
                 ).count()
                 if count == 0:
-                    raise ValueError('Minimal harus ada 1 Order Line sebelum konfirmasi.')
+                    raise ValueError('Minimal harus ada 1 Baris Pesanan sebelum konfirmasi.')
 
     def _effect_confirm(self):
         """Generate reference dari sequence setelah confirm."""
@@ -416,7 +416,7 @@ class SalesOrder(BaseModel):
             '_action_type': 'open_record',
             'model': 'sales.delivery_order',
             'record_id': do.pk,
-            'message': f'Delivery Order berhasil {mode_label}',
+            'message': f'Pengiriman Barang berhasil {mode_label}',
         }
 
     def _action_create_invoice(self, data=None):
@@ -515,7 +515,7 @@ class SalesOrder(BaseModel):
                     '_action_type': 'open_record',
                     'model': 'accounting.customer_invoice',
                     'record_id': invoice.pk,
-                    'message': f'DP Invoice berhasil dibuat: Rp {dp_nominal:,.0f}',
+                    'message': f'Faktur DP berhasil dibuat: Rp {dp_nominal:,.0f}',
                 }
 
             else:  # nominal
@@ -540,7 +540,7 @@ class SalesOrder(BaseModel):
                     '_action_type': 'open_record',
                     'model': 'accounting.customer_invoice',
                     'record_id': invoice.pk,
-                    'message': f'DP Invoice berhasil dibuat: Rp {dp_value:,.0f}',
+                    'message': f'Faktur DP berhasil dibuat: Rp {dp_value:,.0f}',
                 }
 
         # ── Normal: bill_all ──
@@ -684,8 +684,8 @@ class SalesOrder(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Sales Order'
-        verbose_name_plural = 'Sales Orders'
+        verbose_name = 'Penjualan'
+        verbose_name_plural = 'Penjualan'
 
     def _compute_summary(self):
         """Compute subtotal, discount, tax, and grand_total from order lines.
@@ -944,7 +944,7 @@ class SalesOrder(BaseModel):
             inv.save(update_fields=inv.get_computed_fields())
             data['_invoice_details'].append({
                 'id': inv.pk,
-                'label': 'DP Invoice' if inv.is_down_payment else 'Invoice',
+                'label': 'Faktur DP' if inv.is_down_payment else 'Faktur',
                 'ref': inv.reference or f'#{inv.pk}',
                 'amount': float(inv.grand_total or 0),
             })

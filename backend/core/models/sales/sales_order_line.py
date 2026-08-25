@@ -11,7 +11,7 @@ class SalesOrderLine(BaseModel):
 
     _fields = {
         'order_id': Many2OneField(
-            label='Sales Order',
+            label='SO',
             relation='sales.order',
             required=True,
         ),
@@ -21,37 +21,37 @@ class SalesOrderLine(BaseModel):
             required=True,
             autofill={'uom': 'uom', 'name': 'name', 'price': 'price'},
         ),
-        'name': TextField(label='Description'),
-        'qty': FloatField(label='Quantity', default=1),
+        'name': TextField(label='Deskripsi'),
+        'qty': FloatField(label='Jumlah', default=1),
         'delivered_qty': FloatField(
-            label='Delivered Qty', default=0,
+            label='Qty Terkirim', default=0,
             virtual=True, hidden_statuses=['draft'],
         ),
         'in_delivery_qty': FloatField(
-            label='In Delivery Qty', default=0,
+            label='Qty Dalam Pengiriman', default=0,
             virtual=True, hidden_statuses=['draft'],
         ),
         'remaining_qty': FloatField(
-            label='Remaining Qty', default=0,
+            label='Qty Sisa', default=0,
             virtual=True, hidden_statuses=['draft'],
         ),
         'billed_qty': FloatField(
-            label='Billed Qty', default=0,
+            label='Qty Ditagih', default=0,
             virtual=True, hidden_statuses=['draft'],
         ),
         'remaining_bill_qty': FloatField(
-            label='Remaining Bill Qty', default=0,
+            label='Qty Sisa Tagihan', default=0,
             virtual=True, hidden_statuses=['draft'],
         ),
         'uom': CharField(label='UOM', default='pcs'),
-        'price': MonetaryField(label='Unit Price', currency='IDR'),
-        'discount_percentage': PercentageField(label='Disc (%)', default=0),
-        'discount_amount': MonetaryField(label='Discount', currency='IDR',
+        'price': MonetaryField(label='Harga Satuan', currency='IDR'),
+        'discount_percentage': PercentageField(label='Diskon (%)', default=0),
+        'discount_amount': MonetaryField(label='Diskon', currency='IDR',
             compute='_compute_total'),
-        'global_discount_amount': MonetaryField(label='Global Disc', currency='IDR',
+        'global_discount_amount': MonetaryField(label='Diskon Global', currency='IDR',
             virtual=True),
-        'tax_percentage': PercentageField(label='Tax (%)', default=0),
-        'tax_amount': MonetaryField(label='Tax', currency='IDR',
+        'tax_percentage': PercentageField(label='Pajak (%)', default=0),
+        'tax_amount': MonetaryField(label='Pajak', currency='IDR',
             compute='_compute_total', depends=['qty', 'price', 'discount_percentage', 'tax_percentage']),
         'total': MonetaryField(
             label='Total', currency='IDR',
@@ -75,8 +75,8 @@ class SalesOrderLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Sales Order Line'
-        verbose_name_plural = 'Sales Order Lines'
+        verbose_name = 'Baris Sales Order'
+        verbose_name_plural = 'Baris Sales Order'
 
     def _compute_total(self):
         """Compute discount, tax, and total from qty/price + stored discount_amount."""

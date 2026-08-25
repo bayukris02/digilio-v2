@@ -64,7 +64,7 @@ class CustomerInvoice(BaseModel):
         'description': TextField(label='Description'),
         'notes': TextField(label='Notes', chatter_show=False),
         'sales_order': Many2OneField(
-            label='Sales Order',
+            label='SO',
             relation='sales.order',
             required=False,
         ),
@@ -134,7 +134,7 @@ class CustomerInvoice(BaseModel):
                 },
             ],
             'smart_buttons': [
-                {'label': 'Sales Order', 'model': 'sales.order', 'icon': 'FileTextOutlined'},
+                {'label': 'SO', 'model': 'sales.order', 'icon': 'FileTextOutlined'},
             ],
             'actions': [
                 {'label': 'Print', 'color': 'green', 'action': 'print'},

@@ -64,8 +64,8 @@ const menuItems = [
       { key: '/sales/dashboard', label: 'Dashboard' },
       { key: '/sales/insight', label: 'Insight' },
       { type: 'group', label: 'OPERATION', children: [
-        { key: '/sales.order', label: 'Sales Order' },
-        { key: '/sales.delivery_order', label: 'Delivery Order' },
+        { key: '/sales.order', label: 'Penjualan' },
+        { key: '/sales.delivery_order', label: 'Pengiriman Barang' },
         { key: '/sales.quick_sales', label: 'Quick Sales' },
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
