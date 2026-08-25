@@ -64,6 +64,11 @@ class CustomerReceipt(BaseModel):
                 'reset_relations': ['receipt_lines'],
             },
         ),
+        'quick_sales': Many2OneField(
+            label='Quick Sales',
+            relation='sales.quick_sales',
+            required=False,
+        ),
         'address': TextField(label='Alamat Customer', virtual=True),
         'code': TextField(label='Kode Customer', virtual=True),
         'payment_date': DateField(label='Payment Date', required=True),

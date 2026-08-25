@@ -66,4 +66,5 @@ class CustomerInvoiceLine(BaseModel):
 
         self.discount_amount = round(disc_amt, 2)
         self.tax_amount = round(tax_amt, 2)
-        self.total = round(qty * price, 2)
+        # total = subtotal - diskon + pajak (konsisten dgn PO / QuickSalesLine)
+        self.total = round(subtotal - disc_amt + tax_amt, 2)

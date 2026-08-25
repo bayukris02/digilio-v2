@@ -68,6 +68,11 @@ class CustomerInvoice(BaseModel):
             relation='sales.order',
             required=False,
         ),
+        'quick_sales': Many2OneField(
+            label='Quick Sales',
+            relation='sales.quick_sales',
+            required=False,
+        ),
 
         # ── Down Payment ──
         'is_down_payment': BooleanField(label='DP Invoice', default=False),

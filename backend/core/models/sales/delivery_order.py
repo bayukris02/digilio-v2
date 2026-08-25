@@ -54,7 +54,12 @@ class DeliveryOrder(BaseModel):
         'sales_order': Many2OneField(
             label='Sales Order',
             relation='sales.order',
-            required=True,
+            required=False,
+        ),
+        'quick_sales': Many2OneField(
+            label='Quick Sales',
+            relation='sales.quick_sales',
+            required=False,
         ),
         'customer': Many2OneField(
             label='Customer',
