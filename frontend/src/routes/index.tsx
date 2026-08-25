@@ -3,6 +3,7 @@ import MainLayout from '../components/MainLayout';
 import DocumentationPage from '../pages/docs/DocumentationPage';
 import FormPage from '../pages/base/FormPage';
 import ListPage from '../pages/base/ListPage';
+import PivotPage from '../pages/base/PivotPage';
 import ReportPivotPage from '../pages/base/ReportPivotPage';
 import ReportTablePage from '../pages/base/ReportTablePage';
 import LoginPage from '../pages/Login';
@@ -30,7 +31,7 @@ export const router = createBrowserRouter([
       // Purchase custom routes
       { path: 'purchase/dashboard', element: <GenericDashboardPage dashboardKey="purchase" /> },
       { path: 'purchase/insight', element: <ComingSoon /> },
-      { path: 'purchase/pivot', element: <ComingSoon /> },
+      { path: 'purchase/pivot', element: <PivotPage pivotKey="purchase" /> },
       { path: 'purchase/detail', element: <ComingSoon /> },
       // Purchase model routes (coming soon)
       { path: 'purchase.quick_purchase', element: <ModelListPage modelName="purchase.quick_purchase" basePath="/purchase.quick_purchase" /> },

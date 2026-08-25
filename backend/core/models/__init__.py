@@ -48,6 +48,9 @@ from core.models.project.unit_detail_progress import UnitDetailProgress
 # Registrasi dashboard utama (gabungan semua modul) ke registry generic
 from core.models.dashboard import MAIN_DASHBOARD  # noqa: F401
 
+# Registrasi config pivot per modul ke registry generic
+from core.models.purchase import pivot  # noqa: F401
+
 __all__ = [
     'BaseModel', 'ChatterLog', 'PurchaseOrder', 'PurchaseOrderLine', 'GoodsReceipt', 'GoodsReceiptLine',
     'Vendor', 'Customer', 'SalesOrder', 'SalesOrderLine', 'DeliveryOrder', 'DeliveryOrderLine', 'Product',

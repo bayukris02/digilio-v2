@@ -2,12 +2,15 @@ from django.urls import path, include
 from core.model_api import model_list, model_config, model_compute, ModelRecordView, chatter_logs, model_action, model_create_child
 from core.dashboard_api import dashboard_data
 from core.report_api import report_data
+from core.pivot_api import pivot_data
 
 urlpatterns = [
     # Dashboard (meta-driven, generic)
     path('dashboards/<str:key>/', dashboard_data, name='dashboard-data'),
     # Financial reports (meta-driven, generic)
     path('reports/<str:key>/', report_data, name='report-data'),
+    # Pivots (meta-driven, generic — AG Grid pivot mode)
+    path('pivots/<str:key>/', pivot_data, name='pivot-data'),
     # Model registry
     path('models/', model_list, name='model-list'),
     path('models/<str:model_name>/config/', model_config, name='model-config'),
