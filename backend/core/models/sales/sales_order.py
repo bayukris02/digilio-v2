@@ -54,6 +54,12 @@ class SalesOrder(BaseModel):
             relation='sales.customer',
             required=True,
         ),
+        'pricelist': Many2OneField(
+            label='Pricelist',
+            relation='sales.pricelist',
+            required=False,
+            help_text='Pilih pricelist untuk autofill harga jual sesuai rentang qty',
+        ),
         'order_date': DateField(label='Order Date'),
         'expected_date': DateField(label='Expected Date'),
         'notes': TextField(label='Notes'),
@@ -157,7 +163,7 @@ class SalesOrder(BaseModel):
                 {
                     'key': 'general',
                     'label': 'General',
-                    'fields': ['reference', 'sequence_id', 'customer', 'order_date', 'expected_date',
+                    'fields': ['reference', 'sequence_id', 'customer', 'pricelist', 'order_date', 'expected_date',
                                'discount_method', 'discount_type', 'global_discount'],
                 },
                 {
@@ -232,7 +238,7 @@ class SalesOrder(BaseModel):
                                 'tax_amount': 'sum', 'total': 'sum'},
                     'subtotal': 'subtotal',
                     'lines': ['discount', 'tax'],
-                    'compute_deps': ['discount_type', 'discount_method', 'global_discount'],
+                    'compute_deps': ['discount_type', 'discount_method', 'global_discount', 'pricelist'],
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],
                     'child_details': {
@@ -708,6 +714,7 @@ class SalesOrder(BaseModel):
                         lines_data.append({
                             'qty': float(getattr(line, 'qty', 0) or 0),
                             'price': float(getattr(line, 'price', 0) or 0),
+                            'product': line.product,
                             'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
                             'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
                             'tax_percentage': float(getattr(line, 'tax_percentage', 0) or 0),
@@ -720,6 +727,15 @@ class SalesOrder(BaseModel):
             price = float(line.get('price', 0) or 0)
             subtotal = qty * price
 
+            # Product id (payload: {id}; DB: objek; else raw)
+            prod = line.get('product')
+            if isinstance(prod, dict):
+                product_id = prod.get('id')
+            elif hasattr(prod, 'pk'):
+                product_id = prod.pk
+            else:
+                product_id = prod
+
             # Line-level discount
             disc_pct = float(line.get('discount_percentage', 0) or 0)
             if disc_pct > 0:
@@ -729,6 +745,9 @@ class SalesOrder(BaseModel):
 
             computed_lines.append({
                 '_key': line.get('_key'),
+                'qty': qty,
+                'price': price,
+                'product_id': product_id,
                 'subtotal_raw': subtotal,
                 'discount_amount': round(disc_amt, 2),
                 'discount_percentage': disc_pct,
@@ -770,6 +789,52 @@ class SalesOrder(BaseModel):
                     cl['discount_percentage'] = 0
                     # discount_amount line_onchange di frontend handle reset
 
+        # ── Sales Pricelist: autofill harga ──
+        # Cocok: pricelist terpilih + product sama, qty dalam rentang
+        # [min_qty, max_qty] (max kosong = tanpa batas), dan Order Date dalam
+        # periode aktif pricelist (start..end; end kosong = aktif terus).
+        # Dipakai baris dengan min_qty TERBESAR yang cocok (harga bertingkat).
+        # Harga otomatis diisi hanya jika price masih harga default product.
+        pricelist_id = getattr(self, 'pricelist_id', None)
+        if not pricelist_id and getattr(self, 'pricelist', None):
+            pricelist_id = self.pricelist.pk if hasattr(self.pricelist, 'pk') else self.pricelist
+        order_date = getattr(self, 'order_date', None)
+        if pricelist_id and order_date:
+            from django.db.models import Q as ModelQ
+            from core.models.sales.pricelist_line import SalesPricelistLine
+            from core.models.inventory.product import Product
+            for cl in computed_lines:
+                pid = cl.get('product_id')
+                qty = cl['qty']
+                if not pid or qty <= 0:
+                    continue
+                entry = SalesPricelistLine.objects.filter(
+                    pricelist_id=pricelist_id,
+                    product=pid,
+                    min_qty__lte=qty,
+                    is_deleted=False,
+                ).filter(
+                    ModelQ(max_qty__isnull=True) | ModelQ(max_qty__gte=qty),
+                ).filter(
+                    ModelQ(pricelist_id__start_date__isnull=True) | ModelQ(pricelist_id__start_date__lte=order_date),
+                    ModelQ(pricelist_id__end_date__isnull=True) | ModelQ(pricelist_id__end_date__gte=order_date),
+                ).order_by('-min_qty').first()
+                if not entry:
+                    continue
+                pl_price = float(entry.fix_price or 0)
+                # Autofill price hanya jika masih harga default product
+                current_price = cl.get('price')
+                try:
+                    default_price = float(Product.objects.get(pk=pid).price or 0)
+                except Product.DoesNotExist:
+                    default_price = None
+                if current_price is None or (
+                    default_price is not None
+                    and abs(float(current_price or 0) - default_price) < 0.01
+                ):
+                    cl['price'] = pl_price
+                    cl['subtotal_raw'] = round(qty * pl_price, 2)
+
         # ── Recompute tax & total (1 formula untuk semua mode) ──
         for cl in computed_lines:
             taxable = cl['subtotal_raw'] - cl['discount_amount']
@@ -800,7 +865,7 @@ class SalesOrder(BaseModel):
         # ── Store per-line computed values untuk response API ──
         self._computed_o2m_lines = {
             'order_lines': [
-                {k: cl[k] for k in ('_key', 'discount_amount', 'discount_percentage', 'tax_amount', 'total')}
+                {k: cl[k] for k in ('_key', 'discount_amount', 'discount_percentage', 'tax_amount', 'total', 'price')}
                 for cl in computed_lines if cl.get('_key')
             ],
         }

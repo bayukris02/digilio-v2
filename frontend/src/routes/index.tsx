@@ -60,7 +60,9 @@ export const router = createBrowserRouter([
       { path: 'sales.product/new', element: <ModelFormPage modelName="inventory.product" basePath="/sales.product" /> },
       { path: 'sales.product/:recordId', element: <ModelFormPage modelName="inventory.product" basePath="/sales.product" /> },
       // Sales -> Pricelist = coming soon (belum ada model)
-      { path: 'sales.pricelist', element: <ComingSoon /> },
+      { path: 'sales.pricelist', element: <ModelListPage modelName="sales.pricelist" basePath="/sales.pricelist" /> },
+      { path: 'sales.pricelist/new', element: <ModelFormPage modelName="sales.pricelist" basePath="/sales.pricelist" /> },
+      { path: 'sales.pricelist/:recordId', element: <ModelFormPage modelName="sales.pricelist" basePath="/sales.pricelist" /> },
       // Inventory custom routes
       { path: 'inventory/dashboard', element: <GenericDashboardPage dashboardKey="inventory" /> },
       { path: 'inventory/insight', element: <ComingSoon /> },

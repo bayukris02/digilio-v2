@@ -11,6 +11,8 @@ from core.models.purchase.quick_purchase import QuickPurchase
 from core.models.purchase.quick_purchase_line import QuickPurchaseLine
 from core.models.sales.quick_sales import QuickSales
 from core.models.sales.quick_sales_line import QuickSalesLine
+from core.models.sales.pricelist import SalesPricelist
+from core.models.sales.pricelist_line import SalesPricelistLine
 from core.models.purchase.order_template import OrderTemplate
 from core.models.purchase.order_template_line import OrderTemplateLine
 from core.models.purchase.vendor_pricelist import VendorPricelist
@@ -69,6 +71,7 @@ __all__ = [
     'PurchaseRequest', 'PurchaseRequestLine',
     'QuickPurchase', 'QuickPurchaseLine',
     'QuickSales', 'QuickSalesLine',
+    'SalesPricelist', 'SalesPricelistLine',
     'OrderTemplate', 'OrderTemplateLine',
     'VendorPricelist',
     'Project', 'ProjectLine', 'Unit', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory', 'ProjectUnit', 'ProjectUnitDetail',
