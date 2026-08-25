@@ -88,13 +88,18 @@ const menuItems = [
       { key: '/inventory/insight', label: 'Insight' },
       { type: 'group', label: 'OPERATION', children: [
         { key: '/inventory.stock_receipt', label: 'Penerimaan Barang' },
-        { key: '/inventory.stock_delivery', label: 'Stock Delivery' },
+        { key: '/inventory.stock_delivery', label: 'Pengiriman Barang' },
         { key: '/inventory.stock_adjustment', label: 'Stock Adjustment' },
-        { key: '/inventory.uom', label: 'Satuan' },
+      ]},
+      { type: 'group', label: 'TRANSFER STOCK', children: [
+        { key: '/inventory.stock_request', label: 'Request Stock' },
+        { key: '/inventory.stock_out', label: 'Stock Keluar' },
+        { key: '/inventory.stock_in', label: 'Terima Stock' },
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
         { key: '/inventory.product', label: 'Product' },
         { key: '/inventory.product_category', label: 'Product Category' },
+        { key: '/inventory.uom', label: 'Satuan' },
         { key: '/inventory.warehouse', label: 'Warehouse' },
       ]},
       { type: 'group', label: 'REPORT', children: [

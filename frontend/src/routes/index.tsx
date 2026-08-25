@@ -75,6 +75,10 @@ export const router = createBrowserRouter([
       { path: 'inventory.stock_delivery/new', element: <ModelFormPage modelName="sales.delivery_order" basePath="/inventory.stock_delivery" /> },
       { path: 'inventory.stock_delivery/:recordId', element: <ModelFormPage modelName="sales.delivery_order" basePath="/inventory.stock_delivery" /> },
       { path: 'inventory.stock_adjustment', element: <ComingSoon /> },
+      // Inventory -> Transfer Stock = coming soon (belum ada model)
+      { path: 'inventory.stock_request', element: <ComingSoon /> },
+      { path: 'inventory.stock_out', element: <ComingSoon /> },
+      { path: 'inventory.stock_in', element: <ComingSoon /> },
       { path: 'inventory/pivot', element: <ComingSoon /> },
       { path: 'inventory/detail', element: <ComingSoon /> },
       // Project custom routes
