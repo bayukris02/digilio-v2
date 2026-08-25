@@ -379,6 +379,13 @@ class ModelRecordView(APIView):
                 one2many_data[key] = data.pop(key)
 
         try:
+            # Validasi child lines via hook per-model (jika didefinisikan) —
+            # dijalankan SEBELUM parent disimpan agar error tidak meninggalkan
+            # mutasi parsial. Contoh: guard "minimal 1 location" di Warehouse.
+            _validate_children = getattr(model_cls, '_validate_children', None)
+            if _validate_children:
+                _validate_children(one2many_data)
+
             obj = model_cls.objects.create(**data)
             # Handle one2many child records
             for field_name, lines in one2many_data.items():
@@ -506,6 +513,13 @@ class ModelRecordView(APIView):
                 one2many_data[key] = data.pop(key)
 
         try:
+            # Validasi child lines via hook per-model (jika didefinisikan) —
+            # dijalankan SEBELUM parent disimpan agar error tidak meninggalkan
+            # mutasi parsial. Contoh: guard "minimal 1 location" di Warehouse.
+            _validate_children = getattr(model_cls, '_validate_children', None)
+            if _validate_children:
+                _validate_children(one2many_data)
+
             # Snapshot old field values before update (for chatter diff)
             old_data = {}
             for field_name, fd in model_cls._field_descriptors.items():

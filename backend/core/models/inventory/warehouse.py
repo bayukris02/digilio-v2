@@ -1,5 +1,5 @@
 """Warehouse / Gudang model."""
-from core.fields import CharField, TextField, BooleanField, Many2OneField
+from core.fields import CharField, TextField, BooleanField, Many2OneField, One2ManyField
 from core.model_meta import BaseModel
 
 
@@ -19,6 +19,11 @@ class Warehouse(BaseModel):
             relation='settings.company',
         ),
         'is_active': BooleanField(label='Active', default=True),
+        'locations': One2ManyField(
+            label='Lokasi Gudang',
+            relation='inventory.warehouse_location',
+            inverse_field='warehouse_id',
+        ),
     }
 
     _list_view = {
@@ -37,6 +42,14 @@ class Warehouse(BaseModel):
                 },
             ],
         },
+        'notebook': [
+            {
+                'key': 'locations',
+                'label': 'Lokasi Gudang',
+                'relation': 'locations',
+                'columns': ['name'],
+            },
+        ],
     }
 
     class Meta(BaseModel.Meta):
@@ -46,3 +59,10 @@ class Warehouse(BaseModel):
 
     def __str__(self):
         return f'[{self.code}] {self.name}' if self.code else (self.name or '')
+
+    @classmethod
+    def _validate_children(cls, one2many_data):
+        """Guard: 1 warehouse minimal harus punya 1 lokasi gudang."""
+        locations = one2many_data.get('locations') or []
+        if len(locations) == 0:
+            raise ValueError('Minimal harus ada 1 Lokasi Gudang.')

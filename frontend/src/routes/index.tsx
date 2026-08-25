@@ -76,9 +76,15 @@ export const router = createBrowserRouter([
       { path: 'inventory.stock_delivery/:recordId', element: <ModelFormPage modelName="sales.delivery_order" basePath="/inventory.stock_delivery" /> },
       { path: 'inventory.stock_adjustment', element: <ComingSoon /> },
       // Inventory -> Transfer Stock = coming soon (belum ada model)
-      { path: 'inventory.stock_request', element: <ComingSoon /> },
-      { path: 'inventory.stock_out', element: <ComingSoon /> },
-      { path: 'inventory.stock_in', element: <ComingSoon /> },
+      { path: 'inventory.stock_request', element: <ModelListPage modelName="inventory.stock_request" basePath="/inventory.stock_request" /> },
+      { path: 'inventory.stock_request/new', element: <ModelFormPage modelName="inventory.stock_request" basePath="/inventory.stock_request" /> },
+      { path: 'inventory.stock_request/:recordId', element: <ModelFormPage modelName="inventory.stock_request" basePath="/inventory.stock_request" /> },
+      { path: 'inventory.stock_out', element: <ModelListPage modelName="inventory.stock_out" basePath="/inventory.stock_out" /> },
+      { path: 'inventory.stock_out/new', element: <ModelFormPage modelName="inventory.stock_out" basePath="/inventory.stock_out" /> },
+      { path: 'inventory.stock_out/:recordId', element: <ModelFormPage modelName="inventory.stock_out" basePath="/inventory.stock_out" /> },
+      { path: 'inventory.stock_in', element: <ModelListPage modelName="inventory.stock_in" basePath="/inventory.stock_in" /> },
+      { path: 'inventory.stock_in/new', element: <ModelFormPage modelName="inventory.stock_in" basePath="/inventory.stock_in" /> },
+      { path: 'inventory.stock_in/:recordId', element: <ModelFormPage modelName="inventory.stock_in" basePath="/inventory.stock_in" /> },
       { path: 'inventory/pivot', element: <ComingSoon /> },
       { path: 'inventory/detail', element: <ComingSoon /> },
       // Project custom routes

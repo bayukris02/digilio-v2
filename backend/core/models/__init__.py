@@ -28,6 +28,13 @@ from core.models.settings.branch import Branch
 from core.models.inventory.product import Product
 from core.models.inventory.product_category import ProductCategory
 from core.models.inventory.warehouse import Warehouse
+from core.models.inventory.warehouse_location import WarehouseLocation
+from core.models.inventory.stock_request import StockRequest
+from core.models.inventory.stock_request_line import StockRequestLine
+from core.models.inventory.stock_out import StockOut
+from core.models.inventory.stock_out_line import StockOutLine
+from core.models.inventory.stock_in import StockIn
+from core.models.inventory.stock_in_line import StockInLine
 from core.models.inventory.uom import Uom
 from core.models.accounting.chart_of_account import ChartOfAccount
 from core.models.accounting.jurnal import Jurnal
@@ -60,6 +67,10 @@ __all__ = [
     'Vendor', 'Customer', 'SalesOrder', 'SalesOrderLine', 'DeliveryOrder', 'DeliveryOrderLine', 'Product',
     'ProductCategory',
     'Warehouse',
+    'WarehouseLocation',
+    'StockRequest', 'StockRequestLine',
+    'StockOut', 'StockOutLine',
+    'StockIn', 'StockInLine',
     'Uom',
     'Company', 'Branch',
     'User',
