@@ -13,9 +13,9 @@ class GoodsReceipt(BaseModel):
     # ── State Machine ──
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
-        'waiting': {'allow_edit': False, 'allow_delete': False, 'label': 'Waiting', 'color': 'processing'},
-        'done': {'allow_edit': False, 'allow_delete': False, 'label': 'Done', 'color': 'success'},
-        'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Cancelled', 'color': 'error'},
+        'waiting': {'allow_edit': False, 'allow_delete': False, 'label': 'Menunggu', 'color': 'processing'},
+        'done': {'allow_edit': False, 'allow_delete': False, 'label': 'Selesai', 'color': 'success'},
+        'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Dibatalkan', 'color': 'error'},
     }
 
     _transitions = [
@@ -23,7 +23,7 @@ class GoodsReceipt(BaseModel):
             'name': 'confirm',
             'from': ['draft'],
             'to': 'waiting',
-            'label': 'Confirm',
+            'label': 'Konfirmasi',
             'icon': 'CheckOutlined',
             'guard': '_guard_confirm',
             'effect': '_effect_confirm',
@@ -32,27 +32,27 @@ class GoodsReceipt(BaseModel):
             'name': 'mark_done',
             'from': ['waiting'],
             'to': 'done',
-            'label': 'Mark Done',
+            'label': 'Tandai Selesai',
             'icon': 'CheckCircleOutlined',
         },
         {
             'name': 'cancel',
             'from': ['draft', 'waiting', 'done'],
             'to': 'cancelled',
-            'label': 'Cancel',
+            'label': 'Batal',
             'icon': 'StopOutlined',
         },
     ]
 
     _fields = {
         'sequence_id': Many2OneField(
-            label='Sequence',
+            label='Tipe Dokumen',
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen penerimaan barang',
         ),
-        'reference': CharField(label='Reference', required=True, editable_statuses=[], placeholder='Automatic'),
+        'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'purchase_order': Many2OneField(
-            label='Purchase Order',
+            label='PO',
             relation='purchase.order',
             required=False,
         ),
@@ -61,11 +61,11 @@ class GoodsReceipt(BaseModel):
             relation='purchase.quick_purchase',
             required=False,
         ),
-        'receipt_date': DateField(label='Receipt Date', editable_statuses=['draft', 'waiting']),
-        'warehouse': CharField(label='Warehouse'),
-        'notes': TextField(label='Notes'),
+        'receipt_date': DateField(label='Tanggal Terima', editable_statuses=['draft', 'waiting']),
+        'warehouse': CharField(label='Gudang'),
+        'notes': TextField(label='Catatan'),
         'receipt_lines': One2ManyField(
-            label='Receipt Lines',
+            label='Baris Penerimaan',
             relation='purchase.goods_receipt.line',
             inverse_field='receipt_id',
         ),
@@ -82,29 +82,29 @@ class GoodsReceipt(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['status', 'reference', 'sequence_id', 'purchase_order', 'receipt_date', 'warehouse'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['notes'],
                 },
             ],
             'actions': [
-                {'label': 'Print', 'color': 'green', 'action': 'print'},
+                {'label': 'Cetak', 'color': 'green', 'action': 'print'},
                 {'label': 'Proses Penerimaan', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
-                {'label': 'Konfirm', 'color': 'primary', 'action': 'mark_done', 'states': ['waiting']},
-                {'label': 'Cancel', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'waiting', 'done']},
+                {'label': 'Konfirmasi', 'color': 'primary', 'action': 'mark_done', 'states': ['waiting']},
+                {'label': 'Batal', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'waiting', 'done']},
             ],
             'smart_buttons': [
-                {'label': 'Purchase Order', 'model': 'purchase.order', 'icon': 'FileTextOutlined'},
+                {'label': 'PO', 'model': 'purchase.order', 'icon': 'FileTextOutlined'},
             ],
         },
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Receipt Lines',
+                'label': 'Baris Penerimaan',
                 'relation': 'receipt_lines',
             },
         ],
@@ -112,8 +112,8 @@ class GoodsReceipt(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Goods Receipt'
-        verbose_name_plural = 'Goods Receipts'
+        verbose_name = 'Penerimaan Barang'
+        verbose_name_plural = 'Penerimaan Barang'
 
     @classmethod
     def get_model_config(cls):
@@ -129,7 +129,7 @@ class GoodsReceipt(BaseModel):
 
     def _guard_confirm(self):
         if not self.sequence_id:
-            raise ValueError('Silakan pilih Sequence terlebih dahulu.')
+            raise ValueError('Silakan pilih Tipe Dokumen (Sequence) terlebih dahulu.')
 
     # ── Effects ──
 

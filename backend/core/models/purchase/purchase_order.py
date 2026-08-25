@@ -734,7 +734,7 @@ class PurchaseOrder(BaseModel):
             '_action_type': 'open_record',
             'model': 'purchase.goods_receipt',
             'record_id': gr.pk,
-            'message': f'Goods Receipt berhasil {mode_label}',
+            'message': f'Penerimaan Barang berhasil {mode_label}',
         }
 
     def _action_create_bill(self, data=None):

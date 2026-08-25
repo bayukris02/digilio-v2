@@ -11,7 +11,7 @@ class GoodsReceiptLine(BaseModel):
 
     _fields = {
         'receipt_id': Many2OneField(
-            label='Goods Receipt',
+            label='Penerimaan Barang',
             relation='purchase.goods_receipt',
             required=True,
         ),
@@ -21,9 +21,9 @@ class GoodsReceiptLine(BaseModel):
             required=True,
             autofill={'uom': 'uom', 'name': 'name', 'price': 'unit_price'},
         ),
-        'name': TextField(label='Description'),
-        'received_qty': FloatField(label='Received Qty', default=0, editable_statuses=['draft', 'waiting']),
-        'unit_price': MonetaryField(label='Unit Price', currency='IDR'),
+        'name': TextField(label='Deskripsi'),
+        'received_qty': FloatField(label='Qty Diterima', default=0, editable_statuses=['draft', 'waiting']),
+        'unit_price': MonetaryField(label='Harga Satuan', currency='IDR'),
     }
 
     _list_view = {
@@ -40,5 +40,5 @@ class GoodsReceiptLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Goods Receipt Line'
-        verbose_name_plural = 'Goods Receipt Lines'
+        verbose_name = 'Baris Penerimaan Barang'
+        verbose_name_plural = 'Baris Penerimaan Barang'

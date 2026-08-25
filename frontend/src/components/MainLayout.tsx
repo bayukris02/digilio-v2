@@ -41,7 +41,7 @@ const menuItems = [
       { type: 'group', label: 'OPERATION', children: [
         { key: '/purchase.request', label: 'Permintaan Pembelian' },
         { key: '/purchase.order', label: 'Purchase Order' },
-        { key: '/purchase.goods_receipt', label: 'Goods Receipt' },
+        { key: '/purchase.goods_receipt', label: 'Penerimaan Barang' },
         { key: '/purchase.quick_purchase', label: 'Quick Purchase' },
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
@@ -87,7 +87,7 @@ const menuItems = [
       { key: '/inventory/dashboard', label: 'Dashboard' },
       { key: '/inventory/insight', label: 'Insight' },
       { type: 'group', label: 'OPERATION', children: [
-        { key: '/inventory.stock_receipt', label: 'Stock Receipt' },
+        { key: '/inventory.stock_receipt', label: 'Penerimaan Barang' },
         { key: '/inventory.stock_delivery', label: 'Stock Delivery' },
         { key: '/inventory.stock_adjustment', label: 'Stock Adjustment' },
         { key: '/inventory.uom', label: 'Satuan' },
