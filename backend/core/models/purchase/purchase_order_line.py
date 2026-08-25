@@ -35,6 +35,10 @@ class PurchaseOrderLine(BaseModel):
         'remaining_bill_qty': FloatField(label='Qty Sisa Tagihan', default=0, virtual=True, hidden_statuses=['draft']),
         'uom': CharField(label='UOM', default='pcs'),
         'price': MonetaryField(label='Harga Satuan', currency='IDR'),
+        'pricelist_price': MonetaryField(
+            label='Harga Pricelist', currency='IDR',
+            virtual=True, editable_statuses=[],
+        ),
         'discount_percentage': PercentageField(label='Diskon (%)', default=0),
         'discount_amount': MonetaryField(label='Diskon', currency='IDR',
             compute='_compute_total'),
@@ -161,6 +165,28 @@ class PurchaseOrderLine(BaseModel):
                     data['remaining_bill_qty'] = max(min(float(self.qty or 0), done_qty) - billed_qty, 0)
                 else:
                     data['remaining_bill_qty'] = max(float(self.qty or 0) - billed_qty, 0)
+
+                # ── Vendor Pricelist: harga pricelist utk display (tanda autofill) ──
+                from django.db.models import Q as ModelQ
+                from core.models.purchase.vendor_pricelist import VendorPricelist
+                vendor_pk = po_obj.vendor_id if hasattr(po_obj, 'vendor_id') else (
+                    po_obj.vendor.pk if hasattr(po_obj.vendor, 'pk') else po_obj.vendor
+                )
+                order_date = getattr(po_obj, 'order_date', None)
+                pl_price = None
+                if vendor_pk and product_pk and order_date:
+                    pl_entry = VendorPricelist.objects.filter(
+                        vendor=vendor_pk,
+                        product=product_pk,
+                        min_qty__lte=float(self.qty or 0),
+                        is_deleted=False,
+                    ).filter(
+                        ModelQ(start_date__isnull=True) | ModelQ(start_date__lte=order_date),
+                        ModelQ(end_date__isnull=True) | ModelQ(end_date__gte=order_date),
+                    ).order_by('-min_qty').first()
+                    if pl_entry:
+                        pl_price = float(pl_entry.unit_price or 0)
+                data['pricelist_price'] = pl_price
 
                 # ── Di global mode, override discount_amount dengan prorata ──
                 if getattr(po_obj, 'discount_type', None) == 'global':

@@ -122,7 +122,13 @@ function Many2OneSelect({ value, onChange, modelName, placeholder, currentModel,
         const records = response.results;
         const opts = records.map((r) => ({
           value: r.id as number,
-          label: (r.display_name as string) || `#${r.id}`,
+          // display_name bisa berupa fallback '#id' (mis. product tanpa code) —
+          // pakai field name kalau ada supaya tampil nama, bukan ID
+          label: (() => {
+            const dn = r.display_name as string;
+            if (dn && !String(dn).startsWith('#')) return dn;
+            return (r.name as string) || dn || `#${r.id}`;
+          })(),
         }));
         setOptions(opts);
       })
@@ -268,7 +274,7 @@ function renderField(
 
   if (field.type === 'date') {
     return (
-      <Form.Item label={label} name={key} rules={required ? [{ required: true, message: `${label} wajib diisi` }] : []}>
+      <Form.Item label={label} name={key} rules={required ? [{ required: true, message: `${label} wajib diisi` }] : []} extra={field.help_text ? <span style={{ fontSize: 12, fontStyle: 'italic', color: '#888' }}>{field.help_text}</span> : undefined}>
         <DatePicker format={DATE_FORMAT} style={{ width: '100%' }} disabled={disabled} />
       </Form.Item>
     );

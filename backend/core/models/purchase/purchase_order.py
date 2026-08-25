@@ -269,12 +269,12 @@ class PurchaseOrder(BaseModel):
                 'key': 'lines',
                 'label': 'Baris Pesanan',
                 'relation': 'order_lines',
-                'columns': ['product', 'name', 'qty', 'uom', 'price', 'discount_percentage', 'discount_amount', 'tax_percentage', 'tax_amount', 'total'],
+                'columns': ['product', 'name', 'qty', 'uom', 'price', 'pricelist_price', 'discount_percentage', 'discount_amount', 'tax_percentage', 'tax_amount', 'total'],
                 'summary': {
                     'columns': {'qty': 'sum', 'discount_amount': 'sum', 'tax_amount': 'sum', 'total': 'sum'},
                     'subtotal': 'subtotal',
                     'lines': ['discount', 'tax'],
-                    'compute_deps': ['discount_type', 'discount_method', 'global_discount'],
+                    'compute_deps': ['discount_type', 'discount_method', 'global_discount', 'vendor'],
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],
                     'child_details': {
@@ -360,6 +360,7 @@ class PurchaseOrder(BaseModel):
                         lines_data.append({
                             'qty': float(getattr(line, 'qty', 0) or 0),
                             'price': float(getattr(line, 'price', 0) or 0),
+                            'product': line.product,
                             'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
                             'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
                             'tax_percentage': float(getattr(line, 'tax_percentage', 0) or 0),
@@ -379,8 +380,20 @@ class PurchaseOrder(BaseModel):
             else:
                 disc_amt = float(line.get('discount_amount', 0) or 0)
 
+            # Product id (payload: {id}; DB: objek; else raw)
+            prod = line.get('product')
+            if isinstance(prod, dict):
+                product_id = prod.get('id')
+            elif hasattr(prod, 'pk'):
+                product_id = prod.pk
+            else:
+                product_id = prod
+
             computed_lines.append({
                 '_key': line.get('_key'),
+                'qty': qty,
+                'price': price,
+                'product_id': product_id,
                 'subtotal_raw': subtotal,
                 'discount_amount': round(disc_amt, 2),
                 'discount_percentage': disc_pct,
@@ -428,6 +441,51 @@ class PurchaseOrder(BaseModel):
                     # discount_amount tidak direset di backend —
                     # line_onchange di frontend handle via setLineItems pas method change
 
+        # ── Vendor Pricelist: autofill harga ──
+        # Cocok: vendor + product sama, min_qty <= qty PO, dan Tanggal Pesanan
+        # dalam periode aktif pricelist (start_date..end_date; end_date kosong =
+        # aktif terus). Dipakai min_qty TERBESAR yang <= qty (harga bertingkat).
+        # Harga otomatis diisi hanya jika price masih harga default product.
+        vendor_id = getattr(self, 'vendor_id', None)
+        if not vendor_id and getattr(self, 'vendor', None):
+            vendor_id = self.vendor.pk if hasattr(self.vendor, 'pk') else self.vendor
+        order_date = getattr(self, 'order_date', None)
+        if vendor_id and order_date:
+            from django.db.models import Q as ModelQ
+            from core.models.purchase.vendor_pricelist import VendorPricelist
+            from core.models.inventory.product import Product
+            for cl in computed_lines:
+                cl['pricelist_price'] = None
+                pid = cl.get('product_id')
+                qty = cl['qty']
+                if not pid or qty <= 0:
+                    continue
+                entry = VendorPricelist.objects.filter(
+                    vendor=vendor_id,
+                    product=pid,
+                    min_qty__lte=qty,
+                    is_deleted=False,
+                ).filter(
+                    ModelQ(start_date__isnull=True) | ModelQ(start_date__lte=order_date),
+                    ModelQ(end_date__isnull=True) | ModelQ(end_date__gte=order_date),
+                ).order_by('-min_qty').first()
+                if not entry:
+                    continue
+                pl_price = float(entry.unit_price or 0)
+                cl['pricelist_price'] = pl_price
+                # Autofill price hanya jika masih harga default product
+                current_price = cl.get('price')
+                try:
+                    default_price = float(Product.objects.get(pk=pid).price or 0)
+                except Product.DoesNotExist:
+                    default_price = None
+                if current_price is None or (
+                    default_price is not None
+                    and abs(float(current_price or 0) - default_price) < 0.01
+                ):
+                    cl['price'] = pl_price
+                    cl['subtotal_raw'] = round(qty * pl_price, 2)
+
         # ── Recompute tax & total (1 formula untuk semua mode) ──
         for cl in computed_lines:
             taxable = cl['subtotal_raw'] - cl['discount_amount']
@@ -450,7 +508,7 @@ class PurchaseOrder(BaseModel):
         # ── Store per-line computed values untuk response API ──
         self._computed_o2m_lines = {
             'order_lines': [
-                {k: cl[k] for k in ('_key', 'discount_amount', 'discount_percentage', 'tax_amount', 'total')}
+                {k: cl[k] for k in ('_key', 'discount_amount', 'discount_percentage', 'tax_amount', 'total', 'price', 'pricelist_price')}
                 for cl in computed_lines
                 if cl.get('_key')
             ],

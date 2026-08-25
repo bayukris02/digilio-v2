@@ -39,7 +39,9 @@ export const router = createBrowserRouter([
       { path: 'purchase.order_template', element: <ModelListPage modelName="purchase.order_template" basePath="/purchase.order_template" /> },
       { path: 'purchase.order_template/new', element: <ModelFormPage modelName="purchase.order_template" basePath="/purchase.order_template" /> },
       { path: 'purchase.order_template/:recordId', element: <ModelFormPage modelName="purchase.order_template" basePath="/purchase.order_template" /> },
-      { path: 'purchase.vendor_pricelist', element: <ComingSoon /> },
+      { path: 'purchase.vendor_pricelist', element: <ModelListPage modelName="purchase.vendor_pricelist" basePath="/purchase.vendor_pricelist" /> },
+      { path: 'purchase.vendor_pricelist/new', element: <ModelFormPage modelName="purchase.vendor_pricelist" basePath="/purchase.vendor_pricelist" /> },
+      { path: 'purchase.vendor_pricelist/:recordId', element: <ModelFormPage modelName="purchase.vendor_pricelist" basePath="/purchase.vendor_pricelist" /> },
       // Purchase -> Product = menu alias → konten model inventory.product (URL tetap /purchase.product)
       { path: 'purchase.product', element: <ModelListPage modelName="inventory.product" basePath="/purchase.product" /> },
       { path: 'purchase.product/new', element: <ModelFormPage modelName="inventory.product" basePath="/purchase.product" /> },
