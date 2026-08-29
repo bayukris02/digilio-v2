@@ -103,6 +103,7 @@ const menuItems = [
         { key: '/inventory.warehouse', label: 'Warehouse' },
       ]},
       { type: 'group', label: 'REPORT', children: [
+        { key: '/inventory.stock_ledger', label: 'Stock Ledger' },
         { key: '/inventory/pivot', label: 'Inventory Pivot' },
         { key: '/inventory/detail', label: 'Inventory Detail' },
       ]},

@@ -35,6 +35,7 @@ from core.models.inventory.stock_out import StockOut
 from core.models.inventory.stock_out_line import StockOutLine
 from core.models.inventory.stock_in import StockIn
 from core.models.inventory.stock_in_line import StockInLine
+from core.models.inventory.stock_ledger import StockLedger
 from core.models.inventory.uom import Uom
 from core.models.accounting.chart_of_account import ChartOfAccount
 from core.models.accounting.jurnal import Jurnal
@@ -73,6 +74,7 @@ __all__ = [
     'StockRequest', 'StockRequestLine',
     'StockOut', 'StockOutLine',
     'StockIn', 'StockInLine',
+    'StockLedger',
     'Uom',
     'Company', 'Branch',
     'User',

@@ -762,11 +762,14 @@ def model_action(request, model_name, record_id):
             guard_method = getattr(obj, guard_name, None)
             if guard_method:
                 try:
+                    # Sediakan request data agar guard bisa baca flag (mis. 'confirmed')
+                    obj._action_request_data = request.data
                     guard_result = guard_method()
                     if guard_result is not None:
-                        # guard returned dict → merge into response (like redirect info)
+                        # guard return dict (mis. _action_type 'confirm') → hentikan transisi,
+                        # kirim payload ke frontend (pola sama seperti Mode 2 / _action_*)
                         if isinstance(guard_result, dict) and guard_result.get('_action_type'):
-                            pass  # let it pass through
+                            return Response(guard_result)
                 except Exception as e:
                     return Response({'error': str(e)}, status=400)
 

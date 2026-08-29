@@ -34,6 +34,8 @@ class DeliveryOrder(BaseModel):
             'to': 'done',
             'label': 'Tandai Selesai',
             'icon': 'CheckCircleOutlined',
+            'guard': '_guard_mark_done',
+            'effect': '_effect_mark_done',
         },
         {
             'name': 'cancel',
@@ -41,6 +43,7 @@ class DeliveryOrder(BaseModel):
             'to': 'cancelled',
             'label': 'Batal',
             'icon': 'StopOutlined',
+            'effect': '_effect_cancel',
         },
     ]
 
@@ -67,7 +70,15 @@ class DeliveryOrder(BaseModel):
             required=True,
         ),
         'delivery_date': DateField(label='Tanggal Kirim'),
-        'warehouse': CharField(label='Gudang'),
+        'warehouse': Many2OneField(
+            label='Gudang',
+            relation='inventory.warehouse',
+        ),
+        'location': Many2OneField(
+            label='Lokasi Pengambilan',
+            relation='inventory.warehouse_location',
+            domain={'warehouse_id': 'warehouse'},
+        ),
         'address': TextField(label='Alamat Pengiriman'),
         'notes': TextField(label='Catatan'),
         'delivery_lines': One2ManyField(
@@ -78,8 +89,8 @@ class DeliveryOrder(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'sequence_id', 'sales_order', 'customer', 'delivery_date', 'warehouse', 'status'],
-        'filters': ['status', 'delivery_date', 'warehouse'],
+        'columns': ['reference', 'sequence_id', 'sales_order', 'customer', 'delivery_date', 'warehouse', 'location', 'status'],
+        'filters': ['status', 'delivery_date', 'warehouse', 'location'],
         'default_sort': ['-delivery_date'],
     }
 
@@ -89,7 +100,7 @@ class DeliveryOrder(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['status', 'reference', 'sequence_id', 'sales_order', 'customer', 'delivery_date', 'warehouse'],
+                    'fields': ['status', 'reference', 'sequence_id', 'sales_order', 'customer', 'delivery_date', 'warehouse', 'location'],
                 },
                 {
                     'key': 'details',
@@ -155,6 +166,8 @@ class DeliveryOrder(BaseModel):
     def _guard_confirm(self):
         if not self.sequence_id:
             raise ValueError('Silakan pilih Tipe Dokumen (Sequence) terlebih dahulu.')
+        if not self.location_id:
+            raise ValueError('Silakan pilih Lokasi Pengambilan terlebih dahulu.')
 
     # ── Effects ──
 
@@ -163,6 +176,68 @@ class DeliveryOrder(BaseModel):
         from core.sequence_engine import SequenceEngine
         if (self.reference or '').startswith('Draft#'):
             self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
+    # ── Stock (via StockEngine) ──
+
+    def _guard_mark_done(self):
+        """Cek stok sebelum Tandai Selesai: lokasi wajib; minus butuh konfirmasi user."""
+        if not self.location_id:
+            raise ValueError('Silakan pilih Lokasi Pengambilan terlebih dahulu.')
+        if self.warehouse_id and self.location and self.location.warehouse_id_id != self.warehouse_id:
+            raise ValueError('Lokasi Pengambilan tidak sesuai dengan Gudang yang dipilih.')
+        from core.models.sales.delivery_order_line import DeliveryOrderLine
+        lines = []
+        for line in DeliveryOrderLine.objects.filter(delivery_id=self.pk, is_deleted=False):
+            if line.product_id and line.delivered_qty:
+                lines.append({
+                    'product_id': line.product_id,
+                    'location_id': self.location_id,
+                    'quantity': -float(line.delivered_qty),
+                })
+        from core.stock_engine import StockEngine
+        warnings = StockEngine.check_negative(lines)
+        confirmed = (getattr(self, '_action_request_data', {}) or {}).get('confirmed')
+        if warnings and not confirmed:
+            detail = '\n'.join(
+                f"• {w['product_name']} @ {w['location_name']}: tersedia {w['available']:g}, "
+                f"dibutuhkan {w['required']:g} (minus {w['deficit']:g})"
+                for w in warnings
+            )
+            return {
+                '_action_type': 'confirm',
+                'confirm_message': f'Stok tidak mencukupi untuk pengiriman ini:\n{detail}\n\n'
+                                   f'Lanjutkan? Stok akan menjadi minus.',
+            }
+
+    def _effect_mark_done(self):
+        """Posting stok keluar (−qty) ke stock ledger."""
+        from core.stock_engine import StockEngine
+        from core.models.sales.delivery_order_line import DeliveryOrderLine
+        lines = []
+        for line in DeliveryOrderLine.objects.filter(delivery_id=self.pk, is_deleted=False):
+            if line.product_id and line.delivered_qty:
+                lines.append({
+                    'product_id': line.product_id,
+                    'location_id': self.location_id,
+                    'quantity': -float(line.delivered_qty),
+                    'cost': line.unit_price,
+                    'description': line.name,
+                    'source_line_id': line.pk,
+                })
+        StockEngine.post(
+            document={
+                'model': 'sales.delivery_order',
+                'id': self.pk,
+                'reference': self.reference,
+                'date': self.delivery_date,
+            },
+            lines=lines,
+        )
+
+    def _effect_cancel(self):
+        """Batalkan dampak stok — soft-delete row ledger (history tetap di DB)."""
+        from core.stock_engine import StockEngine
+        StockEngine.delete(document={'model': 'sales.delivery_order', 'id': self.pk})
 
     def _action_print(self, *args, **kwargs):
         """Print DO — tampilkan print preview di halaman yang sama."""

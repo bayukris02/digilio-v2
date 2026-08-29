@@ -107,16 +107,38 @@ function SmartButton({ icon, count, label, color, onClick }: SmartBtnProps) {
 }
 
 /** Select component for Many2One fields — fetches options from related model */
-function Many2OneSelect({ value, onChange, modelName, placeholder, currentModel, onQuickView, disabled }: {
-  value?: number; onChange?: (v: number | undefined) => void; modelName: string; placeholder?: string; currentModel?: string; onQuickView?: (id: number) => void; disabled?: boolean;
+function Many2OneSelect({ value, onChange, modelName, placeholder, currentModel, onQuickView, disabled, domain, form }: {
+  value?: number; onChange?: (v: number | undefined) => void; modelName: string; placeholder?: string; currentModel?: string; onQuickView?: (id: number) => void; disabled?: boolean; domain?: Record<string, string>; form?: any;
 }) {
   const [options, setOptions] = useState<{ value: number; label: string }[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Domain: nilai header field terkait (mis. domain={'warehouse_id': 'warehouse'} →
+  // lokasi ikut ter-filter saat gudang diganti). Form.useWatch memicu re-render
+  // tiap form berubah; domainKey hanya berubah kalau nilai header yang dipakai
+  // domain benar-benar berganti.
+  const domainFormValues = Form.useWatch([], form);
+  const domainKey = useMemo(() => {
+    if (!domain || !form) return '';
+    const resolved: Record<string, string> = {};
+    Object.entries(domain).forEach(([relatedField, headerField]) => {
+      const v = form.getFieldValue(headerField);
+      if (v != null) resolved[relatedField] = String(v);
+    });
+    return JSON.stringify(resolved);
+  }, [domain, domainFormValues, form]);
+
   const fetchOptions = useCallback(() => {
     if (!modelName) return;
     setLoading(true);
-    const params = currentModel ? { model_ref: currentModel } : undefined;
+    const params: Record<string, string> = {};
+    if (currentModel) params.model_ref = currentModel;
+    if (domain && form) {
+      Object.entries(domain).forEach(([relatedField, headerField]) => {
+        const v = form.getFieldValue(headerField);
+        if (v != null) params[relatedField] = String(v);
+      });
+    }
     modelApi.listRecords(modelName, undefined, undefined, params)
       .then((response) => {
         const records = response.results;
@@ -136,7 +158,7 @@ function Many2OneSelect({ value, onChange, modelName, placeholder, currentModel,
         message.error(`Failed to load ${modelName}`);
       })
       .finally(() => setLoading(false));
-  }, [modelName, currentModel]);
+  }, [modelName, currentModel, domain, form, domainKey]);
 
   useEffect(() => { fetchOptions(); }, [fetchOptions]);
 
@@ -225,6 +247,7 @@ function renderField(
   currentModel?: string,
   onQuickView?: (modelName: string, recordId: number) => void,
   disabled?: boolean,
+  form?: any,
 ) {
   const label = field.label;
   const required = field.required;
@@ -357,6 +380,8 @@ function renderField(
             currentModel={currentModel}
             onQuickView={onQuickView ? (id) => onQuickView((field as Record<string, string>).relation!, id) : undefined}
             disabled={disabled}
+            domain={(field as any)?.domain}
+            form={form}
           />
         )}
       </Form.Item>
@@ -1080,8 +1105,10 @@ export default function ModelFormPage({
     }
   }, [config, recordData, lineItems, syncSaveSnapshot]);
 
-  // ── Domain refetch: saat header field berubah, refetch many2one options ──
-  const headerFieldForDomain = Form.useWatch('vendor', form);
+  // ── Domain refetch: saat field header berubah, refetch many2one options ──
+  // Watch seluruh form (bukan hardcode 'vendor') agar domain seperti
+  // domain={'warehouse': 'warehouse'} ikut ter-refresh saat gudang diganti.
+  const headerFormValues = Form.useWatch([], form);
   useEffect(() => {
     if (!config || !Object.keys(childConfigs).length) return;
     const tabs = config?.form_view?.notebook || [];
@@ -1120,7 +1147,7 @@ export default function ModelFormPage({
         }).catch(() => {});
       });
     });
-  }, [headerFieldForDomain, config, childConfigs]);
+  }, [headerFormValues, config, childConfigs]);
 
   // ── Stepper steps from status field ──
   const stepperSteps = useMemo(() => {
@@ -2370,7 +2397,7 @@ export default function ModelFormPage({
               }
               return (
                 <Col span={8} key={fieldName}>
-                  {renderField(fieldName, effectiveField as any, {}, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(fieldName))}
+                  {renderField(fieldName, effectiveField as any, {}, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(fieldName), form)}
                 </Col>
               );
             }) : (
@@ -2920,7 +2947,7 @@ export default function ModelFormPage({
                     }
                   }
                 }
-                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key))}</div>;
+                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key), form)}</div>;
               })}
             </Col>
             <Col span={8}>
@@ -2946,7 +2973,7 @@ export default function ModelFormPage({
                     }
                   }
                 }
-                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key))}</div>;
+                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key), form)}</div>;
               })}
             </Col>
             <Col span={8}>
@@ -2972,7 +2999,7 @@ export default function ModelFormPage({
                     }
                   }
                 }
-                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key))}</div>;
+                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key), form)}</div>;
               })}
             </Col>
           </Row>

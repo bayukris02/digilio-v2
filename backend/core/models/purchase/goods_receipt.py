@@ -34,6 +34,8 @@ class GoodsReceipt(BaseModel):
             'to': 'done',
             'label': 'Tandai Selesai',
             'icon': 'CheckCircleOutlined',
+            'guard': '_guard_mark_done',
+            'effect': '_effect_mark_done',
         },
         {
             'name': 'cancel',
@@ -41,6 +43,7 @@ class GoodsReceipt(BaseModel):
             'to': 'cancelled',
             'label': 'Batal',
             'icon': 'StopOutlined',
+            'effect': '_effect_cancel',
         },
     ]
 
@@ -62,7 +65,15 @@ class GoodsReceipt(BaseModel):
             required=False,
         ),
         'receipt_date': DateField(label='Tanggal Terima', editable_statuses=['draft', 'waiting']),
-        'warehouse': CharField(label='Gudang'),
+        'warehouse': Many2OneField(
+            label='Gudang',
+            relation='inventory.warehouse',
+        ),
+        'location': Many2OneField(
+            label='Lokasi Penyimpanan',
+            relation='inventory.warehouse_location',
+            domain={'warehouse_id': 'warehouse'},
+        ),
         'notes': TextField(label='Catatan'),
         'receipt_lines': One2ManyField(
             label='Baris Penerimaan',
@@ -72,8 +83,8 @@ class GoodsReceipt(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'sequence_id', 'purchase_order', 'receipt_date', 'status', 'warehouse'],
-        'filters': ['status', 'receipt_date', 'warehouse'],
+        'columns': ['reference', 'sequence_id', 'purchase_order', 'receipt_date', 'status', 'warehouse', 'location'],
+        'filters': ['status', 'receipt_date', 'warehouse', 'location'],
         'default_sort': ['-receipt_date'],
     }
 
@@ -83,7 +94,7 @@ class GoodsReceipt(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['status', 'reference', 'sequence_id', 'purchase_order', 'receipt_date', 'warehouse'],
+                    'fields': ['status', 'reference', 'sequence_id', 'purchase_order', 'receipt_date', 'warehouse', 'location'],
                 },
                 {
                     'key': 'details',
@@ -130,6 +141,8 @@ class GoodsReceipt(BaseModel):
     def _guard_confirm(self):
         if not self.sequence_id:
             raise ValueError('Silakan pilih Tipe Dokumen (Sequence) terlebih dahulu.')
+        if not self.location_id:
+            raise ValueError('Silakan pilih Lokasi Penyimpanan terlebih dahulu.')
 
     # ── Effects ──
 
@@ -138,6 +151,45 @@ class GoodsReceipt(BaseModel):
         from core.sequence_engine import SequenceEngine
         if (self.reference or '').startswith('Draft#'):
             self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
+    # ── Stock (via StockEngine) ──
+
+    def _guard_mark_done(self):
+        """Validasi lokasi sebelum Konfirmasi (stok masuk +qty, tanpa cek minus)."""
+        if not self.location_id:
+            raise ValueError('Silakan pilih Lokasi Penyimpanan terlebih dahulu.')
+        if self.warehouse_id and self.location and self.location.warehouse_id_id != self.warehouse_id:
+            raise ValueError('Lokasi Penyimpanan tidak sesuai dengan Gudang yang dipilih.')
+
+    def _effect_mark_done(self):
+        """Posting stok masuk (+qty) ke stock ledger."""
+        from core.stock_engine import StockEngine
+        from core.models.purchase.goods_receipt_line import GoodsReceiptLine
+        lines = []
+        for line in GoodsReceiptLine.objects.filter(receipt_id=self.pk, is_deleted=False):
+            if line.product_id and line.received_qty:
+                lines.append({
+                    'product_id': line.product_id,
+                    'location_id': self.location_id,
+                    'quantity': float(line.received_qty),
+                    'cost': line.unit_price,
+                    'description': line.name,
+                    'source_line_id': line.pk,
+                })
+        StockEngine.post(
+            document={
+                'model': 'purchase.goods_receipt',
+                'id': self.pk,
+                'reference': self.reference,
+                'date': self.receipt_date,
+            },
+            lines=lines,
+        )
+
+    def _effect_cancel(self):
+        """Batalkan dampak stok — soft-delete row ledger (history tetap di DB)."""
+        from core.stock_engine import StockEngine
+        StockEngine.delete(document={'model': 'purchase.goods_receipt', 'id': self.pk})
 
     def _action_print(self, *args, **kwargs):
         """Print GR — tampilkan print preview di halaman yang sama."""

@@ -45,7 +45,7 @@ class StockIn(BaseModel):
             label='Lokasi Asal',
             relation='inventory.warehouse_location',
             required=True,
-            domain={'warehouse': 'source_warehouse'},
+            domain={'warehouse_id': 'source_warehouse'},
         ),
         'destination_warehouse': Many2OneField(
             label='Gudang Tujuan',
@@ -56,7 +56,7 @@ class StockIn(BaseModel):
             label='Lokasi Tujuan',
             relation='inventory.warehouse_location',
             required=True,
-            domain={'warehouse': 'destination_warehouse'},
+            domain={'warehouse_id': 'destination_warehouse'},
         ),
         'transfer_date': DateField(label='Tanggal Transfer'),
         'transfer_out': Many2OneField(
