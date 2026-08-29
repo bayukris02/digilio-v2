@@ -99,7 +99,9 @@ class Project(BaseModel):
                                 'icon': 'CheckCircleOutlined',
                                 'inputs': [
                                     {'key': 'customer', 'label': 'Nama Customer', 'type': 'many2one', 'relation': 'sales.customer'},
-                                    {'key': 'unit', 'label': 'Unit', 'type': 'many2one', 'relation': 'project.unit'},
+                                    {'key': 'unit', 'label': 'Unit', 'type': 'many2one', 'relation': 'project.project_unit',
+                                     'filter': {'project_id': '{record_id}'},
+                                     'value_field': 'unit_id', 'label_field': 'unit_id'},
                                     {'key': 'harga_jual', 'label': 'Harga Jual (Rp)', 'type': 'number', 'default': 0},
                                     {'key': 'tanggal', 'label': 'Tanggal', 'type': 'date'},
                                 ],
@@ -460,19 +462,22 @@ class Project(BaseModel):
         return {'_action_type': 'table', 'rows': rows}
 
     def _action_input_sales(self, data=None):
-        """Input Penjualan — buat sales.order dari wizard, lalu line baru di Detail Unit.
+        """Input Penjualan — buat accounting.customer_invoice dari wizard, lalu line baru di Detail Unit.
 
         Wizard input: customer, unit, harga_jual, tanggal.
         Menghasilkan:
-          - sales.order draft (customer + 1 order line, qty=1, price=harga_jual)
+          - accounting.customer_invoice draft (customer + 1 invoice line,
+            qty=1, price=harga_jual, name=unit)
           - project.project_unit_detail baru (name=customer, unit_id=unit,
             selling_price=harga_jual) → line baru di tab Detail Unit.
+          - update qty_sold di project.project_unit (tab Progress Penjualan).
+        Ditolak jika unit sudah terjual 100% (qty_sold >= qty_available).
         """
         from django.db import transaction
         from datetime import date
         from core.model_meta import ErpModelBase
-        from core.models.sales.sales_order import SalesOrder
-        from core.models.sales.sales_order_line import SalesOrderLine
+        from core.models.accounting.customer_invoice import CustomerInvoice
+        from core.models.accounting.customer_invoice_line import CustomerInvoiceLine
         from core.models.settings.sequence import Sequence
 
         customer_id = (data or {}).get('customer')
@@ -497,33 +502,40 @@ class Project(BaseModel):
         if not unit:
             return {'error': 'Unit tidak ditemukan.'}
 
-        # Product mapping wajib — dipakai untuk line SO
-        product = getattr(unit, 'product', None)
-        if not product:
-            return {'error': f'Unit "{unit}" belum dipetakan ke Product di master Unit.'}
+        # Baris Progress Penjualan (project.project_unit) untuk unit ini
+        from core.models.project.project_unit import ProjectUnit
+        project_unit = ProjectUnit.objects.filter(
+            project_id=self, unit_id=unit, is_deleted=False
+        ).first()
+        if not project_unit:
+            return {'error': f'Unit "{unit}" tidak ada di tab Progress Penjualan proyek ini.'}
+        available = int(project_unit.qty_available or 0)
+        sold = int(project_unit.qty_sold or 0)
+        if available > 0 and sold >= available:
+            return {'error': f'Unit "{unit}" sudah terjual 100% — tidak bisa membuat Invoice.'}
 
         # Inject sequence aktif (pola sama seperti _action_buat_tagihan)
         active_seq = Sequence.objects.filter(
-            model_ref='sales.order', active=True, is_deleted=False
+            model_ref='accounting.customer_invoice', active=True, is_deleted=False
         ).first()
 
         with transaction.atomic():
-            so = SalesOrder.objects.create(
+            invoice = CustomerInvoice.objects.create(
                 customer=customer,
                 sequence_id=active_seq,
                 status='draft',
-                order_date=tanggal,
+                invoice_date=tanggal,
             )
-            SalesOrderLine.objects.create(
-                order_id=so,
-                product=product,
+            CustomerInvoiceLine.objects.create(
+                invoice_id=invoice,
                 name=str(unit),
                 qty=1,
                 price=harga_jual,
             )
-            # Compute summary (subtotal/grand_total)
-            so._compute_summary()
-            so.save()
+            # Compute summary + payment summary
+            invoice._compute_summary()
+            invoice._compute_payment_summary()
+            invoice.save()
 
             # Line baru di Detail Unit (tab unit_details)
             from core.models.project.project_unit_detail import ProjectUnitDetail
@@ -534,9 +546,13 @@ class Project(BaseModel):
                 selling_price=harga_jual,
             )
 
+            # Update Unit Terjual di tab Progress Penjualan
+            project_unit.qty_sold = sold + 1
+            project_unit.save()  # _run_compute → sold_percentage
+
         return {
             '_action_type': 'open_record',
-            'model': 'sales.order',
-            'record_id': so.pk,
-            'message': f'Sales Order dibuat: {so.reference or f"#{so.pk}"} — line baru di Detail Unit.',
+            'model': 'accounting.customer_invoice',
+            'record_id': invoice.pk,
+            'message': f'Faktur dibuat: {invoice.reference or f"#{invoice.pk}"} — line baru di Detail Unit.',
         }

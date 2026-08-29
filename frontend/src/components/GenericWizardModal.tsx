@@ -3,6 +3,7 @@ import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Butt
 import { HomeOutlined, FileTextOutlined, SendOutlined, BarChartOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ProgressBar from './ProgressBar';
+import { DATE_FORMAT } from '../utils/format';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -50,6 +51,14 @@ interface WizardInput {
   min?: number;
   max?: number;
   options?: { value: string; label: string }[];
+  relation?: string;
+  /** Query params tambahan saat fetch options many2one — value string bisa
+   *  berisi placeholder `{record_id}` yang diganti id record aktif. */
+  filter?: Record<string, string>;
+  /** Field record hasil fetch yang dipakai sebagai value option (default: id). */
+  value_field?: string;
+  /** Field record hasil fetch yang dipakai sebagai label option (default: display_name). */
+  label_field?: string;
 }
 
 interface EditableColumnConfig {
@@ -94,6 +103,8 @@ interface GenericWizardModalProps {
   onFetchTable?: (mode: string) => Promise<{ rows: Record<string, unknown>[] }>;
   /** Optional — label kolom line_selection (key → label) dari config child model */
   columnLabels?: Record<string, string>;
+  /** Optional — id record parent aktif (untuk placeholder {record_id} di filter many2one) */
+  recordId?: number | null;
 }
 
 function ModeCards({
@@ -139,14 +150,15 @@ function Many2OneWizardInput({ inp, value, onChange, many2oneOptions, onFetch }:
   value: number | undefined;
   onChange: (v: number | undefined) => void;
   many2oneOptions: Record<string, { value: number; label: string }[]>;
-  onFetch: (relation: string) => void;
+  onFetch: (inp: WizardInput & { relation?: string }) => void;
 }) {
   const relation = inp.relation || '';
-  const opts = many2oneOptions[relation] || [];
+  const cacheKey = relation + '::' + JSON.stringify(inp.filter || {});
+  const opts = many2oneOptions[cacheKey] || [];
 
   useEffect(() => {
-    if (relation && opts.length === 0) onFetch(relation);
-  }, [relation]);
+    if (relation && opts.length === 0) onFetch(inp);
+  }, [cacheKey]);
 
   return (
     <Select
@@ -159,7 +171,7 @@ function Many2OneWizardInput({ inp, value, onChange, many2oneOptions, onFetch }:
       filterOption={(input, option) =>
         (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
       }
-      onFocus={() => onFetch(relation)}
+      onFocus={() => onFetch(inp)}
       allowClear
     />
   );
@@ -181,7 +193,7 @@ interface LineSelectorProps {
   onDeselectAll: () => void;
   onQtyChange: (id: number, qty: number) => void;
   onEditableChange: (id: number, key: string, value: unknown) => void;
-  onFetchMany2One: (relation: string) => void;
+  onFetchMany2One: (inp: WizardInput & { relation?: string }) => void;
 }
 
 function LineSelector({
@@ -246,7 +258,7 @@ function LineSelector({
                 {editableColumns.map((ec) => {
                   const val = editableValues[numId]?.[ec.key];
                   if (ec.type === 'many2one' && ec.relation) {
-                    const opts = many2oneOptions[ec.relation] || [];
+                    const opts = many2oneOptions[ec.relation + '::' + JSON.stringify((ec as WizardInput).filter || {})] || [];
                     return (
                       <td key={ec.key} style={{ padding: '4px 8px' }} onClick={(e) => e.stopPropagation()}>
                         <Select
@@ -260,7 +272,7 @@ function LineSelector({
                           filterOption={(input, option) =>
                             (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                           }
-                          onFocus={() => onFetchMany2One(ec.relation!)}
+                          onFocus={() => onFetchMany2One(ec as WizardInput & { relation?: string })}
                           disabled={!checked}
                         />
                       </td>
@@ -307,6 +319,7 @@ export default function GenericWizardModal({
   onCancel,
   onFetchTable,
   columnLabels,
+  recordId,
 }: GenericWizardModalProps) {
   const [selectedMode, setSelectedMode] = useState<string>(config.modes[0]?.value || '');
   const [selectedIds, setSelectedIds] = useState<number[]>(
@@ -428,20 +441,37 @@ export default function GenericWizardModal({
     }));
   };
 
-  const handleFetchMany2One = async (relation: string) => {
-    if (many2oneOptions[relation]) return; // already loaded
+  const handleFetchMany2One = async (inp: WizardInput & { relation?: string }) => {
+    const relation = inp.relation || '';
+    if (!relation) return;
+    const cacheKey = relation + '::' + JSON.stringify(inp.filter || {});
+    if (many2oneOptions[cacheKey]) return; // already loaded
     try {
       const token = localStorage.getItem('access_token');
-      const resp = await fetch(`/api/models/${relation}/records/?limit=200`, {
+      // Query params tambahan (filter) — {record_id} diganti id record aktif
+      const filterParams = Object.entries(inp.filter || {})
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v.replace('{record_id}', String(recordId ?? '')))}`)
+        .join('&');
+      const query = filterParams ? `&${filterParams}` : '';
+      const resp = await fetch(`/api/models/${relation}/records/?limit=200${query}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!resp.ok) throw new Error('Fetch failed');
       const data = await resp.json();
-      const opts = (data.results || []).map((r: { id: number; display_name?: string }) => ({
-        value: r.id,
-        label: r.display_name || `#${r.id}`,
-      }));
-      setMany2oneOptions((prev) => ({ ...prev, [relation]: opts }));
+      const opts = (data.results || []).map((r: Record<string, unknown>) => {
+        // value: field tertentu (default id) — support {id} / {value} object
+        const rawVal = inp.value_field ? r[inp.value_field] : r.id;
+        const value = rawVal && typeof rawVal === 'object'
+          ? Number((rawVal as { id?: unknown }).id ?? rawVal)
+          : Number(rawVal);
+        // label: field tertentu (default display_name)
+        const rawLabel = inp.label_field ? r[inp.label_field] : (r as { display_name?: string }).display_name;
+        const label = rawLabel && typeof rawLabel === 'object'
+          ? String((rawLabel as { name?: unknown }).name ?? rawLabel)
+          : String(rawLabel ?? `#${r.id}`);
+        return { value, label };
+      });
+      setMany2oneOptions((prev) => ({ ...prev, [cacheKey]: opts }));
     } catch {
       // silently fail
     }
@@ -555,6 +585,7 @@ export default function GenericWizardModal({
                     ) : inp.type === 'date' ? (
                       <DatePicker
                         style={{ width: '100%' }}
+                        format={DATE_FORMAT}
                         value={extraInputValues[inp.key] ? dayjs(extraInputValues[inp.key] as string) : null}
                         onChange={(d) => handleExtraInputChange(inp.key, d ? d.format('YYYY-MM-DD') : '')}
                       />
@@ -576,6 +607,14 @@ export default function GenericWizardModal({
                           value={extraInputValues[inp.key] as number ?? (inp.default as number ?? 0)}
                           onChange={(val) => handleExtraInputChange(inp.key, val)}
                           style={{ width: '100%' }}
+                          formatter={(value) => {
+                            if (value === undefined || value === null || value === '') return '';
+                            return Number(value).toLocaleString('id-ID');
+                          }}
+                          parser={(value) => {
+                            if (!value) return undefined as unknown as number;
+                            return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+                          }}
                         />
                       );
                     })()}

@@ -3036,6 +3036,7 @@ export default function ModelFormPage({
           config={actionWizardBtn.wizard as any}
           items={wizardItems}
           columnLabels={wizardColumnLabels}
+          recordId={recordId ? Number(recordId) : null}
           onConfirm={handleWizardConfirm}
           onFetchTable={handleFetchWizardTable}
           onCancel={() => { setActionWizardVisible(false); setActionWizardBtn(null); }}

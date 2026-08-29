@@ -1,5 +1,5 @@
 from core.fields import (
-    CharField, TextField, MonetaryField, Many2OneField,
+    CharField, TextField, MonetaryField,
 )
 from core.model_meta import BaseModel
 
@@ -24,12 +24,6 @@ class Unit(BaseModel):
         'base_price': MonetaryField(
             label='Harga Jual Dasar',
             currency='IDR',
-        ),
-        'product': Many2OneField(
-            label='Product',
-            relation='inventory.product',
-            required=False,
-            help_text='Mapping unit ke product inventory — dipakai saat input penjualan',
         ),
     }
 
