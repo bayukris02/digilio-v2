@@ -83,7 +83,7 @@ class ProjectUnitDetail(BaseModel):
                 'key': 'payments',
                 'label': 'Pembayaran',
                 'relation': 'payments',
-                'columns': ['name', 'amount', 'payment_date'],
+                'columns': ['name', 'payment_method', 'payment_ref', 'amount', 'payment_date'],
                 'read_only': True,
             },
             {

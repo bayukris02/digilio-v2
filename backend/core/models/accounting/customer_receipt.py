@@ -161,6 +161,28 @@ class CustomerReceipt(BaseModel):
             config['fields']['sequence_id']['default'] = active_seq.pk
         return config
 
+    def save(self, *args, **kwargs):
+        """Setelah status ter-persist, sync pembayaran ke Detail Unit terkait."""
+        super().save(*args, **kwargs)
+        self._sync_invoice_unit_detail_payments()
+
+    def _sync_invoice_unit_detail_payments(self):
+        """Sync Tab Pembayaran Detail Unit untuk invoice yang dialokasikan.
+
+        Dipanggil SETELAH save sehingga status receipt (confirmed/done/cancelled)
+        sudah final di DB — menghindari race dengan framework yang set status
+        sebelum effect dijalankan (model_api transition handler).
+        """
+        from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+        seen = set()
+        for line in CustomerReceiptLine.objects.filter(
+            receipt_id=self.pk, is_deleted=False
+        ).select_related('invoice_id'):
+            inv = line.invoice_id
+            if inv and inv.unit_detail and inv.pk not in seen:
+                seen.add(inv.pk)
+                inv._sync_unit_detail_payments()
+
     def _compute_total_receipt(self):
         """Total Receipt is set manually by the user — no auto-computation needed.
         This compute method exists so the field is included in get_computed_fields(),

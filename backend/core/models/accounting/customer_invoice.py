@@ -226,15 +226,18 @@ class CustomerInvoice(BaseModel):
 
         receipts = CustomerReceiptLine.objects.filter(
             invoice_id=self.pk, is_deleted=False
-        ).exclude(receipt_id__status='cancelled').select_related('receipt_id')
+        ).filter(receipt_id__status__in=['confirmed', 'done']).select_related('receipt_id')
 
         seq = 0
         for line in receipts:
             seq += 1
             r = line.receipt_id
+            method = r.payment_method
             UnitDetailPayment.objects.create(
                 unit_detail_id=self.unit_detail,
-                name=f'Pembayaran {r.reference or f"#{r.pk}"}',
+                name=r.reference or f'#{r.pk}',
+                payment_method=str(method) if method else '',
+                payment_ref=r.payment_ref or '',
                 amount=float(line.received_amount or 0),
                 payment_date=r.payment_date,
             )

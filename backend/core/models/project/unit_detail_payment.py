@@ -17,9 +17,17 @@ class UnitDetailPayment(BaseModel):
             required=True,
         ),
         'name': CharField(
-            label='Pembayaran',
+            label='No Faktur',
             required=True,
-            help_text='Misal: DP, Termin 1, Termin 2, Pelunasan',
+            help_text='Nomor dokumen penerimaan (receipt)',
+        ),
+        'payment_method': CharField(
+            label='Metode',
+            help_text='Metode pembayaran penerimaan',
+        ),
+        'payment_ref': CharField(
+            label='Ref. Pembayaran',
+            help_text='No. Cek / Transfer / dll dari penerimaan',
         ),
         'amount': MonetaryField(
             label='Jumlah',
@@ -31,13 +39,13 @@ class UnitDetailPayment(BaseModel):
     }
 
     _list_view = {
-        'columns': ['name', 'amount', 'payment_date'],
+        'columns': ['name', 'payment_method', 'payment_ref', 'amount', 'payment_date'],
         'default_sort': ['id'],
     }
 
     _form_view = {
         'header': {
-            'fields': ['name', 'amount', 'payment_date'],
+            'fields': ['name', 'payment_method', 'payment_ref', 'amount', 'payment_date'],
             'smart_buttons': [],
         },
     }
