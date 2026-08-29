@@ -1241,13 +1241,14 @@ export default function ModelFormPage({
 
   // Per-field editable check: field punya editable_statuses sendiri?
   const isFieldDisabled = useCallback((fieldKey: string) => {
-    if (!currentStatus) return false;
     const field = config?.fields?.[fieldKey];
     if (!field) return false;
     const fieldStatuses = (field as Record<string, unknown>)?.editable_statuses as string[] | undefined;
     if (fieldStatuses) {
-      return !fieldStatuses.includes(currentStatus);
+      // [] = never editable (model tanpa status / field read-only permanen)
+      return !fieldStatuses.includes(currentStatus ?? '');
     }
+    if (!currentStatus) return false;
     return isReadOnly;
   }, [config, currentStatus, isReadOnly]);
 

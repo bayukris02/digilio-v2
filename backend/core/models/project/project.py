@@ -539,12 +539,16 @@ class Project(BaseModel):
 
             # Line baru di Detail Unit (tab unit_details)
             from core.models.project.project_unit_detail import ProjectUnitDetail
-            ProjectUnitDetail.objects.create(
+            du = ProjectUnitDetail.objects.create(
                 project_id=self,
-                name=str(customer),
+                customer=customer,
                 unit_id=unit,
                 selling_price=harga_jual,
             )
+
+            # Link invoice ke Detail Unit (relasi smart button dua arah)
+            invoice.unit_detail = du
+            invoice.save()
 
             # Update Unit Terjual di tab Progress Penjualan
             project_unit.qty_sold = sold + 1

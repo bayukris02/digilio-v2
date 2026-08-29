@@ -6,6 +6,7 @@ class ProjectUnitDetail(BaseModel):
     """Unit Detail pada Project — breakdown unit individual per tipe.
 
     Satu baris = satu unit fisik (mis. Tipe 36/72 → Unit 01, Unit 02).
+    Data dibuat otomatis dari wizard Input Penjualan — read-only (tanpa CRUD manual).
     """
 
     _model_name = 'project.project_unit_detail'
@@ -15,6 +16,7 @@ class ProjectUnitDetail(BaseModel):
             label='Project',
             relation='project.project',
             required=True,
+            editable_statuses=[],
         ),
         'unit_id': Many2OneField(
             label='Tipe Unit',
@@ -22,15 +24,19 @@ class ProjectUnitDetail(BaseModel):
             required=True,
             allow_duplicate=True,
             help_text='Pilih tipe unit dari master Unit',
+            editable_statuses=[],
         ),
-        'name': CharField(
-            label='Nama Unit',
+        'customer': Many2OneField(
+            label='Nama Customer',
+            relation='sales.customer',
             required=True,
-            help_text='Contoh: Unit 01, Blok A1',
+            editable_statuses=[],
+            help_text='Customer pembeli unit ini (dari master Customer)',
         ),
         'selling_price': MonetaryField(
             label='Harga Jual',
             currency='IDR',
+            editable_statuses=[],
         ),
         'est_cost': MonetaryField(
             label='Est. Biaya Konstruksi',
@@ -41,6 +47,12 @@ class ProjectUnitDetail(BaseModel):
             currency='IDR',
             compute='_compute_margin',
             depends=['selling_price', 'est_cost'],
+            editable_statuses=[],
+        ),
+        'invoices': One2ManyField(
+            label='Faktur',
+            relation='accounting.customer_invoice',
+            inverse_field='unit_detail',
         ),
         'payments': One2ManyField(
             label='Pembayaran',
@@ -55,14 +67,16 @@ class ProjectUnitDetail(BaseModel):
     }
 
     _list_view = {
-        'columns': ['project_id', 'name', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
+        'columns': ['project_id', 'customer', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
         'default_sort': ['id'],
     }
 
     _form_view = {
         'header': {
-            'fields': ['project_id', 'name', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
-            'smart_buttons': [],
+            'fields': ['project_id', 'customer', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
+            'smart_buttons': [
+                {'label': 'Faktur', 'model': 'accounting.customer_invoice', 'icon': 'FileTextOutlined'},
+            ],
         },
         'notebook': [
             {
@@ -70,6 +84,7 @@ class ProjectUnitDetail(BaseModel):
                 'label': 'Pembayaran',
                 'relation': 'payments',
                 'columns': ['name', 'amount', 'payment_date'],
+                'read_only': True,
             },
             {
                 'key': 'progress_lines',
@@ -92,4 +107,4 @@ class ProjectUnitDetail(BaseModel):
         self.est_margin = round(selling_price - est_cost, 2)
 
     def __str__(self):
-        return self.name or ''
+        return str(self.customer) if self.customer else ''

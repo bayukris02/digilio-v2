@@ -73,6 +73,12 @@ class CustomerInvoice(BaseModel):
             relation='sales.quick_sales',
             required=False,
         ),
+        'unit_detail': Many2OneField(
+            label='Detail Unit',
+            relation='project.project_unit_detail',
+            required=False,
+            help_text='Detail Unit proyek yang dijual lewat invoice ini',
+        ),
 
         # ── Down Payment ──
         'is_down_payment': BooleanField(label='DP Invoice', default=False),
@@ -135,6 +141,7 @@ class CustomerInvoice(BaseModel):
             ],
             'smart_buttons': [
                 {'label': 'SO', 'model': 'sales.order', 'icon': 'FileTextOutlined'},
+                {'label': 'Detail Unit', 'model': 'project.project_unit_detail', 'icon': 'HomeOutlined'},
             ],
             'actions': [
                 {'label': 'Print', 'color': 'green', 'action': 'print'},
@@ -193,6 +200,44 @@ class CustomerInvoice(BaseModel):
         from core.sequence_engine import SequenceEngine
         if (self.reference or '').startswith('Draft#'):
             self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
+    # ── Auto-fill Pembayaran Detail Unit ──
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self._sync_unit_detail_payments()
+
+    def _sync_unit_detail_payments(self):
+        """Autofill unit_detail_payment dari pembayaran invoice (customer_receipt).
+
+        Hanya berlaku kalau invoice ter-link ke project.project_unit_detail.
+        Sinkronisasi di-REPLACE total (hapus lama, buat ulang dari receipt aktif)
+        supaya data pembayaran selalu mencerminkan receipt terkini.
+        """
+        if not self.unit_detail:
+            return
+        from core.models.project.unit_detail_payment import UnitDetailPayment
+        from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+
+        # Hapus semua payment lama milik unit_detail ini (hanya yang berasal dari invoice ini)
+        UnitDetailPayment.objects.filter(
+            unit_detail_id=self.unit_detail, is_deleted=False
+        ).update(is_deleted=True)
+
+        receipts = CustomerReceiptLine.objects.filter(
+            invoice_id=self.pk, is_deleted=False
+        ).exclude(receipt_id__status='cancelled').select_related('receipt_id')
+
+        seq = 0
+        for line in receipts:
+            seq += 1
+            r = line.receipt_id
+            UnitDetailPayment.objects.create(
+                unit_detail_id=self.unit_detail,
+                name=f'Pembayaran {r.reference or f"#{r.pk}"}',
+                amount=float(line.received_amount or 0),
+                payment_date=r.payment_date,
+            )
 
     # ── Computed Fields ──
 
