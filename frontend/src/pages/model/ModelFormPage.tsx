@@ -823,6 +823,7 @@ export default function ModelFormPage({
     setConfig(null);
     setRecordData(null);
     setLineItems({});
+    lineItemsOwnerRef.current = null;
     setCurrentStep(0);
     setChildConfigs({});
     setMany2oneOptions({});
@@ -997,6 +998,11 @@ export default function ModelFormPage({
     // Akumulasi line items dari SEMUA tab dulu (hindari closure stale saat
     // multi-tab: pakai setLineItems sekali di akhir, bukan per tab)
     const pendingLines: Record<string, Record<string, unknown>[]> = {};
+    // Re-init line items jika record berubah (navigasi ◀▶ / buka record lain):
+    // tanpa ini guard `!lineItems[relation]` memblokir reload dan notebook
+    // tetap menampilkan baris record sebelumnya.
+    const ownerId = recordData?.id != null ? Number(recordData.id) : null;
+    const needReload = recordData != null && lineItemsOwnerRef.current !== ownerId;
     for (const tab of relationTabs) {
       const fieldMeta = config.fields?.[tab.relation];
       if (fieldMeta?.type === 'one2many' && fieldMeta.relation) {
@@ -1046,7 +1052,15 @@ export default function ModelFormPage({
         }
       }
       // Init line items if recordData has one2many data
-      if (recordData?.[tab.relation] && !lineItems[tab.relation]) {
+      if (needReload) {
+        const src = recordData?.[tab.relation];
+        pendingLines[tab.relation] = (Array.isArray(src) ? src : []).map(
+          (item: Record<string, unknown>) => ({
+            ...item,
+            _key: `line_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          }),
+        );
+      } else if (recordData?.[tab.relation] && !lineItems[tab.relation]) {
         pendingLines[tab.relation] = (recordData[tab.relation] as Record<string, unknown>[]).map(
           (item: Record<string, unknown>) => ({
             ...item,
@@ -1059,8 +1073,9 @@ export default function ModelFormPage({
     // (setState async, jadi kirim nilai langsung supaya watcher lineItems
     // tidak salah deteksi dirty pas load)
     if (Object.keys(pendingLines).length > 0) {
-      const nextLines = { ...lineItems, ...pendingLines };
+      const nextLines = needReload ? pendingLines : { ...lineItems, ...pendingLines };
       setLineItems(nextLines);
+      lineItemsOwnerRef.current = ownerId;
       syncSaveSnapshot(nextLines);
     }
   }, [config, recordData, lineItems, syncSaveSnapshot]);
@@ -1185,6 +1200,10 @@ export default function ModelFormPage({
   // ── Ref to avoid stale closure in effects ──
   const lineItemsRef = useRef(lineItems);
   lineItemsRef.current = lineItems;
+  // Record id yang jadi sumber lineItems saat ini — dipakai untuk reload
+  // notebook saat pindah record via ◀▶ (tanpa ini, lineItems tidak ter-reset
+  // karena guard `!lineItems[relation]` memblokir re-init).
+  const lineItemsOwnerRef = useRef<number | null>(null);
 
   // ── Initial values for form fields (from fetched record or defaults) ──
   const initialValues = useMemo(() => {
