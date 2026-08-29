@@ -50,7 +50,7 @@ class CustomerInvoice(BaseModel):
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen faktur',
         ),
-        'reference': CharField(label='Reference', required=True, editable_statuses=[], placeholder='Automatic'),
+        'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'customer': Many2OneField(
             label='Customer',
             relation='sales.customer',
@@ -59,12 +59,12 @@ class CustomerInvoice(BaseModel):
         ),
         'address': TextField(label='Alamat Customer', virtual=True),
         'code': TextField(label='Kode Customer', virtual=True),
-        'invoice_date': DateField(label='Invoice Date'),
-        'due_date': DateField(label='Due Date'),
-        'description': TextField(label='Description'),
-        'notes': TextField(label='Notes', chatter_show=False),
+        'invoice_date': DateField(label='Tanggal Faktur'),
+        'due_date': DateField(label='Jatuh Tempo'),
+        'description': TextField(label='Deskripsi'),
+        'notes': TextField(label='Catatan', chatter_show=False),
         'sales_order': Many2OneField(
-            label='SO',
+            label='Penjualan',
             relation='sales.order',
             required=False,
         ),
@@ -81,34 +81,34 @@ class CustomerInvoice(BaseModel):
         ),
 
         # ── Down Payment ──
-        'is_down_payment': BooleanField(label='DP Invoice', default=False),
-        'down_payment_amount': MonetaryField(label='Down Payment', currency='IDR',
+        'is_down_payment': BooleanField(label='Faktur DP', default=False),
+        'down_payment_amount': MonetaryField(label='Jumlah DP', currency='IDR',
             compute='_compute_down_payment', depends=['sales_order']),
 
         # ── Summary fields ──
         'subtotal': MonetaryField(label='Subtotal', currency='IDR',
             compute='_compute_summary', depends=['invoice_lines']),
-        'discount': MonetaryField(label='Discount', currency='IDR',
+        'discount': MonetaryField(label='Diskon', currency='IDR',
             compute='_compute_summary', depends=['invoice_lines']),
-        'tax': MonetaryField(label='Tax', currency='IDR',
+        'tax': MonetaryField(label='Pajak', currency='IDR',
             compute='_compute_summary', depends=['invoice_lines']),
-        'manual_discount': FloatField(label='Manual Disc (%)', default=0),
+        'manual_discount': FloatField(label='Diskon Manual (%)', default=0),
         'grand_total': MonetaryField(label='Grand Total', currency='IDR',
             compute='_compute_summary', depends=['invoice_lines', 'manual_discount', 'down_payment_amount']),
 
         'invoice_lines': One2ManyField(
-            label='Invoice Lines',
+            label='Baris Faktur',
             relation='accounting.customer_invoice_line',
             inverse_field='invoice_id',
         ),
 
         # ── Payment fields ──
-        'due_amount': MonetaryField(label='Amount Due', currency='IDR',
+        'due_amount': MonetaryField(label='Sisa Tagihan', currency='IDR',
             compute='_compute_payment_summary', depends=['grand_total', 'paid_amount']),
-        'paid_amount': MonetaryField(label='Paid', currency='IDR', default=0),
+        'paid_amount': MonetaryField(label='Sudah Dibayar', currency='IDR', default=0),
         'payment_status': SelectionField(
-            label='Payment Status',
-            options=[('unpaid', 'Unpaid'), ('partial', 'Partial'), ('paid', 'Paid')],
+            label='Status Pembayaran',
+            options=[('unpaid', 'Belum Dibayar'), ('partial', 'Sebagian'), ('paid', 'Lunas')],
             compute='_compute_payment_summary',
             depends=['grand_total', 'paid_amount'],
             default='unpaid',
@@ -128,14 +128,14 @@ class CustomerInvoice(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['reference', 'sales_order', 'customer', 'code', 'address',
                                'invoice_date', 'due_date', 'status', 'sequence_id',
                                'payment_status'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['notes'],
                 },
             ],
@@ -153,7 +153,7 @@ class CustomerInvoice(BaseModel):
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Invoice Lines',
+                'label': 'Baris Faktur',
                 'relation': 'invoice_lines',
                 'summary': {
                     'columns': {'qty': 'sum', 'discount_percentage': 'avg', 'discount_amount': 'sum',
@@ -164,7 +164,7 @@ class CustomerInvoice(BaseModel):
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],
                     'child_details': {
-                        'label': 'Payments',
+                        'label': 'Pembayaran',
                         'data_key': '_receipt_details',
                         'model': 'accounting.customer_receipt',
                     },
@@ -175,8 +175,8 @@ class CustomerInvoice(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Customer Invoice'
-        verbose_name_plural = 'Customer Invoices'
+        verbose_name = 'Faktur'
+        verbose_name_plural = 'Faktur'
 
     @classmethod
     def get_model_config(cls):
@@ -343,7 +343,7 @@ class CustomerInvoice(BaseModel):
             r = line.receipt_id
             data['_receipt_details'].append({
                 'id': r.pk,
-                'label': 'Receipt',
+                'label': 'Penerimaan',
                 'ref': r.reference or f'#{r.pk}',
                 'amount': float(line.received_amount or 0),
             })

@@ -13,12 +13,12 @@ class CustomerReceiptLine(BaseModel):
 
     _fields = {
         'receipt_id': Many2OneField(
-            label='Customer Receipt',
+            label='Penerimaan',
             relation='accounting.customer_receipt',
             required=True,
         ),
         'invoice_id': Many2OneField(
-            label='Invoice',
+            label='Faktur',
             relation='accounting.customer_invoice',
             required=True,
             domain={'customer': 'customer', 'status': 'confirmed'},
@@ -30,13 +30,13 @@ class CustomerReceiptLine(BaseModel):
             editable_statuses=[],
         ),
         'due_amount': MonetaryField(
-            label='Amount Due', currency='IDR',
+            label='Sisa Tagihan', currency='IDR',
             virtual=True,
             editable_statuses=[],
             compute='_compute_total',
         ),
         'received_amount': MonetaryField(
-            label='Received Amount', currency='IDR',
+            label='Jumlah Diterima', currency='IDR',
             required=True,
         ),
     }
@@ -55,8 +55,8 @@ class CustomerReceiptLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Customer Receipt Line'
-        verbose_name_plural = 'Customer Receipt Lines'
+        verbose_name = 'Baris Penerimaan'
+        verbose_name_plural = 'Baris Penerimaan'
 
     def _compute_total(self):
         """Populate customer_name/due_amount dari invoice & validasi received_amount ≤ due_amount."""
@@ -69,7 +69,7 @@ class CustomerReceiptLine(BaseModel):
         due = float(getattr(self, 'due_amount', 0) or 0)
         if received > due > 0:
             raise ValueError(
-                f'Receipt ({received:,.0f}) melebihi Amount Due ({due:,.0f}).'
+                f'Penerimaan ({received:,.0f}) melebihi Sisa Tagihan ({due:,.0f}).'
             )
 
     def to_record(self):

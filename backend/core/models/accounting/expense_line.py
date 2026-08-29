@@ -19,7 +19,7 @@ class ExpenseLine(BaseModel):
         'description': TextField(label='Deskripsi'),
         'amount': MonetaryField(label='Nominal', currency='IDR', required=True),
         'account': Many2OneField(
-            label='Account',
+            label='Akun',
             relation='accounting.chart_of_account',
             required=False,
             help_text='Wajib diisi saat POST',
@@ -40,8 +40,8 @@ class ExpenseLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Expense Line'
-        verbose_name_plural = 'Expense Lines'
+        verbose_name = 'Baris Biaya'
+        verbose_name_plural = 'Baris Biaya'
 
     def __str__(self):
         return self.description or f'#{self.pk}'

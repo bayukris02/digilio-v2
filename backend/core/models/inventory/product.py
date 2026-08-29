@@ -11,18 +11,18 @@ class Product(BaseModel):
     _display_name = 'code'
 
     _fields = {
-        'name': CharField(label='Product Name', required=True),
-        'code': CharField(label='SKU / Code'),
-        'description': TextField(label='Description'),
+        'name': CharField(label='Nama Produk', required=True),
+        'code': CharField(label='SKU / Kode'),
+        'description': TextField(label='Deskripsi'),
         'category': Many2OneField(
-            label='Category',
+            label='Kategori',
             relation='inventory.product_category',
         ),
-        'price': MonetaryField(label='Sales Price', currency='IDR'),
-        'cost': MonetaryField(label='Cost', currency='IDR'),
-        'uom': CharField(label='Unit of Measure', default='pcs'),
-        'weight': FloatField(label='Weight (kg)'),
-        'is_active': BooleanField(label='Active', default=True),
+        'price': MonetaryField(label='Harga Jual', currency='IDR'),
+        'cost': MonetaryField(label='Harga Beli', currency='IDR'),
+        'uom': CharField(label='Satuan', default='pcs'),
+        'weight': FloatField(label='Berat (kg)'),
+        'is_active': BooleanField(label='Aktif', default=True),
     }
 
     _list_view = {
@@ -40,7 +40,7 @@ class Product(BaseModel):
         'notebook': [
             {
                 'key': 'details',
-                'label': 'Details',
+                'label': 'Detail',
                 'fields': ['description'],
             },
         ],
@@ -48,8 +48,8 @@ class Product(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Product'
-        verbose_name_plural = 'Products'
+        verbose_name = 'Produk'
+        verbose_name_plural = 'Produk'
 
     def __str__(self):
         return self.name or ''

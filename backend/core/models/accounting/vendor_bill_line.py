@@ -11,25 +11,25 @@ class VendorBillLine(BaseModel):
 
     _fields = {
         'bill_id': Many2OneField(
-            label='Vendor Bill',
+            label='Tagihan',
             relation='accounting.vendor_bill',
             required=True,
         ),
         'product': Many2OneField(
-            label='Product',
+            label='Produk',
             relation='inventory.product',
             required=False,
             autofill={'uom': 'uom', 'name': 'name', 'price': 'price'},
         ),
-        'name': TextField(label='Description'),
-        'qty': FloatField(label='Quantity', default=1),
+        'name': TextField(label='Deskripsi'),
+        'qty': FloatField(label='Jumlah', default=1),
         'uom': CharField(label='UOM', default='pcs'),
-        'price': MonetaryField(label='Unit Price', currency='IDR'),
-        'discount_percentage': FloatField(label='Disc (%)', default=0),
-        'discount_amount': MonetaryField(label='Discount', currency='IDR',
+        'price': MonetaryField(label='Harga Satuan', currency='IDR'),
+        'discount_percentage': FloatField(label='Diskon (%)', default=0),
+        'discount_amount': MonetaryField(label='Diskon', currency='IDR',
             compute='_compute_total', depends=['qty', 'price', 'discount_percentage']),
-        'tax_percentage': FloatField(label='Tax (%)', default=0),
-        'tax_amount': MonetaryField(label='Tax', currency='IDR',
+        'tax_percentage': FloatField(label='Pajak (%)', default=0),
+        'tax_amount': MonetaryField(label='Pajak', currency='IDR',
             compute='_compute_total', depends=['qty', 'price', 'discount_percentage', 'tax_percentage']),
         'total': MonetaryField(label='Total', currency='IDR',
             compute='_compute_total', depends=['qty', 'price', 'discount_percentage', 'tax_percentage']),
@@ -49,8 +49,8 @@ class VendorBillLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Vendor Bill Line'
-        verbose_name_plural = 'Vendor Bill Lines'
+        verbose_name = 'Baris Tagihan'
+        verbose_name_plural = 'Baris Tagihan'
 
     def _compute_total(self):
         qty = float(self.qty or 0)

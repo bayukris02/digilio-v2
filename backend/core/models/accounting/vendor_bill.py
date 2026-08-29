@@ -42,7 +42,7 @@ class VendorBill(BaseModel):
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen tagihan',
         ),
-        'reference': CharField(label='Reference', required=True, editable_statuses=[], placeholder='Automatic'),
+        'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'vendor': Many2OneField(
             label='Vendor',
             relation='purchase.vendor',
@@ -51,10 +51,10 @@ class VendorBill(BaseModel):
         ),
         'address': TextField(label='Alamat Vendor', virtual=True),
         'code': TextField(label='Kode Vendor', virtual=True),
-        'bill_date': DateField(label='Bill Date'),
-        'due_date': DateField(label='Due Date'),
-        'description': TextField(label='Description'),
-        'notes': TextField(label='Notes', chatter_show=False),
+        'bill_date': DateField(label='Tanggal Tagihan'),
+        'due_date': DateField(label='Jatuh Tempo'),
+        'description': TextField(label='Deskripsi'),
+        'notes': TextField(label='Catatan', chatter_show=False),
         'purchase_order': Many2OneField(
             label='Purchase Order',
             relation='purchase.order',
@@ -78,35 +78,35 @@ class VendorBill(BaseModel):
             help_text='Milestone terkait (otomatis dari wizard Buat Tagihan)',
         ),
         'milestone_line': Many2OneField(
-            label='Milestone Line',
+            label='Baris Milestone',
             relation='project.milestone_line',
             required=False,
             help_text='Sub-line milestone terkait (dari wizard Buat Tagihan)',
         ),
 
         # ── Down Payment ──
-        'is_down_payment': BooleanField(label='DP Bill', default=False),
-        'down_payment_amount': MonetaryField(label='Down Payment', currency='IDR',
+        'is_down_payment': BooleanField(label='Tagihan DP', default=False),
+        'down_payment_amount': MonetaryField(label='Jumlah DP', currency='IDR',
             compute='_compute_down_payment', depends=['purchase_order']),
 
         # ── Summary fields ──
         'subtotal': MonetaryField(label='Subtotal', currency='IDR',
             compute='_compute_summary', depends=['bill_lines']),
-        'discount': MonetaryField(label='Discount', currency='IDR',
+        'discount': MonetaryField(label='Diskon', currency='IDR',
             compute='_compute_summary', depends=['bill_lines']),
-        'tax': MonetaryField(label='Tax', currency='IDR',
+        'tax': MonetaryField(label='Pajak', currency='IDR',
             compute='_compute_summary', depends=['bill_lines']),
-        'manual_discount': FloatField(label='Manual Disc (%)', default=0),
+        'manual_discount': FloatField(label='Diskon Manual (%)', default=0),
         'grand_total': MonetaryField(label='Grand Total', currency='IDR',
             compute='_compute_summary', depends=['bill_lines', 'manual_discount', 'down_payment_amount']),
 
         # ── Payment fields ──
-        'due_amount': MonetaryField(label='Amount Due', currency='IDR',
+        'due_amount': MonetaryField(label='Sisa Tagihan', currency='IDR',
             compute='_compute_payment_summary', depends=['grand_total', 'paid_amount']),
-        'paid_amount': MonetaryField(label='Paid', currency='IDR', default=0),
+        'paid_amount': MonetaryField(label='Sudah Dibayar', currency='IDR', default=0),
         'payment_status': SelectionField(
-            label='Payment Status',
-            options=[('unpaid', 'Unpaid'), ('partial', 'Partial'), ('paid', 'Paid')],
+            label='Status Pembayaran',
+            options=[('unpaid', 'Belum Dibayar'), ('partial', 'Sebagian'), ('paid', 'Lunas')],
             compute='_compute_payment_summary',
             depends=['grand_total', 'paid_amount'],
             default='unpaid',
@@ -114,7 +114,7 @@ class VendorBill(BaseModel):
         ),
 
         'bill_lines': One2ManyField(
-            label='Bill Lines',
+            label='Baris Tagihan',
             relation='accounting.vendor_bill_line',
             inverse_field='bill_id',
         ),
@@ -132,14 +132,14 @@ class VendorBill(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['reference', 'project', 'project_line', 'purchase_order', 'vendor', 'code', 'address',
                                'bill_date', 'due_date', 'status', 'sequence_id',
                                'payment_status'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['notes'],
                 },
             ],
@@ -156,7 +156,7 @@ class VendorBill(BaseModel):
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Bill Lines',
+                'label': 'Baris Tagihan',
                 'relation': 'bill_lines',
                 'summary': {
                     'columns': {'qty': 'sum', 'discount_percentage': 'avg', 'discount_amount': 'sum',
@@ -167,7 +167,7 @@ class VendorBill(BaseModel):
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],
                     'child_details': {
-                        'label': 'Payments',
+                        'label': 'Pembayaran',
                         'data_key': '_payment_details',
                         'model': 'accounting.vendor_payment',
                     },
@@ -178,8 +178,8 @@ class VendorBill(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Vendor Bill'
-        verbose_name_plural = 'Vendor Bills'
+        verbose_name = 'Tagihan'
+        verbose_name_plural = 'Tagihan'
 
     @classmethod
     def get_model_config(cls):
@@ -339,7 +339,7 @@ class VendorBill(BaseModel):
             p = line.payment_id
             data['_payment_details'].append({
                 'id': p.pk,
-                'label': 'Payment',
+                'label': 'Pembayaran',
                 'ref': p.reference or f'#{p.pk}',
                 'amount': float(line.paid_amount or 0),
             })

@@ -53,7 +53,7 @@ class CustomerReceipt(BaseModel):
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen penerimaan',
         ),
-        'reference': CharField(label='Reference', required=True, editable_statuses=[], placeholder='Automatic'),
+        'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'customer': Many2OneField(
             label='Customer',
             relation='sales.customer',
@@ -71,29 +71,29 @@ class CustomerReceipt(BaseModel):
         ),
         'address': TextField(label='Alamat Customer', virtual=True),
         'code': TextField(label='Kode Customer', virtual=True),
-        'payment_date': DateField(label='Payment Date', required=True),
+        'payment_date': DateField(label='Tanggal Penerimaan', required=True),
         'payment_method': Many2OneField(
-            label='Payment Method',
+            label='Metode Pembayaran',
             relation='accounting.payment_method',
             required=True,
         ),
-        'payment_ref': CharField(label='Payment Reference', placeholder='No. Cek / Transfer / dll'),
+        'payment_ref': CharField(label='Referensi Pembayaran', placeholder='No. Cek / Transfer / dll'),
         'currency': CharField(label='Currency', default='IDR'),
         'total_amount': MonetaryField(
-            label='Total Receipt', currency='IDR',
+            label='Total Penerimaan', currency='IDR',
             compute='_compute_total_receipt',
         ),
         'total_allocation': MonetaryField(
-            label='Total Allocation', currency='IDR',
+            label='Total Alokasi', currency='IDR',
             compute='_compute_summary',
         ),
         'remaining_amount': MonetaryField(
-            label='Remaining Amount', currency='IDR',
+            label='Sisa Alokasi', currency='IDR',
             compute='_compute_summary',
         ),
 
         'receipt_lines': One2ManyField(
-            label='Receipt Lines',
+            label='Baris Penerimaan',
             relation='accounting.customer_receipt_line',
             inverse_field='receipt_id',
         ),
@@ -111,7 +111,7 @@ class CustomerReceipt(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['reference', 'customer', 'code', 'address',
                                'payment_date', 'payment_method', 'payment_ref', 'currency',
                                'total_amount', 'status', 'sequence_id'],
@@ -128,7 +128,7 @@ class CustomerReceipt(BaseModel):
         'notebook': [
             {
                 'key': 'allocations',
-                'label': 'Receipt Allocations',
+                'label': 'Alokasi Penerimaan',
                 'relation': 'receipt_lines',
                 'add_line_guard': ['customer'],
                 'columns': [{'name': 'invoice_id', 'display_field': 'reference'}, 'customer_name', 'due_amount', 'received_amount'],
@@ -144,8 +144,8 @@ class CustomerReceipt(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Customer Receipt'
-        verbose_name_plural = 'Customer Receipts'
+        verbose_name = 'Penerimaan'
+        verbose_name_plural = 'Penerimaan'
 
     # ── Config ──
 

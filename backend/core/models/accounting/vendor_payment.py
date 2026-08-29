@@ -53,7 +53,7 @@ class VendorPayment(BaseModel):
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen pembayaran',
         ),
-        'reference': CharField(label='Reference', required=True, editable_statuses=[], placeholder='Automatic'),
+        'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'vendor': Many2OneField(
             label='Vendor',
             relation='purchase.vendor',
@@ -66,13 +66,13 @@ class VendorPayment(BaseModel):
         ),
         'address': TextField(label='Alamat Vendor', virtual=True),
         'code': TextField(label='Kode Vendor', virtual=True),
-        'payment_date': DateField(label='Payment Date', required=True),
+        'payment_date': DateField(label='Tanggal Pembayaran', required=True),
         'payment_method': Many2OneField(
-            label='Payment Method',
+            label='Metode Pembayaran',
             relation='accounting.payment_method',
             required=True,
         ),
-        'payment_ref': CharField(label='Payment Reference', placeholder='No. Cek / Transfer / dll'),
+        'payment_ref': CharField(label='Referensi Pembayaran', placeholder='No. Cek / Transfer / dll'),
         'quick_purchase': Many2OneField(
             label='Quick Purchase',
             relation='purchase.quick_purchase',
@@ -80,20 +80,20 @@ class VendorPayment(BaseModel):
         ),
         'currency': CharField(label='Currency', default='IDR'),
         'total_amount': MonetaryField(
-            label='Total Payment', currency='IDR',
+            label='Total Pembayaran', currency='IDR',
             compute='_compute_total_payment',
         ),
         'total_allocation': MonetaryField(
-            label='Total Allocation', currency='IDR',
+            label='Total Alokasi', currency='IDR',
             compute='_compute_summary',
         ),
         'remaining_amount': MonetaryField(
-            label='Remaining Amount', currency='IDR',
+            label='Sisa Alokasi', currency='IDR',
             compute='_compute_summary',
         ),
 
         'payment_lines': One2ManyField(
-            label='Payment Lines',
+            label='Baris Pembayaran',
             relation='accounting.vendor_payment_line',
             inverse_field='payment_id',
         ),
@@ -111,7 +111,7 @@ class VendorPayment(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['reference', 'vendor', 'code', 'address',
                                'payment_date', 'payment_method', 'payment_ref', 'currency',
                                'total_amount', 'status', 'sequence_id'],
@@ -128,7 +128,7 @@ class VendorPayment(BaseModel):
         'notebook': [
             {
                 'key': 'allocations',
-                'label': 'Payment Allocations',
+                'label': 'Alokasi Pembayaran',
                 'relation': 'payment_lines',
                 'add_line_guard': ['vendor'],
                 'columns': [{'name': 'bill_id', 'display_field': 'reference'}, 'vendor_name', 'due_amount', 'paid_amount'],
@@ -144,8 +144,8 @@ class VendorPayment(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Vendor Payment'
-        verbose_name_plural = 'Vendor Payments'
+        verbose_name = 'Pembayaran'
+        verbose_name_plural = 'Pembayaran'
 
     # ── Config ──
 

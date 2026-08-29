@@ -49,11 +49,11 @@ class Expense(BaseModel):
             relation='settings.sequence',
             help_text='Pilih format nomor dokumen input biaya',
         ),
-        'reference': CharField(label='Reference', required=True, editable_statuses=[], placeholder='Automatic'),
+        'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'date': DateField(label='Tanggal', required=True),
         'description': TextField(label='Keterangan'),
         'payment_method': Many2OneField(
-            label='Payment Method',
+            label='Metode Pembayaran',
             relation='accounting.payment_method',
             required=False,
         ),
@@ -64,13 +64,13 @@ class Expense(BaseModel):
             help_text='Milestone terkait (otomatis dari wizard Input Expenses)',
         ),
         'milestone_line': Many2OneField(
-            label='Milestone Line',
+            label='Baris Milestone',
             relation='project.milestone_line',
             required=False,
             help_text='Sub-line milestone terkait (dari wizard Input Expenses)',
         ),
         'expense_lines': One2ManyField(
-            label='Expense Lines',
+            label='Baris Biaya',
             relation='accounting.expense_line',
             inverse_field='expense_id',
         ),
@@ -87,7 +87,7 @@ class Expense(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['reference', 'sequence_id', 'date', 'payment_method', 'description'],
                 },
             ],
@@ -100,7 +100,7 @@ class Expense(BaseModel):
         'notebook': [
             {
                 'key': 'lines',
-                'label': 'Expense Lines',
+                'label': 'Baris Biaya',
                 'relation': 'expense_lines',
                 'columns': ['description', 'amount', 'account'],
             },
@@ -135,7 +135,7 @@ class Expense(BaseModel):
             raise ValueError('Silakan pilih Sequence terlebih dahulu.')
 
         if not self.pk:
-            raise ValueError('Record belum disimpan.')
+            raise ValueError('Data belum disimpan.')
         fd = self._field_descriptors.get('expense_lines')
         if fd:
             child_model = ErpModelBase._model_registry.get(fd.relation)
@@ -144,12 +144,12 @@ class Expense(BaseModel):
                     **{fd.inverse_field: self.pk, 'is_deleted': False}
                 ).count()
                 if count == 0:
-                    raise ValueError('Minimal harus ada 1 Expense Line sebelum confirm.')
+                    raise ValueError('Minimal harus ada 1 Baris Biaya sebelum konfirmasi.')
 
     def _guard_post(self):
         """Saat POST: semua expense line WAJIB punya account (COA)."""
         if not self.pk:
-            raise ValueError('Record belum disimpan.')
+            raise ValueError('Data belum disimpan.')
         fd = self._field_descriptors.get('expense_lines')
         if fd:
             child_model = ErpModelBase._model_registry.get(fd.relation)
@@ -158,10 +158,10 @@ class Expense(BaseModel):
                     **{fd.inverse_field: self.pk, 'is_deleted': False}
                 )
                 if lines.count() == 0:
-                    raise ValueError('Minimal harus ada 1 Expense Line sebelum POST.')
+                    raise ValueError('Minimal harus ada 1 Baris Biaya sebelum POST.')
                 missing = lines.filter(account__isnull=True)
                 if missing.exists():
-                    raise ValueError('Semua Expense Line wajib memilih Account sebelum POST.')
+                    raise ValueError('Semua Baris Biaya wajib memilih Akun sebelum POST.')
 
     # ── Effects ──
 

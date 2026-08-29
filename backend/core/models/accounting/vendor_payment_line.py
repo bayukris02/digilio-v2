@@ -13,12 +13,12 @@ class VendorPaymentLine(BaseModel):
 
     _fields = {
         'payment_id': Many2OneField(
-            label='Vendor Payment',
+            label='Pembayaran',
             relation='accounting.vendor_payment',
             required=True,
         ),
         'bill_id': Many2OneField(
-            label='Bill',
+            label='Tagihan',
             relation='accounting.vendor_bill',
             required=True,
             domain={'vendor': 'vendor', 'status': 'confirmed'},
@@ -30,13 +30,13 @@ class VendorPaymentLine(BaseModel):
             editable_statuses=[],
         ),
         'due_amount': MonetaryField(
-            label='Amount Due', currency='IDR',
+            label='Sisa Tagihan', currency='IDR',
             virtual=True,
             editable_statuses=[],
             compute='_compute_total',
         ),
         'paid_amount': MonetaryField(
-            label='Payment Allocation', currency='IDR',
+            label='Alokasi Pembayaran', currency='IDR',
             required=True,
         ),
     }
@@ -55,8 +55,8 @@ class VendorPaymentLine(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Vendor Payment Line'
-        verbose_name_plural = 'Vendor Payment Lines'
+        verbose_name = 'Baris Pembayaran'
+        verbose_name_plural = 'Baris Pembayaran'
 
     def _compute_total(self):
         """Populate vendor_name/due_amount dari bill & validasi paid_amount ≤ due_amount."""
@@ -69,7 +69,7 @@ class VendorPaymentLine(BaseModel):
         due = float(getattr(self, 'due_amount', 0) or 0)
         if paid > due > 0:
             raise ValueError(
-                f'Payment ({paid:,.0f}) melebihi Amount Due ({due:,.0f}).'
+                f'Pembayaran ({paid:,.0f}) melebihi Sisa Tagihan ({due:,.0f}).'
             )
 
     def to_record(self):

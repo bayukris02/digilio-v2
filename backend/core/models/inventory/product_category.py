@@ -7,8 +7,8 @@ class ProductCategory(BaseModel):
     _display_name = 'name'
 
     _fields = {
-        'name': CharField(label='Category Name', required=True),
-        'code': CharField(label='Category Code'),
+        'name': CharField(label='Nama Kategori', required=True),
+        'code': CharField(label='Kode Kategori'),
     }
 
     _list_view = {
@@ -21,7 +21,7 @@ class ProductCategory(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['name', 'code'],
                 },
             ],
@@ -30,8 +30,8 @@ class ProductCategory(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Category'
-        verbose_name_plural = 'Categories'
+        verbose_name = 'Kategori'
+        verbose_name_plural = 'Kategori'
 
     def __str__(self):
         return self.name or ''

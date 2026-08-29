@@ -97,8 +97,8 @@ const menuItems = [
         { key: '/inventory.stock_in', label: 'Terima Stock' },
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
-        { key: '/inventory.product', label: 'Product' },
-        { key: '/inventory.product_category', label: 'Product Category' },
+        { key: '/inventory.product', label: 'Produk' },
+        { key: '/inventory.product_category', label: 'Kategori Produk' },
         { key: '/inventory.uom', label: 'Satuan' },
         { key: '/inventory.warehouse', label: 'Warehouse' },
       ]},
