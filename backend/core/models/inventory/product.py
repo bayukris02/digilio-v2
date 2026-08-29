@@ -17,24 +17,34 @@ class Product(BaseModel):
         'category': Many2OneField(
             label='Kategori',
             relation='inventory.product_category',
+            required=True,
+        ),
+        'tipe_product': SelectionField(
+            label='Tipe Produk',
+            options=[('Stock', 'Stock'), ('Non Stock', 'Non Stock')],
+            default='Stock',
         ),
         'price': MonetaryField(label='Harga Jual', currency='IDR'),
         'cost': MonetaryField(label='Harga Beli', currency='IDR'),
-        'uom': CharField(label='Satuan', default='pcs'),
+        'uom': Many2OneField(
+            label='Satuan',
+            relation='inventory.uom',
+            required=True,
+        ),
         'weight': FloatField(label='Berat (kg)'),
         'is_active': BooleanField(label='Aktif', default=True),
     }
 
     _list_view = {
-        'columns': ['code', 'name', 'category', 'price', 'uom', 'is_active'],
-        'filters': ['category', 'is_active'],
+        'columns': ['code', 'name', 'category', 'tipe_product', 'price', 'uom', 'is_active'],
+        'filters': ['category', 'tipe_product', 'is_active'],
         'group_by': ['category'],
         'default_sort': ['name'],
     }
 
     _form_view = {
         'header': {
-            'fields': ['name', 'code', 'category', 'price', 'cost', 'uom', 'weight', 'is_active'],
+            'fields': ['name', 'code', 'category', 'tipe_product', 'price', 'cost', 'uom', 'weight', 'is_active'],
             'smart_buttons': [],
         },
         'notebook': [
