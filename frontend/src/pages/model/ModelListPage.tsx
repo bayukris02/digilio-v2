@@ -289,7 +289,7 @@ export default function ModelListPage({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={4} style={{ margin: 0 }}>{config.verbose_name_plural}</Title>
-        {!readOnly && (
+        {!readOnly && config.allow_create !== false && (
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -359,7 +359,7 @@ export default function ModelListPage({
                     });
                   },
                 },
-                ...(readOnly
+                ...(readOnly || config.allow_create === false
                   ? []
                   : [
                       {

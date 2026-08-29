@@ -284,6 +284,7 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
             'list_view': cls._list_view or {},
             'form_view': cls._form_view or {},
             'display_field': cls._display_name,
+            'allow_create': getattr(cls, '_allow_create', True),
         }
 
         # Include state machine config (frontend uses for auto-generating actions + status badge)

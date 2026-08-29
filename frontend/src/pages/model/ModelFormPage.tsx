@@ -2279,6 +2279,18 @@ export default function ModelFormPage({
     );
   }
 
+  // Model yang menonaktifkan create (_allow_create=false) — jangan tampilkan form kosong
+  if (isNew && config?.allow_create === false) {
+    return (
+      <Card style={{ margin: 24, textAlign: 'center', padding: 40 }}>
+        <Title level={4}>Tidak bisa membuat record baru</Title>
+        <Typography.Text type="secondary">
+          Data {config.verbose_name_plural.toLowerCase()} dibuat otomatis dari proses Input Penjualan.
+        </Typography.Text>
+      </Card>
+    );
+  }
+
   // ── Header fields = fields that go into the main card body ──
   const headerFieldKeys = new Set(
     config?.form_view?.header?.tabs

@@ -45,6 +45,8 @@ export interface ModelConfig {
     }[];
   } | null;
   list_view: ListViewConfig | null;
+  /** false = model menolak create (data dibuat otomatis dari proses lain) */
+  allow_create?: boolean;
 }
 
 export interface ModelInfo {

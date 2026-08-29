@@ -345,6 +345,13 @@ class ModelRecordView(APIView):
         if not model_cls:
             return Response({'error': f'Model "{model_name}" not found'}, status=404)
 
+        # Model yang menonaktifkan create (_allow_create=False) menolak POST
+        if not getattr(model_cls, '_allow_create', True):
+            return Response(
+                {'error': f'Pembuatan record {model_name} tidak diizinkan. Data dibuat otomatis dari proses lain.'},
+                status=403,
+            )
+
         data = request.data
         # Remove read-only base fields
         data.pop('id', None)
