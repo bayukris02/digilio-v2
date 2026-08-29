@@ -147,8 +147,8 @@ const menuItems = [
       { type: 'group', label: 'KAS/BANK', children: [
         { key: '/accounting.vendor_payment', label: 'Pembayaran' },
         { key: '/accounting.customer_receipt', label: 'Penerimaan' },
-        { key: '/accounting/transfer_kas', label: 'Transfer Kas/Bank' },
-        { key: '/accounting/deposit', label: 'Deposit' },
+        { key: '/accounting.transfer_cash_bank', label: 'Transfer Kas/Bank' },
+        { key: '/accounting.deposit', label: 'Deposit' },
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
         { key: '/accounting.chart_of_account', label: 'COA' },

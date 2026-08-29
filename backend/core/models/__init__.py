@@ -45,6 +45,8 @@ from core.models.accounting.customer_invoice import CustomerInvoice
 from core.models.accounting.customer_invoice_line import CustomerInvoiceLine
 from core.models.accounting.expense import Expense
 from core.models.accounting.expense_line import ExpenseLine
+from core.models.accounting.transfer_cash_bank import TransferCashBank
+from core.models.accounting.deposit import Deposit
 from core.models.project.project import Project
 from core.models.project.project_line import ProjectLine
 from core.models.project.unit import Unit
@@ -79,6 +81,7 @@ __all__ = [
     'VendorBill', 'VendorBillLine',
     'CustomerInvoice', 'CustomerInvoiceLine',
     'Expense', 'ExpenseLine',
+    'TransferCashBank', 'Deposit',
     'PurchaseRequest', 'PurchaseRequestLine',
     'QuickPurchase', 'QuickPurchaseLine',
     'QuickSales', 'QuickSalesLine',

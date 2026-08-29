@@ -105,8 +105,6 @@ export const router = createBrowserRouter([
       { path: 'accounting/neraca', element: <ComingSoon /> },
       { path: 'accounting/cashflow', element: <ComingSoon /> },
       // Accounting coming-soon routes
-      { path: 'accounting/transfer_kas', element: <ComingSoon /> },
-      { path: 'accounting/deposit', element: <ComingSoon /> },
       { path: 'accounting/asset', element: <ComingSoon /> },
       { path: 'accounting/cost_center', element: <ComingSoon /> },
       { path: 'accounting/neraca_saldo', element: <ComingSoon /> },
