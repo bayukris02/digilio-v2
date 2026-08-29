@@ -13,7 +13,7 @@ class ChartOfAccount(BaseModel):
     """Akun akuntansi — Chart of Account."""
 
     _model_name = 'accounting.chart_of_account'
-    _display_name = 'code'
+    _display_name = None  # fallback __str__ → '[kode] nama' (konsisten dgn kolom list & dropdown m2o)
 
     _fields = {
         'code': CharField(

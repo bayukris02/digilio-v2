@@ -15,12 +15,13 @@ class PaymentMethod(BaseModel):
         'name': CharField(label='Nama Metode', required=True),
         'code': CharField(label='Kode'),
         'account': Many2OneField(
-            label='Akun COA',
+            label='Akun Perkiraan',
             relation='accounting.chart_of_account',
+            required=True,
             help_text='Akun default untuk metode pembayaran ini',
         ),
         'description': TextField(label='Deskripsi'),
-        'is_active': BooleanField(label='Active', default=True),
+        'is_active': BooleanField(label='Aktif', default=True),
     }
 
     _list_view = {
@@ -34,12 +35,12 @@ class PaymentMethod(BaseModel):
             'tabs': [
                 {
                     'key': 'general',
-                    'label': 'General',
+                    'label': 'Umum',
                     'fields': ['name', 'code', 'account', 'is_active'],
                 },
                 {
                     'key': 'details',
-                    'label': 'Details',
+                    'label': 'Detail',
                     'fields': ['description'],
                 },
             ],
@@ -49,8 +50,8 @@ class PaymentMethod(BaseModel):
 
     class Meta(BaseModel.Meta):
         app_label = 'core'
-        verbose_name = 'Payment Method'
-        verbose_name_plural = 'Payment Methods'
+        verbose_name = 'Metode Pembayaran'
+        verbose_name_plural = 'Metode Pembayaran'
 
     def __str__(self):
         return self.name or ''
