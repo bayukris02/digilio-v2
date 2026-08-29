@@ -23,10 +23,6 @@ import {
   UnorderedListOutlined,
   FileAddOutlined,
   ProjectOutlined,
-  ToolOutlined,
-  WalletOutlined,
-  DatabaseOutlined,
-  BarChartOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
@@ -143,24 +139,24 @@ const menuItems = [
     label: 'Akunting',
     children: [
       { key: '/accounting/dashboard', label: 'Dashboard' },
-      { type: 'group', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><ToolOutlined /> OPERATION</span>, children: [
+      { type: 'group', label: 'OPERATION', children: [
         { key: '/accounting.vendor_bill', label: 'Tagihan' },
         { key: '/accounting.customer_invoice', label: 'Faktur' },
         { key: '/accounting.expense', label: 'Input Biaya' },
       ]},
-      { type: 'group', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><WalletOutlined /> KAS/BANK</span>, children: [
+      { type: 'group', label: 'KAS/BANK', children: [
         { key: '/accounting.vendor_payment', label: 'Pembayaran' },
         { key: '/accounting.customer_receipt', label: 'Penerimaan' },
         { key: '/accounting/transfer_kas', label: 'Transfer Kas/Bank' },
         { key: '/accounting/deposit', label: 'Deposit' },
       ]},
-      { type: 'group', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><DatabaseOutlined /> MASTER DATA</span>, children: [
+      { type: 'group', label: 'MASTER DATA', children: [
         { key: '/accounting.chart_of_account', label: 'COA' },
         { key: '/accounting.payment_method', label: 'Kas dan Bank' },
         { key: '/accounting/asset', label: 'Asset' },
         { key: '/accounting/cost_center', label: 'Cost Center' },
       ]},
-      { type: 'group', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><BarChartOutlined /> REPORT</span>, children: [
+      { type: 'group', label: 'REPORT', children: [
         { key: '/accounting/laba_rugi', label: 'Laba Rugi' },
         { key: '/accounting/neraca', label: 'Neraca' },
         { key: '/accounting/neraca_saldo', label: 'Neraca Saldo' },
@@ -267,28 +263,6 @@ export default function MainLayout() {
           margin-top: 4px;
         }
 
-        /* ── Accounting: section header ber-icon + offset dari item child ── */
-        .sidebar2-accounting .ant-menu-item-group-title {
-          padding-left: 26px !important;
-          padding-bottom: 5px !important;
-          margin-bottom: 6px !important;
-          font-size: 10px !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 5px !important;
-          border-top: none !important;
-          border-bottom: 1px solid rgba(255,255,255,0.06) !important;
-        }
-        .sidebar2-accounting .ant-menu-item-group {
-          border-bottom: none !important;
-          padding-bottom: 0 !important;
-          margin-bottom: 0 !important;
-        }
-        .sidebar2-accounting .ant-menu-item-group-title .anticon {
-          font-size: 11px !important;
-          color: rgba(255,255,255,0.5) !important;
-        }
-
         /* ── Scrollbar minimalis ── */
         .sidebar-scroll::-webkit-scrollbar {
           width: 3px;
@@ -380,7 +354,7 @@ export default function MainLayout() {
             {selectedModuleLabel}
           </div>
           <Menu
-            className={`sidebar2-menu${currentModule === 'accounting' ? ' sidebar2-accounting' : ''}`}
+            className="sidebar2-menu"
             theme="dark"
             mode="inline"
             selectedKeys={[location.pathname]}
