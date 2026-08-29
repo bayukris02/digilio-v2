@@ -1959,8 +1959,12 @@ export default function ModelFormPage({
           },
         };
       }
-      // Selection: colored Tag badge (only when colors defined)
+      // Selection: colored Tag badge (only when colors defined) + dropdown editor
       if (field.type === 'selection') {
+        col.cellEditor = 'agSelectCellEditor';
+        col.cellEditorParams = {
+          values: (field.options || []).map((o: { value: string }) => o.value),
+        };
         const fieldColors = (childCfg.fields[key] as Record<string, unknown>)?.colors as Record<string, string> | undefined;
         if (fieldColors) {
           col.cellRenderer = (params: ICellRendererParams) => {

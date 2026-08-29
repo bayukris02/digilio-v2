@@ -91,7 +91,7 @@ class ProjectUnitDetail(BaseModel):
                 'key': 'progress_lines',
                 'label': 'Progress',
                 'relation': 'progress_lines',
-                'columns': ['name', 'progress', 'date'],
+                'columns': ['name', 'progress', 'date', 'date_done', 'selisih', 'budget', 'realisasi_budget', 'selisih_budget', 'mandor', 'catatan'],
             },
         ],
     }
