@@ -402,7 +402,7 @@ class ModelRecordView(APIView):
                                 line.pop(key, None)
                             # Remove virtual fields (frontend-only, no DB column)
                             _vfd = child_model._field_descriptors.get(key)
-                            if _vfd and getattr(_vfd, 'virtual', False):
+                            if _vfd and (getattr(_vfd, 'virtual', False) or getattr(_vfd, 'field_type', None) == 'one2many'):
                                 line.pop(key, None)
                         line.pop('id', None)
                         line.pop('_key', None)  # frontend temp key
@@ -585,7 +585,7 @@ class ModelRecordView(APIView):
                                     line.pop(key, None)
                                 # Remove virtual fields (frontend-only, no DB column)
                                 _vfd = child_model._field_descriptors.get(key)
-                                if _vfd and getattr(_vfd, 'virtual', False):
+                                if _vfd and (getattr(_vfd, 'virtual', False) or getattr(_vfd, 'field_type', None) == 'one2many'):
                                     line.pop(key, None)
                             line.pop('_key', None)
                             line.pop('created_at', None)

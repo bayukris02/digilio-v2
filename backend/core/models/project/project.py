@@ -90,7 +90,22 @@ class Project(BaseModel):
                     'icon': 'SendOutlined',
                     'color': 'primary',
                     'action': 'input_sales',
-                    'goto_tab': 'units',
+                    'wizard': {
+                        'title': 'Input Penjualan',
+                        'modes': [
+                            {
+                                'value': 'create',
+                                'label': '✅ Buat Penjualan',
+                                'icon': 'CheckCircleOutlined',
+                                'inputs': [
+                                    {'key': 'customer', 'label': 'Nama Customer', 'type': 'many2one', 'relation': 'sales.customer'},
+                                    {'key': 'unit', 'label': 'Unit', 'type': 'many2one', 'relation': 'project.unit'},
+                                    {'key': 'harga_jual', 'label': 'Harga Jual (Rp)', 'type': 'number', 'default': 0},
+                                    {'key': 'tanggal', 'label': 'Tanggal', 'type': 'date'},
+                                ],
+                            },
+                        ],
+                    },
                 },
             ],
             'smart_buttons': [],
@@ -445,33 +460,83 @@ class Project(BaseModel):
         return {'_action_type': 'table', 'rows': rows}
 
     def _action_input_sales(self, data=None):
-        """Input penjualan unit — set qty_sold (sold_percentage recompute otomatis)."""
+        """Input Penjualan — buat sales.order dari wizard, lalu line baru di Detail Unit.
+
+        Wizard input: customer, unit, harga_jual, tanggal.
+        Menghasilkan:
+          - sales.order draft (customer + 1 order line, qty=1, price=harga_jual)
+          - project.project_unit_detail baru (name=customer, unit_id=unit,
+            selling_price=harga_jual) → line baru di tab Detail Unit.
+        """
+        from django.db import transaction
+        from datetime import date
         from core.model_meta import ErpModelBase
+        from core.models.sales.sales_order import SalesOrder
+        from core.models.sales.sales_order_line import SalesOrderLine
+        from core.models.settings.sequence import Sequence
 
-        selected_lines_raw = (data or {}).get('selected_lines')
-        if not selected_lines_raw or not isinstance(selected_lines_raw, list):
-            return {'error': 'Tidak ada baris yang dipilih.'}
+        customer_id = (data or {}).get('customer')
+        unit_id = (data or {}).get('unit')
+        harga_jual = float((data or {}).get('harga_jual', 0) or 0)
+        tanggal = (data or {}).get('tanggal') or date.today().isoformat()
 
-        fd = self._field_descriptors.get('units')
-        if not fd:
-            return {'error': 'Konfigurasi units tidak ditemukan.'}
-        unit_model = ErpModelBase._model_registry.get(fd.relation)
-        if not unit_model:
-            return {'error': 'Model project.project_unit tidak ditemukan.'}
+        if not customer_id:
+            return {'error': 'Nama Customer wajib diisi.'}
+        if not unit_id:
+            return {'error': 'Unit wajib diisi.'}
+        if harga_jual <= 0:
+            return {'error': 'Harga Jual harus lebih dari 0.'}
 
-        updated = 0
-        for item in selected_lines_raw:
-            lid = item.get('id')
-            if lid is None:
-                continue
-            value = float(item.get('qty', 0) or 0)
-            unit = unit_model.objects.filter(
-                pk=int(lid), project_id=self.pk, is_deleted=False
-            ).first()
-            if not unit:
-                continue
-            unit.qty_sold = value
-            unit.save()  # _run_compute → sold_percentage
-            updated += 1
+        customer_model = ErpModelBase._model_registry.get('sales.customer')
+        customer = customer_model.objects.filter(pk=int(customer_id), is_deleted=False).first() if customer_model else None
+        if not customer:
+            return {'error': 'Customer tidak ditemukan.'}
 
-        return {'message': f'Penjualan diinput untuk {updated} unit.'}
+        unit_model = ErpModelBase._model_registry.get('project.unit')
+        unit = unit_model.objects.filter(pk=int(unit_id), is_deleted=False).first() if unit_model else None
+        if not unit:
+            return {'error': 'Unit tidak ditemukan.'}
+
+        # Product mapping wajib — dipakai untuk line SO
+        product = getattr(unit, 'product', None)
+        if not product:
+            return {'error': f'Unit "{unit}" belum dipetakan ke Product di master Unit.'}
+
+        # Inject sequence aktif (pola sama seperti _action_buat_tagihan)
+        active_seq = Sequence.objects.filter(
+            model_ref='sales.order', active=True, is_deleted=False
+        ).first()
+
+        with transaction.atomic():
+            so = SalesOrder.objects.create(
+                customer=customer,
+                sequence_id=active_seq,
+                status='draft',
+                order_date=tanggal,
+            )
+            SalesOrderLine.objects.create(
+                order_id=so,
+                product=product,
+                name=str(unit),
+                qty=1,
+                price=harga_jual,
+            )
+            # Compute summary (subtotal/grand_total)
+            so._compute_summary()
+            so.save()
+
+            # Line baru di Detail Unit (tab unit_details)
+            from core.models.project.project_unit_detail import ProjectUnitDetail
+            ProjectUnitDetail.objects.create(
+                project_id=self,
+                name=str(customer),
+                unit_id=unit,
+                selling_price=harga_jual,
+            )
+
+        return {
+            '_action_type': 'open_record',
+            'model': 'sales.order',
+            'record_id': so.pk,
+            'message': f'Sales Order dibuat: {so.reference or f"#{so.pk}"} — line baru di Detail Unit.',
+        }
