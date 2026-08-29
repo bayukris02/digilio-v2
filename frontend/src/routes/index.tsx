@@ -92,12 +92,7 @@ export const router = createBrowserRouter([
       // Project Update = menu alias → konten model project.project (URL tetap /project/progress, read-only)
       { path: 'project/progress', element: <ModelListPage modelName="project.project" basePath="/project/progress" readOnly /> },
       { path: 'project/progress/:recordId', element: <ModelFormPage modelName="project.project" basePath="/project/progress" readOnly /> },
-      // Update Unit = menu alias → konten model project.project_unit_detail (read-only, data dari Input Penjualan)
-      { path: 'project/unit_update', element: <ModelListPage modelName="project.project_unit_detail" basePath="/project/unit_update" readOnly /> },
-      { path: 'project/unit_update/:recordId', element: <ModelFormPage modelName="project.project_unit_detail" basePath="/project/unit_update" readOnly /> },
-      // URL model lama juga di-paksa read-only (blokir CRUD lewat route generik)
-      { path: 'project.project_unit_detail', element: <ModelListPage modelName="project.project_unit_detail" readOnly /> },
-      { path: 'project.project_unit_detail/:recordId', element: <ModelFormPage modelName="project.project_unit_detail" readOnly /> },
+      // Update Unit = konsep direct model → route generik :modelName (CRUD seperti biasa)
       { path: 'project/budgeting', element: <ComingSoon /> },
       { path: 'project/pivot', element: <ComingSoon /> },
       { path: 'project/pnl', element: <ComingSoon /> },

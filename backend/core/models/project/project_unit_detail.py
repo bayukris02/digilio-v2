@@ -16,7 +16,6 @@ class ProjectUnitDetail(BaseModel):
             label='Project',
             relation='project.project',
             required=True,
-            editable_statuses=[],
         ),
         'unit_id': Many2OneField(
             label='Tipe Unit',
@@ -24,19 +23,16 @@ class ProjectUnitDetail(BaseModel):
             required=True,
             allow_duplicate=True,
             help_text='Pilih tipe unit dari master Unit',
-            editable_statuses=[],
         ),
         'customer': Many2OneField(
             label='Nama Customer',
             relation='sales.customer',
             required=True,
-            editable_statuses=[],
             help_text='Customer pembeli unit ini (dari master Customer)',
         ),
         'selling_price': MonetaryField(
             label='Harga Jual',
             currency='IDR',
-            editable_statuses=[],
         ),
         'est_cost': MonetaryField(
             label='Est. Biaya Konstruksi',
@@ -47,7 +43,6 @@ class ProjectUnitDetail(BaseModel):
             currency='IDR',
             compute='_compute_margin',
             depends=['selling_price', 'est_cost'],
-            editable_statuses=[],
         ),
         'invoices': One2ManyField(
             label='Faktur',
