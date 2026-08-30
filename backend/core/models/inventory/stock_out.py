@@ -39,23 +39,19 @@ class StockOut(BaseModel):
         'source_warehouse': Many2OneField(
             label='Gudang Asal',
             relation='inventory.warehouse',
-            required=True,
         ),
         'source_location': Many2OneField(
             label='Lokasi Asal',
             relation='inventory.warehouse_location',
-            required=True,
             domain={'warehouse_id': 'source_warehouse'},
         ),
         'destination_warehouse': Many2OneField(
             label='Gudang Tujuan',
             relation='inventory.warehouse',
-            required=True,
         ),
         'destination_location': Many2OneField(
             label='Lokasi Tujuan',
             relation='inventory.warehouse_location',
-            required=True,
             domain={'warehouse_id': 'destination_warehouse'},
         ),
         'transfer_date': DateField(label='Tanggal Transfer'),
@@ -125,6 +121,16 @@ class StockOut(BaseModel):
     def _guard_confirm(self):
         if not self.pk:
             raise ValueError('Record belum disimpan.')
+        if not self.source_location_id:
+            raise ValueError('Silakan pilih Lokasi Asal terlebih dahulu.')
+        if not self.destination_location_id:
+            raise ValueError('Silakan pilih Lokasi Tujuan terlebih dahulu.')
+        if (self.source_warehouse_id and self.source_location
+                and self.source_location.warehouse_id_id != self.source_warehouse_id):
+            raise ValueError('Lokasi Asal tidak sesuai dengan Gudang Asal yang dipilih.')
+        if (self.destination_warehouse_id and self.destination_location
+                and self.destination_location.warehouse_id_id != self.destination_warehouse_id):
+            raise ValueError('Lokasi Tujuan tidak sesuai dengan Gudang Tujuan yang dipilih.')
         fd = self._field_descriptors.get('out_lines')
         if fd:
             child_model = ErpModelBase._model_registry.get(fd.relation)
@@ -134,3 +140,56 @@ class StockOut(BaseModel):
                 ).count()
                 if count == 0:
                     raise ValueError('Minimal harus ada 1 Baris Transfer sebelum konfirmasi.')
+        # Cek stok minus di Lokasi Asal sebelum transfer keluar
+        from core.models.inventory.stock_out_line import StockOutLine
+        lines = []
+        for line in StockOutLine.objects.filter(out_id=self.pk, is_deleted=False):
+            if line.product_id and line.transfer_qty:
+                lines.append({
+                    'product_id': line.product_id,
+                    'location_id': self.source_location_id,
+                    'quantity': -float(line.transfer_qty),
+                })
+        from core.stock_engine import StockEngine
+        warnings = StockEngine.check_negative(lines)
+        confirmed = (getattr(self, '_action_request_data', {}) or {}).get('confirmed')
+        if warnings and not confirmed:
+            detail = '\n'.join(
+                f"• {w['product_name']} @ {w['location_name']}: tersedia {w['available']:g}, "
+                f"dibutuhkan {w['required']:g} (minus {w['deficit']:g})"
+                for w in warnings
+            )
+            return {
+                '_action_type': 'confirm',
+                'confirm_message': f'Stok tidak mencukupi untuk transfer keluar ini:\n{detail}\n\n'
+                                   f'Lanjutkan? Stok akan menjadi minus.',
+            }
+
+    def _effect_confirm(self):
+        """Posting stok keluar (−qty) dari Lokasi Asal ke stock ledger."""
+        from core.stock_engine import StockEngine
+        from core.models.inventory.stock_out_line import StockOutLine
+        lines = []
+        for line in StockOutLine.objects.filter(out_id=self.pk, is_deleted=False):
+            if line.product_id and line.transfer_qty:
+                lines.append({
+                    'product_id': line.product_id,
+                    'location_id': self.source_location_id,
+                    'quantity': -float(line.transfer_qty),
+                    'description': line.name,
+                    'source_line_id': line.pk,
+                })
+        StockEngine.post(
+            document={
+                'model': 'inventory.stock_out',
+                'id': self.pk,
+                'reference': self.reference,
+                'date': self.transfer_date,
+            },
+            lines=lines,
+        )
+
+    def _effect_cancel(self):
+        """Batalkan dampak stok — soft-delete row ledger (history tetap di DB)."""
+        from core.stock_engine import StockEngine
+        StockEngine.delete(document={'model': 'inventory.stock_out', 'id': self.pk})
