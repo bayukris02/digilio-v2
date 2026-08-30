@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate, useSearchParams, useLocation, useBlocker } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Typography, Card, Row, Col, Form, Button, Space, Spin,
@@ -21,6 +21,7 @@ import QuickViewModal from '../../components/QuickViewModal';
 import GenericWizardModal from '../../components/GenericWizardModal';
 import ProgressBar from '../../components/ProgressBar';
 import { SmartButton, renderField, Many2OneCellEditor, M2O_PAGE_SIZE } from './formControls';
+import { useUnsavedChangesGuard } from './useUnsavedChangesGuard';
 import { AgGridReact } from 'ag-grid-react';
 import type { ColDef, ICellRendererParams, CellValueChangedEvent } from 'ag-grid-community';
 import { AllCommunityModule, ModuleRegistry, themeBalham } from 'ag-grid-community';
@@ -111,52 +112,14 @@ export default function ModelFormPage({
   const prevFieldValuesRef = useRef<Record<string, unknown>>({});
   const isRevertingRef = useRef(false);
 
-  // ── Save status tracking ──
-  // Snapshot mencakup form values DAN line items notebook — perubahan di
-  // notebook (tambah/hapus/edit baris, drag) juga dihitung unsaved.
-  const lastSnapshotRef = useRef<string>('');         // JSON {form, lines} saat terakhir save
-  const [dirtyFlag, setDirtyFlag] = useState(false);
-
-  const makeSnapshot = useCallback(
-    (formVals: Record<string, unknown>, lines: Record<string, Record<string, unknown>[]>) =>
-      JSON.stringify({ form: formVals, lines }),
-    [],
-  );
-
-  // Helper: true kalau form/lineItems berbeda dari snapshot terakhir
-  const computeDirty = useCallback(() => {
-    if (!lastSnapshotRef.current) return false;
-    return makeSnapshot(form.getFieldsValue(), lineItemsRef.current) !== lastSnapshotRef.current;
-  }, [form, makeSnapshot]);
-
-  // Helper: sync snapshot dari current form values (+ lineItems).
-  // overrideLines: untuk kasus load, state lineItems belum ter-update saat
-  // dipanggil (setState async), jadi kirim nilai yang persis diset.
-  const syncSaveSnapshot = useCallback((overrideLines?: Record<string, Record<string, unknown>[]>) => {
-    lastSnapshotRef.current = makeSnapshot(
-      form.getFieldsValue(),
-      overrideLines ?? lineItemsRef.current,
-    );
-    setDirtyFlag(false);
-  }, [form, makeSnapshot]);
-
-  // Perubahan lineItems (notebook) → hitung dirty
-  useEffect(() => {
-    if (!lastSnapshotRef.current) return;
-    setDirtyFlag(computeDirty());
-  }, [lineItems, computeDirty]);
-
-  // Re-sync snapshot SETELAH recordData berubah (load/action refresh).
-  // Snapshot yang diambil synchronously di handleAction/handleWizardConfirm
-  // terjadi SEBELUM React re-render — padahal re-render bisa mengubah
-  // set/urutan Form.Item yang ter-register (mis. isReadOnly aktif setelah
-  // konfirmasi, status baru, field rules) sehingga getFieldsValue() berikutnya
-  // berbeda dari snapshot → false-positive "Perubahan belum disimpan".
-  // Effect ini mengambil snapshot ulang saat field sudah ter-render.
-  useEffect(() => {
-    if (!recordData) return;
-    syncSaveSnapshot();
-  }, [recordData, syncSaveSnapshot]);
+  const {
+    dirtyFlag,
+    setDirtyFlag,
+    lastSnapshotRef,
+    computeDirty,
+    syncSaveSnapshot,
+    skipBlockerRef,
+  } = useUnsavedChangesGuard({ form, lineItems, recordData });
 
   /** Callback untuk Form.onValuesChange — deteksi dirty + field onchange */
   const handleFormChange = useCallback((changedValues?: Record<string, unknown>) => {
@@ -297,39 +260,6 @@ export default function ModelFormPage({
       });
     }
   }, [form, config, setLineItems, lineItems, setSummaryRevision, computeDirty, childConfigs]);
-
-  // ── Block navigation when there are unsaved changes ──
-  // useBlocker intercepts route changes (menu, breadcrumb, prev/next, discard)
-  // so we can warn the user before data could be lost.
-  // skipBlockerRef: bypass blocker utk navigasi SAH setelah save sukses
-  // (setDirtyFlag(false) async, jadi blocker harus cek ref, bukan state).
-  const skipBlockerRef = useRef(false);
-  const location = useLocation();
-  const blocker = useBlocker(
-    useCallback(
-      ({ currentLocation, nextLocation }) =>
-        !skipBlockerRef.current && dirtyFlag && currentLocation.pathname !== nextLocation.pathname,
-      [dirtyFlag],
-    ),
-  );
-
-  useEffect(() => {
-    if (blocker.state === 'blocked') {
-      Modal.confirm({
-        title: 'Perubahan Belum Disimpan',
-        content: 'Ada perubahan yang belum disimpan. Yakin ingin meninggalkan halaman ini?',
-        okText: 'Ya, Tinggalkan',
-        cancelText: 'Tetap di Sini',
-        onOk: () => blocker.proceed(),
-        onCancel: () => blocker.reset(),
-      });
-    }
-  }, [blocker]);
-
-  // Reset bypass setelah navigasi selesai (pathname berubah)
-  useEffect(() => {
-    skipBlockerRef.current = false;
-  }, [location.pathname]);
 
   // ── Fetch model config (once per model) ──
   useEffect(() => {
@@ -716,8 +646,6 @@ export default function ModelFormPage({
   }, [config, allFormValues]);
 
   // ── Ref to avoid stale closure in effects ──
-  const lineItemsRef = useRef(lineItems);
-  lineItemsRef.current = lineItems;
   // Record id yang jadi sumber lineItems saat ini — dipakai untuk reload
   // notebook saat pindah record via ◀▶ (tanpa ini, lineItems tidak ter-reset
   // karena guard `!lineItems[relation]` memblokir re-init).
