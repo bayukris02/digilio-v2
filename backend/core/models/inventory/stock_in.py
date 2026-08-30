@@ -121,6 +121,11 @@ class StockIn(BaseModel):
     def _guard_confirm(self):
         if not self.pk:
             raise ValueError('Record belum disimpan.')
+        if self.transfer_out_id:
+            from core.models.inventory.stock_out import StockOut
+            out = StockOut.objects.get(pk=self.transfer_out_id)
+            if out.status != 'confirmed':
+                raise ValueError('Proses Stock Keluar (OUT) terlebih dahulu sebelum Terima Stock (IN).')
         if not self.destination_location_id:
             raise ValueError('Silakan pilih Lokasi Tujuan terlebih dahulu.')
         if (self.source_warehouse_id and self.source_location
