@@ -10,9 +10,11 @@ class StockIn(BaseModel):
     _model_name = 'inventory.stock_in'
     _display_name = 'reference'
 
+    # ── State Machine (sama seperti Delivery Order / Penerimaan Barang) ──
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
-        'confirmed': {'allow_edit': False, 'allow_delete': False, 'label': 'Dikonfirmasi', 'color': 'processing'},
+        'waiting': {'allow_edit': False, 'allow_delete': False, 'label': 'Menunggu', 'color': 'processing'},
+        'done': {'allow_edit': False, 'allow_delete': False, 'label': 'Selesai', 'color': 'success'},
         'cancelled': {'allow_edit': False, 'allow_delete': False, 'label': 'Dibatalkan', 'color': 'error'},
     }
 
@@ -20,21 +22,37 @@ class StockIn(BaseModel):
         {
             'name': 'confirm',
             'from': ['draft'],
-            'to': 'confirmed',
+            'to': 'waiting',
             'label': 'Konfirmasi',
             'icon': 'CheckOutlined',
             'guard': '_guard_confirm',
+            'effect': '_effect_confirm',
+        },
+        {
+            'name': 'mark_done',
+            'from': ['waiting'],
+            'to': 'done',
+            'label': 'Tandai Selesai',
+            'icon': 'CheckCircleOutlined',
+            'guard': '_guard_mark_done',
+            'effect': '_effect_mark_done',
         },
         {
             'name': 'cancel',
-            'from': ['draft', 'confirmed'],
+            'from': ['draft', 'waiting', 'done'],
             'to': 'cancelled',
             'label': 'Batal',
             'icon': 'StopOutlined',
+            'effect': '_effect_cancel',
         },
     ]
 
     _fields = {
+        'sequence_id': Many2OneField(
+            label='Tipe Dokumen',
+            relation='settings.sequence',
+            help_text='Pilih format nomor dokumen (SIN, dll)',
+        ),
         'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'source_warehouse': Many2OneField(
             label='Gudang Asal',
@@ -55,6 +73,11 @@ class StockIn(BaseModel):
             domain={'warehouse_id': 'destination_warehouse'},
         ),
         'transfer_date': DateField(label='Tanggal Transfer'),
+        'request_ref': Many2OneField(
+            label='Nomor Request',
+            relation='inventory.stock_request',
+            required=False,
+        ),
         'transfer_out': Many2OneField(
             label='Transfer Keluar',
             relation='inventory.stock_out',
@@ -69,7 +92,7 @@ class StockIn(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'source_warehouse', 'destination_warehouse', 'transfer_date', 'transfer_out', 'status'],
+        'columns': ['reference', 'sequence_id', 'request_ref', 'source_warehouse', 'destination_warehouse', 'transfer_date', 'status'],
         'filters': ['status', 'source_warehouse', 'destination_warehouse'],
         'default_sort': ['-transfer_date'],
     }
@@ -80,8 +103,8 @@ class StockIn(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['status', 'reference', 'source_warehouse', 'source_location',
-                               'destination_warehouse', 'destination_location', 'transfer_date', 'transfer_out'],
+                    'fields': ['status', 'sequence_id', 'reference', 'source_warehouse', 'source_location',
+                               'destination_warehouse', 'destination_location', 'transfer_date', 'request_ref', 'transfer_out'],
                 },
                 {
                     'key': 'details',
@@ -91,7 +114,12 @@ class StockIn(BaseModel):
             ],
             'actions': [
                 {'label': 'Konfirmasi', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
-                {'label': 'Batal', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed']},
+                {'label': 'Tandai Selesai', 'color': 'green', 'action': 'mark_done', 'states': ['waiting']},
+                {'label': 'Batal', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'waiting', 'done']},
+            ],
+            'smart_buttons': [
+                {'label': 'Nomor Request', 'model': 'inventory.stock_request', 'icon': 'FileTextOutlined'},
+                {'label': 'Stock Keluar', 'model': 'inventory.stock_out', 'icon': 'SendOutlined'},
             ],
         },
         'notebook': [
@@ -118,13 +146,47 @@ class StockIn(BaseModel):
             self.reference = f'Draft#{self.pk}'
             self.save(update_fields=['reference'])
 
+    @classmethod
+    def get_model_config(cls):
+        """Override: inject default sequence_id dari active sequence."""
+        config = super().get_model_config()
+        from core.models.settings.sequence import Sequence
+        active_seq = Sequence.objects.filter(model_ref='inventory.stock_in', active=True, is_deleted=False).first()
+        if active_seq:
+            config['fields']['sequence_id']['default'] = active_seq.pk
+        return config
+
     def _guard_confirm(self):
+        if not self.pk:
+            raise ValueError('Record belum disimpan.')
+        if not self.sequence_id:
+            raise ValueError('Silakan pilih Tipe Dokumen (Sequence) terlebih dahulu.')
+        if not self.destination_location_id:
+            raise ValueError('Silakan pilih Lokasi Tujuan terlebih dahulu.')
+        if (self.source_warehouse_id and self.source_location
+                and self.source_location.warehouse_id_id != self.source_warehouse_id):
+            raise ValueError('Lokasi Asal tidak sesuai dengan Gudang Asal yang dipilih.')
+        if (self.destination_warehouse_id and self.destination_location
+                and self.destination_location.warehouse_id_id != self.destination_warehouse_id):
+            raise ValueError('Lokasi Tujuan tidak sesuai dengan Gudang Tujuan yang dipilih.')
+        fd = self._field_descriptors.get('in_lines')
+        if fd:
+            child_model = ErpModelBase._model_registry.get(fd.relation)
+            if child_model:
+                count = child_model.objects.filter(
+                    **{fd.inverse_field: self.pk, 'is_deleted': False}
+                ).count()
+                if count == 0:
+                    raise ValueError('Minimal harus ada 1 Baris Transfer sebelum konfirmasi.')
+
+    def _guard_mark_done(self):
+        """Rule: OUT harus selesai dulu; lokasi tujuan wajib sebelum stok masuk."""
         if not self.pk:
             raise ValueError('Record belum disimpan.')
         if self.transfer_out_id:
             from core.models.inventory.stock_out import StockOut
             out = StockOut.objects.get(pk=self.transfer_out_id)
-            if out.status != 'confirmed':
+            if out.status != 'done':
                 raise ValueError('Proses Stock Keluar (OUT) terlebih dahulu sebelum Terima Stock (IN).')
         if not self.destination_location_id:
             raise ValueError('Silakan pilih Lokasi Tujuan terlebih dahulu.')
@@ -145,9 +207,21 @@ class StockIn(BaseModel):
                     raise ValueError('Minimal harus ada 1 Baris Transfer sebelum konfirmasi.')
 
     def _effect_confirm(self):
+        """Generate reference dari sequence setelah confirm (draft → menunggu)."""
+        from core.sequence_engine import SequenceEngine
+        if (self.reference or '').startswith('Draft#'):
+            self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
+    def _effect_mark_done(self):
         """Posting stok masuk (+qty) ke Lokasi Tujuan di stock ledger."""
+        from core.sequence_engine import SequenceEngine
         from core.stock_engine import StockEngine
         from core.models.inventory.stock_in_line import StockInLine
+
+        # Nomor dokumen dari sequence (bukan Draft#) — untuk dokumen yg lahir dari request
+        if (self.reference or '').startswith('Draft#'):
+            self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
         lines = []
         for line in StockInLine.objects.filter(in_id=self.pk, is_deleted=False):
             if line.product_id and line.received_qty:

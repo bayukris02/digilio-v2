@@ -727,42 +727,10 @@ export default function ModelFormPage({
     }
 
     // ── Execute action ──
-    try {
-      const result = await modelApi.postAction(apiModelName, currentRecordId!, actionName);
-
-      // Handle error response
+    // Helper: terapkan response sukses (normalisasi + set form + toast)
+    const applyActionSuccess = (result: Record<string, unknown>) => {
       if (result.error) {
         message.error(result.error as string);
-        setActionLoading(null);
-        return;
-      }
-
-      if (result._action_type === 'print_preview' && result.url) {
-        try {
-          const token = localStorage.getItem('access_token');
-          const resp = await fetch(result.url as string, {
-            headers: { 'Authorization': `Bearer ${token}` },
-          });
-          setPrintPreviewHtml(await resp.text());
-          setPrintPdfUrl((result.pdf_url as string) ?? null);
-          return;
-        } catch (e) {
-          message.error('Failed to load print preview');
-        }
-      }
-      if (result._action_type === 'redirect' && result.url) {
-        window.open(result.url as string, '_blank');
-        return;
-      }
-      // Handle open_record: navigate to child record created by action
-      if (result._action_type === 'open_record') {
-        const targetModel = result.model as string;
-        const targetId = result.record_id as number;
-        if (targetModel && targetId) {
-          const urlName = apiToUrlName(targetModel);
-          navigate(`/${urlName}/${targetId}?from=${apiModelName}&fromId=${recordId}`);
-          if (result.message) message.success(result.message as string);
-        }
         return;
       }
       // Convert dates + normalize many2one before setting form values
@@ -802,6 +770,62 @@ export default function ModelFormPage({
       } else {
         message.success(`${actionName} completed`);
       }
+    };
+
+    try {
+      const result = await modelApi.postAction(apiModelName, currentRecordId!, actionName);
+
+      // Handle error response
+      if (result.error) {
+        message.error(result.error as string);
+        setActionLoading(null);
+        return;
+      }
+
+      if (result._action_type === 'print_preview' && result.url) {
+        try {
+          const token = localStorage.getItem('access_token');
+          const resp = await fetch(result.url as string, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          setPrintPreviewHtml(await resp.text());
+          setPrintPdfUrl((result.pdf_url as string) ?? null);
+          return;
+        } catch (e) {
+          message.error('Failed to load print preview');
+        }
+      }
+      if (result._action_type === 'redirect' && result.url) {
+        window.open(result.url as string, '_blank');
+        return;
+      }
+      // Handle open_record: navigate to child record created by action
+      if (result._action_type === 'open_record') {
+        const targetModel = result.model as string;
+        const targetId = result.record_id as number;
+        if (targetModel && targetId) {
+          const urlName = apiToUrlName(targetModel);
+          navigate(`/${urlName}/${targetId}?from=${apiModelName}&fromId=${recordId}`);
+          if (result.message) message.success(result.message as string);
+        }
+        return;
+      }
+      // Konfirmasi dialog: backend minta user pilih Lanjut/Tidak sebelum action dijalankan
+      if (result._action_type === 'confirm' && result.confirm_message) {
+        Modal.confirm({
+          title: 'Konfirmasi',
+          content: result.confirm_message as string,
+          okText: 'Lanjut',
+          cancelText: 'Tidak',
+          onOk: async () => {
+            const res2 = await modelApi.postAction(apiModelName, currentRecordId!, actionName, { confirmed: true });
+            applyActionSuccess(res2);
+          },
+        });
+        return;
+      }
+
+      applyActionSuccess(result);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || (err as Error)?.message || 'Action failed';
       message.error(msg);

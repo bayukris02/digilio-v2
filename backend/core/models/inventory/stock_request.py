@@ -24,6 +24,7 @@ class StockRequest(BaseModel):
             'label': 'Konfirmasi',
             'icon': 'CheckOutlined',
             'guard': '_guard_confirm',
+            'effect': '_effect_confirm',
         },
         {
             'name': 'cancel',
@@ -34,7 +35,32 @@ class StockRequest(BaseModel):
         },
     ]
 
+    # ── Document Flow (smart button: buka OUT/IN yang dibuat dari request ini) ──
+    _document_flow = {
+        'children': [
+            {
+                'model': 'inventory.stock_out',
+                'label': 'Stock Keluar',
+                'icon': 'SendOutlined',
+                'source_field_in_child': 'request_ref',
+                'constraints': {'max_per_parent': 1, 'unique_per_parent': True},
+            },
+            {
+                'model': 'inventory.stock_in',
+                'label': 'Terima Stock',
+                'icon': 'DownloadOutlined',
+                'source_field_in_child': 'request_ref',
+                'constraints': {'max_per_parent': 1, 'unique_per_parent': True},
+            },
+        ],
+    }
+
     _fields = {
+        'sequence_id': Many2OneField(
+            label='Tipe Dokumen',
+            relation='settings.sequence',
+            help_text='Pilih format nomor dokumen (SR, dll)',
+        ),
         'reference': CharField(label='Referensi', required=True, editable_statuses=[], placeholder='Otomatis'),
         'source_warehouse': Many2OneField(
             label='Gudang Asal',
@@ -69,7 +95,7 @@ class StockRequest(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'source_warehouse', 'destination_warehouse', 'deadline', 'status', 'requested_by'],
+        'columns': ['reference', 'sequence_id', 'source_warehouse', 'destination_warehouse', 'deadline', 'status', 'requested_by'],
         'filters': ['status', 'source_warehouse', 'destination_warehouse'],
         'default_sort': ['-deadline'],
     }
@@ -80,7 +106,7 @@ class StockRequest(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['status', 'reference', 'source_warehouse', 'source_location',
+                    'fields': ['status', 'sequence_id', 'reference', 'source_warehouse', 'source_location',
                                'destination_warehouse', 'destination_location', 'deadline', 'requested_by'],
                 },
                 {
@@ -92,6 +118,10 @@ class StockRequest(BaseModel):
             'actions': [
                 {'label': 'Konfirmasi', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {'label': 'Batal', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed']},
+            ],
+            'smart_buttons': [
+                {'label': 'Stock Keluar', 'model': 'inventory.stock_out', 'icon': 'SendOutlined'},
+                {'label': 'Terima Stock', 'model': 'inventory.stock_in', 'icon': 'DownloadOutlined'},
             ],
         },
         'notebook': [
@@ -112,6 +142,16 @@ class StockRequest(BaseModel):
         return self.reference or f'SR#{self.pk}'
 
     def save(self, *args, **kwargs):
+        # Validasi gudang & lokasi saat simpan (bukan saat konfirm)
+        if (self.source_warehouse_id and self.destination_warehouse_id
+                and self.source_warehouse_id == self.destination_warehouse_id):
+            raise ValueError('Gudang Asal dan Gudang Tujuan tidak boleh sama.')
+        if (self.source_warehouse_id and self.source_location
+                and self.source_location.warehouse_id_id != self.source_warehouse_id):
+            raise ValueError('Lokasi Asal tidak sesuai dengan Gudang Asal yang dipilih.')
+        if (self.destination_warehouse_id and self.destination_location
+                and self.destination_location.warehouse_id_id != self.destination_warehouse_id):
+            raise ValueError('Lokasi Tujuan tidak sesuai dengan Gudang Tujuan yang dipilih.')
         is_new = not self.pk
         if is_new:
             if not self.requested_by_id and hasattr(self, 'created_by_id') and self.created_by_id:
@@ -121,19 +161,25 @@ class StockRequest(BaseModel):
             self.reference = f'Draft#{self.pk}'
             self.save(update_fields=['reference'])
 
+    @classmethod
+    def get_model_config(cls):
+        """Override: inject default sequence_id dari active sequence."""
+        config = super().get_model_config()
+        from core.models.settings.sequence import Sequence
+        active_seq = Sequence.objects.filter(model_ref='inventory.stock_request', active=True, is_deleted=False).first()
+        if active_seq:
+            config['fields']['sequence_id']['default'] = active_seq.pk
+        return config
+
     def _guard_confirm(self):
         if not self.pk:
             raise ValueError('Record belum disimpan.')
+        if not self.sequence_id:
+            raise ValueError('Silakan pilih Tipe Dokumen (Sequence) terlebih dahulu.')
         if not self.source_location_id:
             raise ValueError('Silakan pilih Lokasi Asal terlebih dahulu.')
         if not self.destination_location_id:
             raise ValueError('Silakan pilih Lokasi Tujuan terlebih dahulu.')
-        if (self.source_warehouse_id and self.source_location
-                and self.source_location.warehouse_id_id != self.source_warehouse_id):
-            raise ValueError('Lokasi Asal tidak sesuai dengan Gudang Asal yang dipilih.')
-        if (self.destination_warehouse_id and self.destination_location
-                and self.destination_location.warehouse_id_id != self.destination_warehouse_id):
-            raise ValueError('Lokasi Tujuan tidak sesuai dengan Gudang Tujuan yang dipilih.')
         fd = self._field_descriptors.get('request_lines')
         if fd:
             child_model = ErpModelBase._model_registry.get(fd.relation)
@@ -150,15 +196,25 @@ class StockRequest(BaseModel):
         Request hanya input; proses OUT (kurangi stok Lokasi Asal) dan
         IN (tambah stok Lokasi Tujuan) dilakukan user terpisah.
         """
+        from core.sequence_engine import SequenceEngine
+        from core.models.settings.sequence import Sequence
         from core.models.inventory.stock_out import StockOut
         from core.models.inventory.stock_out_line import StockOutLine
         from core.models.inventory.stock_in import StockIn
         from core.models.inventory.stock_in_line import StockInLine
         from core.models.inventory.stock_request_line import StockRequestLine
 
+        # Nomor dokumen dari sequence (bukan Draft#)
+        if (self.reference or '').startswith('Draft#'):
+            self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
+
         # Idempotent: jangan buat duplikat jika OUT sudah pernah dibuat
         if StockOut.objects.filter(request_ref_id=self.pk, is_deleted=False).exists():
             return
+
+        # Pasang sequence default untuk OUT/IN (dipilih saat dokumen tsb dikonfirmasi)
+        out_seq = Sequence.objects.filter(model_ref='inventory.stock_out', active=True, is_deleted=False).first()
+        in_seq = Sequence.objects.filter(model_ref='inventory.stock_in', active=True, is_deleted=False).first()
 
         out = StockOut.objects.create(
             source_warehouse_id=self.source_warehouse_id,
@@ -167,6 +223,8 @@ class StockRequest(BaseModel):
             destination_location_id=self.destination_location_id,
             transfer_date=self.deadline,
             request_ref_id=self.pk,
+            sequence_id=out_seq,
+            status='waiting',
             notes=self.notes,
         )
         ins = StockIn.objects.create(
@@ -176,6 +234,9 @@ class StockRequest(BaseModel):
             destination_location_id=self.destination_location_id,
             transfer_date=self.deadline,
             transfer_out_id=out.pk,
+            request_ref_id=self.pk,
+            sequence_id=in_seq,
+            status='waiting',
             notes=self.notes,
         )
         for line in StockRequestLine.objects.filter(request_id=self.pk, is_deleted=False):

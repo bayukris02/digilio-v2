@@ -20,7 +20,7 @@ class StockInLine(BaseModel):
         ),
         'name': TextField(label='Deskripsi'),
         'uom': CharField(label='UOM'),
-        'received_qty': FloatField(label='Qty Diterima', default=0, editable_statuses=['draft']),
+        'received_qty': FloatField(label='Qty Diterima', default=0, editable_statuses=['draft', 'waiting']),
     }
 
     _list_view = {

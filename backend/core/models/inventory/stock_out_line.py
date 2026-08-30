@@ -20,7 +20,7 @@ class StockOutLine(BaseModel):
         ),
         'name': TextField(label='Deskripsi'),
         'uom': CharField(label='UOM'),
-        'transfer_qty': FloatField(label='Transfer Qty', default=0, editable_statuses=['draft']),
+        'transfer_qty': FloatField(label='Transfer Qty', default=0, editable_statuses=['draft', 'waiting']),
     }
 
     _list_view = {
