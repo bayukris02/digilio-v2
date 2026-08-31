@@ -53,6 +53,7 @@ from core.models.accounting.deposit import Deposit
 from core.models.project.project import Project
 from core.models.project.project_line import ProjectLine
 from core.models.project.unit import Unit
+from core.models.project.unit_progress import UnitProgress
 from core.models.project.dokumen import Dokumen
 from core.models.project.milestone import Milestone
 from core.models.project.milestone_line import MilestoneLine
@@ -92,6 +93,6 @@ __all__ = [
     'SalesPricelist', 'SalesPricelistLine',
     'OrderTemplate', 'OrderTemplateLine',
     'VendorPricelist',
-    'Project', 'ProjectLine', 'Unit', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory', 'ProjectUnit', 'ProjectUnitDetail',
+    'Project', 'ProjectLine', 'Unit', 'UnitProgress', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory', 'ProjectUnit', 'ProjectUnitDetail',
     'UnitDetailPayment', 'UnitDetailProgress',
 ]

@@ -545,6 +545,8 @@ class Project(BaseModel):
                 unit_id=unit,
                 selling_price=harga_jual,
             )
+            # Autofill Tahap dari master Tahapan Tipe Unit (Tab Progress & Budget)
+            du._sync_progress_from_unit()
 
             # Link invoice ke Detail Unit (relasi smart button dua arah)
             invoice.unit_detail = du

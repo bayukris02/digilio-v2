@@ -1,5 +1,5 @@
 from core.fields import (
-    CharField, TextField, MonetaryField,
+    CharField, TextField, MonetaryField, One2ManyField,
 )
 from core.model_meta import BaseModel
 
@@ -25,6 +25,11 @@ class Unit(BaseModel):
             label='Harga Jual Dasar',
             currency='IDR',
         ),
+        'unit_progress_lines': One2ManyField(
+            label='Tahapan',
+            relation='project.unit_progress',
+            inverse_field='unit_id',
+        ),
     }
 
     _list_view = {
@@ -48,6 +53,14 @@ class Unit(BaseModel):
             ],
             'smart_buttons': [],
         },
+        'notebook': [
+            {
+                'key': 'unit_progress_lines',
+                'label': 'Tahapan',
+                'relation': 'unit_progress_lines',
+                'columns': ['name'],
+            },
+        ],
     }
 
     class Meta(BaseModel.Meta):

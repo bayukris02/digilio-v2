@@ -113,5 +113,37 @@ class ProjectUnitDetail(BaseModel):
         est_cost = float(self.est_cost or 0)
         self.est_margin = round(selling_price - est_cost, 2)
 
+    def _sync_progress_from_unit(self):
+        """Generate baris Tahap (progress_lines) dari master Tahapan Tipe Unit.
+
+        Idempotent: hanya menambah tahapan yang belum ada (match by name) —
+        dipakai saat wizard Input Penjualan membuat Detail Unit baru, dan untuk
+        backfill data lama. Isi otomatis muncul di Tab Progress & Budget
+        (keduanya share relation progress_lines).
+        """
+        unit = self.unit_id
+        if not unit:
+            return 0
+        from core.models.project.unit_detail_progress import UnitDetailProgress
+        from core.models.project.unit_progress import UnitProgress
+        tahapan = UnitProgress.objects.filter(unit_id=unit, is_deleted=False)
+        existing = set(
+            UnitDetailProgress.objects.filter(
+                unit_detail_id=self, is_deleted=False
+            ).values_list('name', flat=True)
+        )
+        added = 0
+        for t in tahapan:
+            name = (t.name or '').strip()
+            if not name or name in existing:
+                continue
+            UnitDetailProgress.objects.create(
+                unit_detail_id=self,
+                name=name,
+            )
+            existing.add(name)
+            added += 1
+        return added
+
     def __str__(self):
         return str(self.customer) if self.customer else ''
