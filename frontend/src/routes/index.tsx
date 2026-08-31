@@ -99,7 +99,6 @@ export const router = createBrowserRouter([
       { path: 'project/progress', element: <ModelListPage modelName="project.project" basePath="/project/progress" readOnly /> },
       { path: 'project/progress/:recordId', element: <ModelFormPage modelName="project.project" basePath="/project/progress" readOnly /> },
       // Update Unit = konsep direct model → route generik :modelName (CRUD seperti biasa)
-      { path: 'project/budgeting', element: <ComingSoon /> },
       { path: 'project/pivot', element: <ComingSoon /> },
       { path: 'project/pnl', element: <ComingSoon /> },
       { path: 'project/cashflow', element: <ComingSoon /> },

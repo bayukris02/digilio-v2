@@ -118,7 +118,6 @@ const menuItems = [
       { type: 'group', label: 'OPERATION', children: [
         { key: '/project/progress', label: 'Update Proyek' },
         { key: '/project.project_unit_detail', label: 'Update Unit' },
-        { key: '/project/budgeting', label: 'Anggaran Proyek (RAB)' },
       ]},
       { type: 'group', label: 'MASTER DATA', children: [
         { key: '/project.project', label: 'Project' },
