@@ -35,6 +35,8 @@ from core.models.inventory.stock_out import StockOut
 from core.models.inventory.stock_out_line import StockOutLine
 from core.models.inventory.stock_in import StockIn
 from core.models.inventory.stock_in_line import StockInLine
+from core.models.inventory.stock_adjustment import StockAdjustment
+from core.models.inventory.stock_adjustment_line import StockAdjustmentLine
 from core.models.inventory.stock_ledger import StockLedger
 from core.models.inventory.uom import Uom
 from core.models.accounting.chart_of_account import ChartOfAccount
