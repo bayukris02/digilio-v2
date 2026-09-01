@@ -157,13 +157,20 @@ const menuItems = [
         { key: '/accounting/cost_center', label: 'Cost Center' },
       ]},
       { type: 'group', label: 'REPORT', children: [
-        { key: '/accounting/laba_rugi', label: 'Laba Rugi' },
-        { key: '/accounting/neraca', label: 'Neraca' },
-        { key: '/accounting/neraca_saldo', label: 'Neraca Saldo' },
-        { key: '/accounting/buku_besar', label: 'Buku Besar' },
-        { key: '/accounting/cashflow', label: 'Cashflow' },
-        { key: '/accounting/catatan_laporan', label: 'Catatan atas Laporan Keuangan' },
-        { key: '/accounting/perubahan_modal', label: 'Perubahan Modal' },
+        {
+          key: 'accounting.laporan_keuangan',
+          label: 'Laporan Keuangan',
+          popupClassName: 'sidebar2-menu',
+          children: [
+            { key: '/accounting/laba_rugi', label: 'Laba Rugi' },
+            { key: '/accounting/neraca', label: 'Neraca' },
+            { key: '/accounting/neraca_saldo', label: 'Neraca Saldo' },
+            { key: '/accounting/buku_besar', label: 'Buku Besar' },
+            { key: '/accounting/cashflow', label: 'Cashflow' },
+            { key: '/accounting/catatan_laporan', label: 'Catatan atas Laporan Keuangan' },
+            { key: '/accounting/perubahan_modal', label: 'Perubahan Modal' },
+          ],
+        },
       ]},
     ],
   },
@@ -194,6 +201,32 @@ function getModuleKey(pathname: string): string {
   return '/';
 }
 
+// Cari key submenu induk dari sebuah item menu (untuk highlight parent saat child aktif)
+function findParentKey(items: { key?: string; children?: any[] }[], targetKey: string): string | undefined {
+  for (const item of items) {
+    if (item?.children?.length) {
+      if (item.children.some((c) => c?.key === targetKey)) return item.key;
+      const nested = findParentKey(item.children, targetKey);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
+// Cari label child aktif di dalam sebuah submenu (untuk ditampilkan di bawah label submenu)
+function findChildLabel(items: any[], parentKey: string, targetKey: string): string | undefined {
+  for (const item of items) {
+    if (item?.key === parentKey) {
+      return item?.children?.find((c: any) => c?.key === targetKey)?.label;
+    }
+    if (item?.children?.length) {
+      const nested = findChildLabel(item.children, parentKey, targetKey);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
 export default function MainLayout() {
   const [sidebar1Collapsed, setSidebar1Collapsed] = useState(true);
   const navigate = useNavigate();
@@ -203,8 +236,39 @@ export default function MainLayout() {
 
   const currentModule = getModuleKey(location.pathname);
   const selectedItem = menuItems.find((m) => m.key === currentModule);
-  const subItems = selectedItem?.children || [];
+  const subItems: any[] = selectedItem?.children || [];
   const selectedModuleLabel = selectedItem?.label;
+  // Highlight parent submenu (mis. "Laporan Keuangan") saat salah satu child-nya aktif;
+  // child di dalam popup sengaja TIDAK di-select supaya popup terbuka bersih (belum ada yang aktif)
+  const parentKey = findParentKey(subItems, location.pathname);
+  const activeChildLabel = parentKey ? findChildLabel(subItems, parentKey, location.pathname) : undefined;
+  const selectedKeys = parentKey ? [parentKey] : [location.pathname];
+  // Label submenu diberi baris child aktif di bawahnya (mis. "Laporan Keuangan" + "• Cashflow");
+  // transform rekursif supaya submenu di dalam grup (REPORT) ikut diproses
+  const decorateSubmenu = (items: any[]): any[] =>
+    items.map((item: any) => {
+      if (item?.type === 'group' && item?.children?.length) {
+        return { ...item, children: decorateSubmenu(item.children) };
+      }
+      if (item?.children?.length) {
+        return {
+          ...item,
+          label: (
+            <div>
+              <div>{item.label}</div>
+              {item.key === parentKey && activeChildLabel && (
+                <div className="sidebar2-submenu-child">
+                  <span className="sidebar2-submenu-child-dot">•</span>
+                  {activeChildLabel}
+                </div>
+              )}
+            </div>
+          ),
+        };
+      }
+      return item;
+    });
+  const displayItems = decorateSubmenu(subItems);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -261,6 +325,54 @@ export default function MainLayout() {
         }
         .sidebar2-menu .ant-menu-item-group:first-of-type {
           margin-top: 4px;
+        }
+
+        /* ── Submenu (mis. "Laporan Keuangan") — tampil seperti item biasa + panah kanan ── */
+        .sidebar2-menu .ant-menu-submenu-title {
+          height: auto !important;
+          min-height: 30px;
+          line-height: 1.35 !important;
+          padding: 4px 30px 4px 16px !important;
+          margin: 0 !important;
+          font-size: 10px !important;
+          border-radius: 0 !important;
+          width: 100% !important;
+          white-space: normal !important;
+        }
+        .sidebar2-menu .ant-menu-submenu-title:hover {
+          background: rgba(255,255,255,0.06) !important;
+        }
+        .sidebar2-menu .ant-menu-submenu-selected > .ant-menu-submenu-title {
+          background: rgba(24,144,255,0.12) !important;
+        }
+        .sidebar2-menu .ant-menu-submenu-selected > .ant-menu-submenu-title::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 3px;
+          bottom: 3px;
+          width: 3px;
+          background: #1677ff;
+          border-radius: 0 2px 2px 0;
+        }
+        .sidebar2-menu .ant-menu-submenu-arrow {
+          top: 50% !important;
+          transform: translateY(-50%) !important;
+        }
+        /* Baris child aktif di bawah label submenu (mis. "• Cashflow") */
+        .sidebar2-submenu-child {
+          font-size: 9px;
+          color: rgba(255,255,255,0.45);
+          line-height: 1.3;
+          margin-top: 1px;
+          padding-left: 14px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .sidebar2-submenu-child .sidebar2-submenu-child-dot {
+          color: #1677ff;
+          margin-right: 4px;
         }
 
         /* ── Scrollbar minimalis ── */
@@ -356,9 +468,11 @@ export default function MainLayout() {
           <Menu
             className="sidebar2-menu"
             theme="dark"
-            mode="inline"
-            selectedKeys={[location.pathname]}
-            items={subItems}
+            mode="vertical"
+            selectedKeys={selectedKeys}
+            items={displayItems}
+            triggerSubMenuAction="click"
+            subMenuCloseDelay={2}
             onClick={({ key }) => navigate(key)}
           />
         </Sider>
