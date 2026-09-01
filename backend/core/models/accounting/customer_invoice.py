@@ -144,10 +144,21 @@ class CustomerInvoice(BaseModel):
                 {'label': 'Detail Unit', 'model': 'project.project_unit_detail', 'icon': 'HomeOutlined'},
             ],
             'actions': [
-                {'label': 'Print', 'color': 'green', 'action': 'print'},
+                {
+                    'label': 'Print', 'color': 'green', 'action': 'print',
+                    'children': [
+                        {'label': 'Print Invoice', 'action': 'print'},
+                        {'label': 'Print Cicilan', 'action': 'print_installment'},
+                    ],
+                },
                 {'label': 'Confirm', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {'label': 'Cancel', 'color': 'primary', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
-                {'label': 'Action', 'color': 'primary'},
+                {
+                    'label': 'Action', 'color': 'primary',
+                    'children': [
+                        {'label': 'Buat Cicilan', 'action': 'create_installment'},
+                    ],
+                },
             ],
         },
         'notebook': [

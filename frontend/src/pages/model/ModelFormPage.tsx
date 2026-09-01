@@ -10,7 +10,7 @@ import {
   PlusOutlined, DeleteOutlined, FileTextOutlined, MailOutlined,
   MoreOutlined, InboxOutlined, CheckOutlined, PrinterOutlined,
   DownloadOutlined, SendOutlined, EditOutlined, CopyOutlined,
-  StopOutlined, UndoOutlined, HolderOutlined,
+  StopOutlined, UndoOutlined, HolderOutlined, DownOutlined,
 } from '@ant-design/icons';
 import { modelApi, type ModelConfig } from '../../api/models';
 import { parseDate, formatDate, formatLastUpdate } from '../../utils/format';
@@ -108,6 +108,9 @@ export default function ModelFormPage({
   const isNew = recordId === 'new' || !recordId;
   // Force form remount on data load — ensures initialValues applied correctly
   const [loadKey, setLoadKey] = useState(0);
+  // Re-fetch record setelah aksi backend return `_action_type: 'refresh'`
+  // (mis. aksi yang mengubah/regenerate baris notebook — supaya grid ikut reload)
+  const [reloadKey, setReloadKey] = useState(0);
 
   // ── confirm_onchange: track previous field values + revert state ──
   const prevFieldValuesRef = useRef<Record<string, unknown>>({});
@@ -190,6 +193,13 @@ export default function ModelFormPage({
       modelApi.getRecord(apiModelName, Number(recordId))
         .then((record) => {
           if (ignore) return;
+          // Reload paksa notebook: reset line items + owner ref supaya baris
+          // di-rebuild dari record terbaru (dipakai aksi `_action_type: 'refresh'`
+          // yang mengubah/regenerate baris notebook, mis. Hitung Depresiasi).
+          // Dilakukan SINI (setelah data baru diterima) — bareng setRecordData
+          // dalam satu batch, jadi effect notebook rebuild dari data fresh.
+          setLineItems({});
+          lineItemsOwnerRef.current = null;
           // Normalize many2one value — keep dates as raw strings for initialValues
           Object.entries(config.fields).forEach(([key, field]) => {
             if (field.type === 'many2one' && record[key] && typeof record[key] === 'object') {
@@ -245,7 +255,7 @@ export default function ModelFormPage({
       syncSaveSnapshot();
       setLoading(false);
     }
-  }, [apiModelName, config, recordId, isNew, form]);
+  }, [apiModelName, config, recordId, isNew, form, reloadKey]);
 
   // ── After record loaded, populate autofill virtual fields from related records ──
   useEffect(() => {
@@ -822,6 +832,21 @@ export default function ModelFormPage({
             applyActionSuccess(res2);
           },
         });
+        return;
+      }
+
+      // Refresh: backend sudah mengubah record (termasuk baris notebook) —
+      // re-fetch record supaya form & grid ikut reload. Reset lineItems
+      // dilakukan di fetch effect (setelah data terbaru diterima), bukan di
+      // sini — kalau di-reset dulu, effect notebook sempat rebuild dari
+      // record lama (kosong) dan refetch tidak reload lagi.
+      if (result._action_type === 'refresh') {
+        setReloadKey((prev) => prev + 1);
+        if (result.message) {
+          message.success(result.message as string);
+        } else {
+          message.success(`${actionName} completed`);
+        }
         return;
       }
 
@@ -1663,18 +1688,49 @@ export default function ModelFormPage({
           }}
         >
           <Space size={4}>
-            {actionButtons.map((btn) => (
-              <Button
-                key={btn.label}
-                variant="solid"
-                color={btn.color as 'green' | 'primary'}
-                icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
-                loading={actionLoading === btn.action}
-                onClick={() => handleAction(btn)}
-              >
-                {btn.label}
-              </Button>
-            ))}
+            {actionButtons.map((btn) => {
+              const children = btn.children as Record<string, unknown>[] | undefined;
+              // Split button: children ada → tombol utama + panah dropdown (Odoo-style)
+              if (children?.length) {
+                return (
+                  <Space.Compact key={btn.label}>
+                    <Button
+                      variant="solid"
+                      color={btn.color as 'green' | 'primary'}
+                      icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
+                      loading={actionLoading === btn.action}
+                      onClick={() => handleAction(btn)}
+                    >
+                      {btn.label}
+                    </Button>
+                    <Dropdown
+                      trigger={['click']}
+                      menu={{
+                        items: children.map((child) => ({
+                          key: child.label as string,
+                          label: child.label as string,
+                          onClick: () => handleAction(child),
+                        })),
+                      }}
+                    >
+                      <Button variant="solid" color={btn.color as 'green' | 'primary'} icon={<DownOutlined />} />
+                    </Dropdown>
+                  </Space.Compact>
+                );
+              }
+              return (
+                <Button
+                  key={btn.label}
+                  variant="solid"
+                  color={btn.color as 'green' | 'primary'}
+                  icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
+                  loading={actionLoading === btn.action}
+                  onClick={() => handleAction(btn)}
+                >
+                  {btn.label}
+                </Button>
+              );
+            })}
           </Space>
           {stepperSteps.length > 0 && (
             <div style={{ flex: 1, maxWidth: 480, marginLeft: 'auto' }}>
