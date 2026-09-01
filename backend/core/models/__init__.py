@@ -50,6 +50,8 @@ from core.models.accounting.expense import Expense
 from core.models.accounting.expense_line import ExpenseLine
 from core.models.accounting.transfer_cash_bank import TransferCashBank
 from core.models.accounting.deposit import Deposit
+from core.models.accounting.asset import Asset
+from core.models.accounting.asset_depreciation_line import AssetDepreciationLine
 from core.models.project.project import Project
 from core.models.project.project_line import ProjectLine
 from core.models.project.unit import Unit
@@ -87,6 +89,7 @@ __all__ = [
     'CustomerInvoice', 'CustomerInvoiceLine',
     'Expense', 'ExpenseLine',
     'TransferCashBank', 'Deposit',
+    'Asset', 'AssetDepreciationLine',
     'PurchaseRequest', 'PurchaseRequestLine',
     'QuickPurchase', 'QuickPurchaseLine',
     'QuickSales', 'QuickSalesLine',

@@ -110,7 +110,9 @@ export const router = createBrowserRouter([
       { path: 'accounting/neraca', element: <ComingSoon /> },
       { path: 'accounting/cashflow', element: <ComingSoon /> },
       // Accounting coming-soon routes
-      { path: 'accounting/asset', element: <ComingSoon /> },
+      { path: 'accounting/asset', element: <ModelListPage modelName="accounting.asset" basePath="/accounting/asset" /> },
+      { path: 'accounting/asset/new', element: <ModelFormPage modelName="accounting.asset" basePath="/accounting/asset" /> },
+      { path: 'accounting/asset/:recordId', element: <ModelFormPage modelName="accounting.asset" basePath="/accounting/asset" /> },
       { path: 'accounting/cost_center', element: <ComingSoon /> },
       { path: 'accounting/neraca_saldo', element: <ComingSoon /> },
       { path: 'accounting/buku_besar', element: <ComingSoon /> },
