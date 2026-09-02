@@ -61,6 +61,31 @@ def _recompute_child_lines(child_model, inverse_field, parent_pk):
         child.save(update_fields=computed)
 
 
+def _pop_m2m_fields(child_model, line):
+    """Keluarkan field many2many dari dict line (biar create/update DB jalan),
+    kembalikan {field_name: [id, ...]} untuk di-set setelah record punya pk."""
+    out = {}
+    for key, fd in child_model._field_descriptors.items():
+        if getattr(fd, 'field_type', None) == 'many2many' and key in line:
+            out[key] = fd.to_python(line.pop(key))
+    return out
+
+
+def _apply_m2m_fields(child, payload):
+    """Set relasi many2many pada instance yang sudah punya pk, lalu recompute
+    field computed (karena compute bisa bergantung pada relasi tsb)."""
+    if not payload:
+        return
+    for key, ids in payload.items():
+        if ids:
+            getattr(child, key).set(ids)
+        else:
+            getattr(child, key).clear()
+    computed = child.get_computed_fields() if hasattr(child, 'get_computed_fields') else []
+    if computed:
+        child.save(update_fields=computed)
+
+
 # ─── Models list endpoint ────────────────────
 
 @api_view(['GET'])
@@ -110,9 +135,16 @@ def model_compute(request, model_name):
             return Response({'error': f'Cannot instantiate {model_name}'}, status=400)
 
     for key, value in data.items():
+        fd = model_cls._field_descriptors.get(key)
+        # Many2Many: jangan sentuh manager (butuh pk) — simpan override utk
+        # dibaca compute. Cek lebih dulu supaya hasattr() tidak memicu manager.
+        if fd and getattr(fd, 'field_type', None) == 'many2many':
+            if not hasattr(obj, '_m2m_override'):
+                obj._m2m_override = {}
+            obj._m2m_override[key] = fd.to_python(value) if hasattr(fd, 'to_python') else value
+            continue
         # Non-virtual fields: set normally via hasattr
         if hasattr(obj, key):
-            fd = model_cls._field_descriptors.get(key)
             if fd and hasattr(fd, 'to_python'):
                 value = fd.to_python(value)
             # FK fields (many2one) need _id suffix, not the relation name
@@ -120,7 +152,6 @@ def model_compute(request, model_name):
             setattr(obj, target_attr, value)
         # Virtual fields: hasattr returns False, but set via _field_descriptors
         elif key in model_cls._field_descriptors:
-            fd = model_cls._field_descriptors[key]
             if getattr(fd, 'virtual', False):
                 setattr(obj, key, fd.to_python(value) if hasattr(fd, 'to_python') else value)
             elif getattr(fd, 'field_type', None) == 'one2many':
@@ -168,7 +199,7 @@ def _log_field_changes(model_cls, obj, old_data=None, user=None):
         # Skip virtual/system fields
         if field_name in ('id', 'is_deleted', 'created_at', 'updated_at', 'deleted_at', 'created_by'):
             continue
-        if getattr(fd, 'field_type', None) == 'one2many':
+        if getattr(fd, 'field_type', None) in ('one2many', 'many2many'):
             continue
 
         new_val = getattr(obj, field_name, None)
@@ -209,7 +240,7 @@ def _log_child_changes(child_model, child_objs, old_child_data=None, inverse_fie
         for field_name, fd in child_model._field_descriptors.items():
             if field_name in ('id', 'is_deleted', 'created_at', 'updated_at', 'deleted_at', 'created_by'):
                 continue
-            if getattr(fd, 'field_type', None) in ('one2many', 'many2one') and field_name == inverse_field:
+            if getattr(fd, 'field_type', None) in ('one2many', 'many2many') or (field_name == inverse_field):
                 continue
 
             new_val = getattr(obj, field_name, None)
@@ -436,7 +467,14 @@ class ModelRecordView(APIView):
                             if getattr(child_fd, 'field_type', None) == 'many2one' and child_key in line:
                                 if not isinstance(line[child_key], dict) and not hasattr(line[child_key], 'pk'):
                                     line[f'{child_key}_id'] = line.pop(child_key)
-                        child_objs.append(child_model(**line))
+                        # Many2Many: pop dari line → set setelah record punya pk
+                        m2m_payload = _pop_m2m_fields(child_model, line)
+                        if m2m_payload:
+                            child = child_model(**line)
+                            child.save()
+                            _apply_m2m_fields(child, m2m_payload)
+                        else:
+                            child_objs.append(child_model(**line))
                     child_model.objects.bulk_create(child_objs)
                     _recompute_child_lines(child_model, fd.inverse_field, obj.pk)
 
@@ -620,14 +658,24 @@ class ModelRecordView(APIView):
                                         line[f'{child_key}_id'] = line.pop(child_key)
 
                             lid = line.pop('id', None) if 'id' in line else line_id
+                            # Many2Many: pop dari line → set setelah record punya pk
+                            m2m_payload = _pop_m2m_fields(child_model, line)
                             if lid is not None and int(lid) in existing_map:
                                 # UPDATE existing record (not touched by soft-delete)
                                 child_model.objects.filter(pk=int(lid)).update(**line)
                                 # Re-fetch the updated record for compute
-                                child_objs.append(child_model.objects.get(pk=int(lid)))
+                                child_obj = child_model.objects.get(pk=int(lid))
+                                if m2m_payload:
+                                    _apply_m2m_fields(child_obj, m2m_payload)
+                                child_objs.append(child_obj)
                             else:
                                 # CREATE new record
-                                child_objs.append(child_model(**line))
+                                child = child_model(**line)
+                                if m2m_payload:
+                                    child.save()
+                                    _apply_m2m_fields(child, m2m_payload)
+                                else:
+                                    child_objs.append(child)
 
                         if child_objs:
                             child_model.objects.bulk_create(

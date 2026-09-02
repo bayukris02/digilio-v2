@@ -4,6 +4,7 @@ from core.fields import (
     SelectionField, Many2OneField, One2ManyField,
 )
 from core.model_meta import BaseModel, ErpModelBase
+from core.models.accounting.tax import taxes_total_rate
 
 
 class QuickSales(BaseModel):
@@ -181,7 +182,7 @@ class QuickSales(BaseModel):
                 'key': 'lines',
                 'label': 'Baris Penjualan',
                 'relation': 'quick_sales_lines',
-                'columns': ['product', 'name', 'qty', 'uom', 'price', 'discount_percentage', 'discount_amount', 'tax_percentage', 'tax_amount', 'total'],
+                'columns': ['product', 'name', 'qty', 'uom', 'price', 'discount_percentage', 'discount_amount', 'taxes', 'tax_amount', 'total'],
                 'summary': {
                     'columns': {'qty': 'sum', 'discount_amount': 'sum', 'tax_amount': 'sum', 'total': 'sum'},
                     'subtotal': 'subtotal',
@@ -281,15 +282,18 @@ class QuickSales(BaseModel):
                 reference=inv_ref or f'INV-QS-{self.pk}',
             )
             for line in lines:
-                CustomerInvoiceLine.objects.create(
+                inv_line = CustomerInvoiceLine.objects.create(
                     invoice_id=invoice,
                     product=line.product,
                     name=line.name,
                     qty=float(line.qty or 0),
                     price=line.price,
                     discount_percentage=line.discount_percentage,
-                    tax_percentage=line.tax_percentage,
                 )
+                tax_ids = line._m2m_ids('taxes') if hasattr(line, '_m2m_ids') else []
+                if tax_ids:
+                    inv_line.taxes.set(tax_ids)
+                    inv_line.save()
             invoice._compute_summary()
             invoice.save(update_fields=['subtotal', 'discount', 'tax', 'grand_total'])
 
@@ -355,7 +359,7 @@ class QuickSales(BaseModel):
                             'product': line.product,
                             'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
                             'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
-                            'tax_percentage': float(getattr(line, 'tax_percentage', 0) or 0),
+                            'tax_pct': taxes_total_rate(line._m2m_ids('taxes')) if hasattr(line, '_m2m_ids') else 0.0,
                         })
 
         # ── Recompute per-line values dari raw data ──
@@ -388,7 +392,7 @@ class QuickSales(BaseModel):
                 'subtotal_raw': subtotal,
                 'discount_amount': round(disc_amt, 2),
                 'discount_percentage': disc_pct,
-                'tax_percentage': float(line.get('tax_percentage', 0) or 0),
+                'tax_pct': float(line.get('tax_pct', 0) or 0) or taxes_total_rate(line.get('taxes')),
                 'tax_amount': 0,
                 'total': 0,
             })
@@ -474,7 +478,7 @@ class QuickSales(BaseModel):
         # ── Recompute tax & total (1 formula) ──
         for cl in computed_lines:
             taxable = cl['subtotal_raw'] - cl['discount_amount']
-            tax_pct = cl['tax_percentage']
+            tax_pct = cl['tax_pct']
             tax_amt = round(taxable * (tax_pct / 100), 2)
             cl['tax_amount'] = tax_amt
             cl['total'] = round(cl['subtotal_raw'] - cl['discount_amount'] + tax_amt, 2)

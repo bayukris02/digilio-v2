@@ -19,7 +19,7 @@ import Chatter from '../../components/Chatter';
 import QuickViewModal from '../../components/QuickViewModal';
 import GenericWizardModal from '../../components/GenericWizardModal';
 import ProgressBar from '../../components/ProgressBar';
-import { SmartButton, renderField, Many2OneCellEditor } from './formControls';
+import { SmartButton, renderField, Many2OneCellEditor, Many2ManyCellEditor } from './formControls';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard';
 import { useFormChangeHandler } from './useFormChangeHandler';
 import { useModelFormActions, collectRequiredErrors } from './useModelFormActions';
@@ -1172,22 +1172,47 @@ export default function ModelFormPage({
         }
       }
       // Many2One: show display name, rich select editor with search
-      if (field.type === 'many2one') {
+      if (field.type === 'many2one' || field.type === 'many2many') {
         // Store display_field from notebook column config (dipakai juga di onLoadMore)
         const colMeta = columnMeta[key];
         if (colMeta?.display_field) {
           (col as any).displayField = colMeta.display_field;
         }
-        col.editable = (params: any) => {
-          if (params.data?._isAddButton) return false;
-          return !isReadOnly;
-        };
-        col.cellRenderer = (params: ICellRendererParams) => {
-          const val = params.value;
-          if (typeof val === 'object' && val?.name) return val.name;
-          if (typeof val === 'object' && val?.label) return val.label;
-          return val ?? '';
-        };
+        if (field.type === 'many2many') {
+          // Many2Many: tag badges; editor multi-select — boleh pilih >1 record
+          col.editable = (params: any) => {
+            if (params.data?._isAddButton) return false;
+            return !isReadOnly;
+          };
+          col.cellRenderer = (params: ICellRendererParams) => {
+            const list: unknown = params.value;
+            if (!Array.isArray(list) || list.length === 0) return <span />;
+            const labelOf = (it: unknown): string => {
+              const o = (it ?? {}) as { id?: unknown; name?: unknown; label?: unknown; value?: unknown };
+              return String(o.name ?? o.label ?? `#${o.id ?? o.value ?? ''}`);
+            };
+            return (
+              <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+                {list.map((it, i) => (
+                  <Tag key={i}>{labelOf(it)}</Tag>
+                ))}
+              </span>
+            );
+          };
+          col.comparator = (a: unknown, b: unknown) => {
+            const name = (v: unknown) => Array.isArray(v)
+              ? v.map((x: unknown) => String(((x ?? {}) as { name?: unknown; label?: unknown }).name ?? ((x ?? {}) as { name?: unknown; label?: unknown }).label ?? '')).join(', ')
+              : '';
+            return name(a).localeCompare(name(b), 'id');
+          };
+        } else {
+          col.cellRenderer = (params: ICellRendererParams) => {
+            const val = params.value;
+            if (typeof val === 'object' && val?.name) return val.name;
+            if (typeof val === 'object' && val?.label) return val.label;
+            return val ?? '';
+          };
+        }
         // Sort berdasarkan nilai yang TAMPIL (name/label), bukan object/id —
         // defaultComparator AG Grid tidak bisa membandingkan object {id, name}
         col.comparator = (a: unknown, b: unknown) => {
@@ -1202,29 +1227,44 @@ export default function ModelFormPage({
           };
           return name(a).localeCompare(name(b), 'id');
         };
-        col.cellEditor = Many2OneCellEditor;
-        col.cellEditorParams = {
-          values: (many2oneOptions[`${relationField}.${key}`] || []).filter((opt) => {
-            // Field dengan allow_duplicate=True → boleh pilih nilai yang sama di baris lain
-            if (field.allow_duplicate) return true;
-            // Hide options already selected in other lines of the same relation
-            const record = opt as Record<string, unknown>;
-            const selectedIds = new Set(
-              (lineItems[relationField] || [])
-                .filter((item) => !item._isAddButton && item[key]?.id)
-                .map((item) => (item[key] as Record<string, unknown>).id as number),
-            );
-            return !selectedIds.has(record.value as number);
-          }),
-          // Infinite scroll: total dari server + pemuat halaman berikutnya
-          total: many2oneMeta[`${relationField}.${key}`]?.total,
-          onLoadMore: () => loadMoreMany2one(
-            relationField,
-            key,
-            (colMeta?.display_field as string) || undefined,
-            !!field.allow_duplicate,
-          ),
-        };
+        if (field.type === 'many2many') {
+          col.cellEditor = Many2ManyCellEditor;
+          col.cellEditorParams = {
+            // Many2Many: semua opsi boleh dipilih berulang antar baris
+            values: many2oneOptions[`${relationField}.${key}`] || [],
+            total: many2oneMeta[`${relationField}.${key}`]?.total,
+            onLoadMore: () => loadMoreMany2one(
+              relationField,
+              key,
+              (colMeta?.display_field as string) || undefined,
+              true,
+            ),
+          };
+        } else {
+          col.cellEditor = Many2OneCellEditor;
+          col.cellEditorParams = {
+            values: (many2oneOptions[`${relationField}.${key}`] || []).filter((opt) => {
+              // Field dengan allow_duplicate=True → boleh pilih nilai yang sama di baris lain
+              if (field.allow_duplicate) return true;
+              // Hide options already selected in other lines of the same relation
+              const record = opt as Record<string, unknown>;
+              const selectedIds = new Set(
+                (lineItems[relationField] || [])
+                  .filter((item) => !item._isAddButton && item[key]?.id)
+                  .map((item) => (item[key] as Record<string, unknown>).id as number),
+              );
+              return !selectedIds.has(record.value as number);
+            }),
+            // Infinite scroll: total dari server + pemuat halaman berikutnya
+            total: many2oneMeta[`${relationField}.${key}`]?.total,
+            onLoadMore: () => loadMoreMany2one(
+              relationField,
+              key,
+              (colMeta?.display_field as string) || undefined,
+              !!field.allow_duplicate,
+            ),
+          };
+        }
       }
       // ── Generic: column config rules dari backend ──
       // column_config_rules mendefinikan hide/readonly berdasarkan field value

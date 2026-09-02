@@ -6,6 +6,7 @@ from core.fields import (
 from core.model_meta import BaseModel, ErpModelBase
 from core.models.purchase.goods_receipt import GoodsReceipt
 from core.models.purchase.goods_receipt_line import GoodsReceiptLine
+from core.models.accounting.tax import taxes_total_rate
 
 
 class PurchaseOrder(BaseModel):
@@ -269,7 +270,7 @@ class PurchaseOrder(BaseModel):
                 'key': 'lines',
                 'label': 'Baris Pesanan',
                 'relation': 'order_lines',
-                'columns': ['product', 'name', 'qty', 'uom', 'price', 'pricelist_price', 'discount_percentage', 'discount_amount', 'tax_percentage', 'tax_amount', 'total'],
+                'columns': ['product', 'name', 'qty', 'uom', 'price', 'pricelist_price', 'discount_percentage', 'discount_amount', 'taxes', 'tax_amount', 'total'],
                 'summary': {
                     'columns': {'qty': 'sum', 'discount_amount': 'sum', 'tax_amount': 'sum', 'total': 'sum'},
                     'subtotal': 'subtotal',
@@ -363,7 +364,7 @@ class PurchaseOrder(BaseModel):
                             'product': line.product,
                             'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
                             'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
-                            'tax_percentage': float(getattr(line, 'tax_percentage', 0) or 0),
+                            'tax_pct': taxes_total_rate(line._m2m_ids('taxes')) if hasattr(line, '_m2m_ids') else 0.0,
                         })
 
         # ── Recompute per-line values dari raw data ──
@@ -397,7 +398,7 @@ class PurchaseOrder(BaseModel):
                 'subtotal_raw': subtotal,
                 'discount_amount': round(disc_amt, 2),
                 'discount_percentage': disc_pct,
-                'tax_percentage': float(line.get('tax_percentage', 0) or 0),
+                'tax_pct': float(line.get('tax_pct', 0) or 0) or taxes_total_rate(line.get('taxes')),
                 'tax_amount': 0,
                 'total': 0,
             })
@@ -489,7 +490,7 @@ class PurchaseOrder(BaseModel):
         # ── Recompute tax & total (1 formula untuk semua mode) ──
         for cl in computed_lines:
             taxable = cl['subtotal_raw'] - cl['discount_amount']
-            tax_pct = cl['tax_percentage']
+            tax_pct = cl['tax_pct']
             tax_amt = round(taxable * (tax_pct / 100), 2)
             cl['tax_amount'] = tax_amt
             cl['total'] = round(cl['subtotal_raw'] - cl['discount_amount'] + tax_amt, 2)
@@ -808,34 +809,37 @@ class PurchaseOrder(BaseModel):
                     po_lines = PurchaseOrderLine.objects.filter(
                         order_id=self.pk, is_deleted=False
                     )
-                    # Group by (tax_pct, disc_pct) → 1 DP line per kelompok
+                    # Group by (taxes, disc_pct) → 1 DP line per kelompok
                     groups = {}
                     for po_line in po_lines:
                         subtotal = float(po_line.qty or 0) * float(po_line.price or 0)
                         disc_pct = float(getattr(po_line, 'discount_percentage', 0) or 0)
                         dpp = subtotal * dp_pct
-                        tax_pct = float(po_line.tax_percentage or 0)
-                        key = (tax_pct, disc_pct)
+                        tax_ids = tuple(po_line._m2m_ids('taxes')) if hasattr(po_line, '_m2m_ids') else ()
+                        key = (tax_ids, disc_pct)
                         if key not in groups:
-                            groups[key] = {'dpp': 0.0, 'tax_pct': tax_pct, 'disc_pct': disc_pct}
+                            groups[key] = {'dpp': 0.0, 'tax_ids': tax_ids, 'disc_pct': disc_pct}
                         groups[key]['dpp'] += dpp
 
-                    for (tax_pct, disc_pct), data in groups.items():
+                    for (tax_ids, disc_pct), data in groups.items():
                         price = data['dpp']
+                        tax_pct = taxes_total_rate(tax_ids)
                         # Buat label
                         parts = [f'DP {dp_value:.0f}%']
                         if disc_pct > 0:
                             parts.append(f'Disc {disc_pct:.0f}%')
                         parts.append(f'Tax {tax_pct:.0f}%' if tax_pct > 0 else 'Non Tax')
                         label = ', '.join(parts)
-                        VendorBillLine.objects.create(
+                        dp_line = VendorBillLine.objects.create(
                             bill_id=bill,
                             name=label,
                             qty=1,
                             price=price,
                             discount_percentage=disc_pct,
-                            tax_percentage=tax_pct,
                         )
+                        if tax_ids:
+                            dp_line.taxes.set(tax_ids)
+                            dp_line.save()
 
                     # Paksa compute summary agar grand_total terisi
                     bill._compute_summary()
@@ -987,7 +991,7 @@ class PurchaseOrder(BaseModel):
                         lines_qs = lines_qs.filter(pk__in=selected_ids_set)
                     for line in lines_qs:
                         qty = qty_map.get(line.pk, float(line.qty or 0))
-                        VendorBillLine.objects.create(
+                        bill_line = VendorBillLine.objects.create(
                             bill_id=bill,
                             product=line.product,
                             name=line.name,
@@ -995,8 +999,11 @@ class PurchaseOrder(BaseModel):
                             uom=line.uom,
                             price=line.price,
                             discount_percentage=line.discount_percentage,
-                            tax_percentage=line.tax_percentage,
                         )
+                        tax_ids = line._m2m_ids('taxes') if hasattr(line, '_m2m_ids') else []
+                        if tax_ids:
+                            bill_line.taxes.set(tax_ids)
+                            bill_line.save()
 
         # Trigger compute summary agar down_payment_amount & grand_total terisi
         bill._compute_down_payment()

@@ -153,6 +153,7 @@ const menuItems = [
       { type: 'group', label: 'MASTER DATA', children: [
         { key: '/accounting.chart_of_account', label: 'COA' },
         { key: '/accounting.payment_method', label: 'Kas dan Bank' },
+        { key: '/accounting.tax', label: 'Pajak' },
         { key: '/accounting/asset', label: 'Asset' },
         { key: '/accounting/cost_center', label: 'Cost Center' },
       ]},

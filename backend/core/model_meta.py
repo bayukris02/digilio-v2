@@ -22,7 +22,7 @@ from django.db.models import Count
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 
-from .fields import BaseField, Many2OneField, One2ManyField, MonetaryField, DateField, DateTimeField, BooleanField
+from .fields import BaseField, Many2OneField, Many2ManyField, One2ManyField, MonetaryField, DateField, DateTimeField, BooleanField
 
 
 class ErpModelBase(ModelBase):
@@ -65,11 +65,17 @@ class ErpModelBase(ModelBase):
 
         django_fields = {}
         m2o_fields = {}
+        m2m_fields = {}
         virtual_fields = {}
 
         for field_name, fd in field_descriptors.items():
             if isinstance(fd, One2ManyField) or getattr(fd, 'virtual', False):
                 virtual_fields[field_name] = fd
+                continue
+
+            if isinstance(fd, Many2ManyField):
+                # M2M — buat setelah class jadi (butuh model relasi ter-resolve)
+                m2m_fields[field_name] = fd
                 continue
 
             df = fd.to_django_field()
@@ -130,6 +136,26 @@ class ErpModelBase(ModelBase):
                     related_name='+',
                 )
 
+            df.contribute_to_class(new_class, field_name)
+
+        # Add M2M fields (ManyToMany) setelah class creation — butuh class
+        # model relasi sudah ter-registrasi (pastikan import model relasi
+        # lebih dulu di core/models/__init__.py).
+        for field_name, fd in m2m_fields.items():
+            relation = fd.relation
+            to_model = mcs._model_registry.get(relation) if isinstance(relation, str) else relation
+            if to_model is None:
+                raise RuntimeError(
+                    f'Many2ManyField "{name}.{field_name}": model relasi '
+                    f'"{relation}" belum ter-registrasi (import model relasi lebih dulu).'
+                )
+            df = dj_models.ManyToManyField(
+                to_model,
+                blank=True,
+                verbose_name=fd.label,
+                help_text=fd.help_text,
+                related_name='+',
+            )
             df.contribute_to_class(new_class, field_name)
 
         # Try to resolve any pending FK fields now that this model registered
@@ -785,6 +811,8 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
 
     def _run_compute(self):
         """Run all compute methods defined in _field_descriptors with compute attribute."""
+        if not hasattr(self, '_m2m_override'):
+            self._m2m_override = {}
         for fname, fd in self._field_descriptors.items():
             compute_method = getattr(fd, 'compute', None)
             if compute_method and isinstance(compute_method, str):
@@ -792,6 +820,16 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
                 compute_fn = getattr(self, method_name, None)
                 if compute_fn:
                     compute_fn()
+
+    def _m2m_ids(self, field_name):
+        """Daftar pk relasi many2many — memakai override dari payload compute
+        bila ada (record belum disimpan), selain itu query dari DB."""
+        if field_name in getattr(self, '_m2m_override', {}):
+            return self._m2m_override[field_name]
+        try:
+            return [o.pk for o in getattr(self, field_name).all()]
+        except Exception:
+            return []
 
     @classmethod
     def get_computed_fields(cls):

@@ -379,6 +379,50 @@ class Many2OneField(BaseField):
         )
 
 
+class Many2ManyField(BaseField):
+    """ManyToMany ke model lain — bisa pilih lebih dari satu (relation = 'model.name')."""
+    field_type = 'many2many'
+    django_field_class = dj_models.ManyToManyField
+
+    def __init__(self, label='', required=False, relation=None, help_text='', **kwargs):
+        super().__init__(label, required, help_text=help_text, **kwargs)
+        self.relation = relation  # e.g., 'accounting.tax'
+
+    def to_config(self):
+        cfg = super().to_config()
+        cfg['relation'] = self.relation
+        return cfg
+
+    def to_python(self, value):
+        # value: list of ids / {id} / objects dari payload API
+        if value is None:
+            return []
+        if not isinstance(value, (list, tuple)):
+            value = [value]
+        out = []
+        for v in value:
+            if isinstance(v, dict):
+                out.append(v.get('id') or v.get('pk') or v.get('value'))
+            elif hasattr(v, 'pk'):
+                out.append(v.pk)
+            else:
+                out.append(v)
+        return [x for x in out if x is not None]
+
+    def to_representation(self, value):
+        # value = ManyRelatedManager (belum di-query sampai .all())
+        try:
+            qs = value.all() if hasattr(value, 'all') else value
+            return [{'id': o.pk, 'name': str(o)} for o in qs]
+        except Exception:
+            return []
+
+    def to_django_field(self, **kwargs):
+        # Placeholder — metaclass membuat ManyToManyField dengan class yang
+        # sudah ter-resolve dari registry.
+        return None
+
+
 class One2ManyField(BaseField):
     """Inverse of Many2One — represents a list of child records."""
     field_type = 'one2many'

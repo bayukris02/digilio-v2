@@ -1,5 +1,8 @@
 from core.model_meta import BaseModel
 from core.models.chatter_log import ChatterLog
+# Tax master di-import PALING AWAL — relasi many2many ke accounting.tax pada
+# line model (SO/PO/Faktur/Tagihan) butuh class ini sudah ter-registrasi.
+from core.models.accounting.tax import Tax
 from core.models.purchase.purchase_order import PurchaseOrder
 from core.models.purchase.purchase_order_line import PurchaseOrderLine
 from core.models.purchase.goods_receipt import GoodsReceipt
@@ -72,7 +75,7 @@ from core.models.dashboard import MAIN_DASHBOARD  # noqa: F401
 from core.models.purchase import pivot  # noqa: F401
 
 __all__ = [
-    'BaseModel', 'ChatterLog', 'PurchaseOrder', 'PurchaseOrderLine', 'GoodsReceipt', 'GoodsReceiptLine',
+    'BaseModel', 'ChatterLog', 'Tax', 'PurchaseOrder', 'PurchaseOrderLine', 'GoodsReceipt', 'GoodsReceiptLine',
     'Vendor', 'Customer', 'SalesOrder', 'SalesOrderLine', 'DeliveryOrder', 'DeliveryOrderLine', 'Product',
     'ProductCategory',
     'Warehouse',

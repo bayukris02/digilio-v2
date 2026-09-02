@@ -224,7 +224,7 @@ class CustomerInvoice(BaseModel):
                 'relation': 'invoice_lines',
                 'summary': {
                     'columns': {'qty': 'sum', 'discount_percentage': 'avg', 'discount_amount': 'sum',
-                                'tax_percentage': 'avg', 'tax_amount': 'sum', 'total': 'sum'},
+                                'tax_amount': 'sum', 'total': 'sum'},
                     'subtotal': 'subtotal',
                     'lines': ['discount', 'manual_discount', 'tax', 'down_payment_amount'],
                     'inputs': ['manual_discount'],

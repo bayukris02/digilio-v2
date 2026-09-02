@@ -229,7 +229,7 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
               const displayField = (params.colDef as any)?.displayField;
               if (childCfg?.fields && fieldName) {
                 const fieldMeta = childCfg.fields[fieldName];
-                if (fieldMeta?.type === 'many2one' && fieldMeta.relation) {
+                if ((fieldMeta?.type === 'many2one' || fieldMeta?.type === 'many2many') && fieldMeta.relation) {
                   // domain: filter related records berdasarkan field header
                   // definisi di Many2OneField: domain={'vendor': 'vendor'}
                   const domain = (fieldMeta as any)?.domain as Record<string, string> | undefined;

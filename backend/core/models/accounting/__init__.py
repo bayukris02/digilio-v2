@@ -1,3 +1,6 @@
+# Tax master di-import PALING AWAL — line model (vendor_bill_line dll) punya
+# relasi many2many ke accounting.tax, butuh class ini ter-registrasi dulu.
+from core.models.accounting.tax import Tax
 from core.models.accounting.vendor_bill import VendorBill
 from core.models.accounting.vendor_bill_line import VendorBillLine
 from core.models.accounting.customer_invoice import CustomerInvoice

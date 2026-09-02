@@ -562,3 +562,107 @@ export const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, un
   },
 );
 Many2OneCellEditor.displayName = 'Many2OneCellEditor';
+
+// ─── Many2Many Cell Editor (AG Grid) ────────────────
+// Multi-select (Ant Select mode="multiple") untuk field many2many —
+// value & commit berupa array opsi {id, name} / {value, label}.
+interface Many2ManyEditorProps {
+  value?: Array<Record<string, unknown>> | null;
+  values?: Array<{ value: number; label?: string; name?: string }>;
+  stopEditing?: () => void;
+  onValueChange?: (value: Array<Record<string, unknown>> | null) => void;
+  total?: number;
+  onLoadMore?: () => Promise<Record<string, unknown>[]>;
+}
+
+export const Many2ManyCellEditor = forwardRef<{ getValue: () => Array<Record<string, unknown>> | null }, Many2ManyEditorProps>(
+  ({ value, values, stopEditing, onValueChange, total, onLoadMore }, ref) => {
+    const allValues = values || [];
+    // Nilai tersimpan array objek {id,name} — normalisasi ke id untuk Select
+    const toId = (o: Record<string, unknown>): number => Number(o.value ?? o.id);
+    const currentIds = (value || []).map(toId);
+    const [items, setItems] = useState<Record<string, unknown>[]>(allValues);
+    const selectedRef = useRef<Record<string, unknown>[]>(value || []);
+    const [search, setSearch] = useState('');
+    const [open, setOpen] = useState(true);
+    const selectRef = useRef<any>(null);
+    const loadingRef = useRef(false);
+
+    useEffect(() => {
+      const t = setTimeout(() => selectRef.current?.focus(), 60);
+      return () => clearTimeout(t);
+    }, []);
+
+    const loadMore = async () => {
+      if (loadingRef.current || !onLoadMore) return;
+      loadingRef.current = true;
+      const newOpts = await onLoadMore();
+      loadingRef.current = false;
+      if (newOpts.length) {
+        setItems((prev) => {
+          const seen = new Set(prev.map((o) => toId(o)));
+          return [...prev, ...newOpts.filter((o) => !seen.has(toId(o)))];
+        });
+      }
+    };
+
+    const commit = (next: Record<string, unknown>[]) => {
+      selectedRef.current = next;
+      onValueChange?.(next);
+      stopEditing?.();
+    };
+
+    useImperativeHandle(ref, () => ({
+      getValue: () => selectedRef.current,
+    }));
+
+    const filtered = useMemo(() => {
+      const q = search.trim().toLowerCase();
+      if (!q) return items;
+      return items.filter((o) =>
+        String(o.label ?? o.name ?? '').toLowerCase().includes(q),
+      );
+    }, [items, search]);
+
+    const options = filtered.map((o) => ({
+      ...o,
+      value: toId(o),
+      label: String(o.label ?? o.name ?? `#${toId(o)}`),
+    }));
+
+    return (
+      <Select
+        ref={selectRef}
+        autoFocus
+        mode="multiple"
+        showSearch
+        filterOption={false}
+        open={open}
+        onDropdownVisibleChange={(o) => setOpen(o)}
+        style={{ width: '100%' }}
+        popupMatchSelectWidth={false}
+        dropdownStyle={{ minWidth: 320 }}
+        listHeight={160}
+        placeholder="Ketik untuk mencari..."
+        value={currentIds}
+        options={options}
+        onSearch={(v) => setSearch(v)}
+        onPopupScroll={(e) => {
+          const el = e.target as HTMLElement;
+          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) loadMore();
+        }}
+        onChange={(vals: number[]) => {
+          const chosen = options.filter((o) => vals.includes(o.value));
+          commit(chosen.map((o) => ({ id: o.value, name: o.label, ...o })));
+        }}
+        notFoundContent={search ? 'Data tidak ditemukan' : 'Ketik untuk mencari data lain...'}
+        dropdownRender={(menu) => (
+          <div onMouseDown={(e) => e.preventDefault()}>
+            {menu}
+          </div>
+        )}
+      />
+    );
+  },
+);
+Many2ManyCellEditor.displayName = 'Many2ManyCellEditor';

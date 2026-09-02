@@ -1,7 +1,7 @@
 from django.db import models
 from core.fields import (
     CharField, TextField, FloatField, MonetaryField, PercentageField,
-    Many2OneField,
+    Many2OneField, Many2ManyField,
 )
 from core.model_meta import BaseModel, ErpModelBase
 
@@ -42,13 +42,17 @@ class PurchaseOrderLine(BaseModel):
         'discount_percentage': PercentageField(label='Diskon (%)', default=0),
         'discount_amount': MonetaryField(label='Diskon', currency='IDR',
             compute='_compute_total'),
-        'tax_percentage': PercentageField(label='Pajak (%)', default=0),
-        'tax_amount': MonetaryField(label='Pajak', currency='IDR', compute='_compute_total', depends=['qty', 'price', 'discount_amount', 'tax_percentage']),
+        'taxes': Many2ManyField(
+            label='Pajak',
+            relation='accounting.tax',
+            help_text='Pilih satu atau lebih pajak (PPN, PPh, dll)',
+        ),
+        'tax_amount': MonetaryField(label='Nilai Pajak', currency='IDR', compute='_compute_total', depends=['qty', 'price', 'discount_amount', 'taxes']),
         'total': MonetaryField(label='Total', currency='IDR', compute='_compute_total', depends=['qty', 'price', 'discount_amount', 'tax_amount']),
     }
 
     _list_view = {
-        'columns': ['product', 'name', 'qty', 'uom', 'done_qty', 'in_receipt_qty', 'remaining_qty', 'price', 'discount_percentage', 'discount_amount', 'tax_percentage', 'tax_amount', 'total'],
+        'columns': ['product', 'name', 'qty', 'uom', 'done_qty', 'in_receipt_qty', 'remaining_qty', 'price', 'discount_percentage', 'discount_amount', 'taxes', 'tax_amount', 'total'],
         'default_sort': ['id'],
     }
 
@@ -79,7 +83,13 @@ class PurchaseOrderLine(BaseModel):
 
         taxable = subtotal - disc_amt
 
-        tax_pct = float(getattr(self, 'tax_percentage', 0) or 0)
+        # Pajak: Σ tarif pajak terpilih (many2many) × dasar pengenaan pajak
+        from core.models.accounting.tax import Tax
+        tax_ids = self._m2m_ids('taxes')
+        tax_pct = sum(
+            float(t.rate or 0)
+            for t in Tax.objects.filter(pk__in=tax_ids, is_active=True)
+        ) if tax_ids else 0.0
         tax_amt = taxable * (tax_pct / 100)
 
         self.discount_amount = round(disc_amt, 2)
@@ -211,7 +221,9 @@ class PurchaseOrderLine(BaseModel):
                                 # Recompute discount_amount, tax_amount, total dgn prorata
                                 orig_disc = data.get('discount_amount', 0) or 0
                                 data['discount_amount'] = prorated
-                                data['tax_amount'] = round((line_total_raw - prorated) * (float(getattr(self, 'tax_percentage', 0) or 0) / 100), 2)
+                                from core.models.accounting.tax import taxes_total_rate
+                                tax_pct = taxes_total_rate(self._m2m_ids('taxes')) if hasattr(self, '_m2m_ids') else 0.0
+                                data['tax_amount'] = round((line_total_raw - prorated) * (tax_pct / 100), 2)
                                 data['total'] = round(line_total_raw - prorated + (data['tax_amount'] or 0), 2)
 
         return data
