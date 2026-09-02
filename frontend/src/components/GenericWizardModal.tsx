@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select, DatePicker, Input, Spin } from 'antd';
-import { HomeOutlined, FileTextOutlined, SendOutlined, BarChartOutlined } from '@ant-design/icons';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select, DatePicker, Input, Spin, Alert, message } from 'antd';
+import { HomeOutlined, FileTextOutlined, SendOutlined, BarChartOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ProgressBar from './ProgressBar';
 import { DATE_FORMAT } from '../utils/format';
@@ -32,6 +32,43 @@ interface WizardTableColumn {
   label: string;
 }
 
+/** Config untuk mode `split` — bagi nilai field parent (source_field) menjadi
+ *  N baris dengan tanggal bertahap (date_step). Nominal dihitung di backend
+ *  saat confirm; tabel preview di sini hanya untuk pratinjau UX. */
+interface WizardSplitConfig {
+  source_label?: string;
+  source_field: string;
+  count_input: string;
+  date_input: string;
+  date_step?: 'month' | 'day';
+  note_prefix?: string;
+  currency?: string;
+  status?: { label: string; color: string };
+  /** Kolom tabel pratinjau — metadata-driven (no/date/number/text/status) */
+  columns: WizardEditableColumn[];
+}
+
+interface WizardEditableColumn {
+  key: string;
+  label: string;
+  type: 'no' | 'date' | 'number' | 'text' | 'status';
+  /** true → sel diedit user (date picker/input number/input text) */
+  editable?: boolean;
+}
+
+/** Config untuk mode `editable_rows` — tabel baris yang diisi user manual.
+ *  Status payment & nomor urut otomatis; sisa tagihan wajib 0 saat confirm
+ *  (divalidasi frontend & backend). */
+interface WizardEditableRowsConfig {
+  source_label?: string;
+  source_field: string;
+  title?: string;
+  note_prefix?: string;
+  currency?: string;
+  status?: { label: string; color: string };
+  columns: WizardEditableColumn[];
+}
+
 interface WizardMode {
   value: string;
   label: string;
@@ -41,6 +78,8 @@ interface WizardMode {
     title?: string;
     columns: WizardTableColumn[];
   };
+  split?: WizardSplitConfig;
+  editable_rows?: WizardEditableRowsConfig;
 }
 
 interface WizardInput {
@@ -97,7 +136,7 @@ interface GenericWizardModalProps {
   visible: boolean;
   config: WizardConfig;
   items: WizardLineItem[];
-  onConfirm: (mode: string, selectedLines: SelectedLine[], extraInputs?: Record<string, number | string>) => void;
+  onConfirm: (mode: string, selectedLines: SelectedLine[], extraInputs?: Record<string, unknown>) => void;
   onCancel: () => void;
   /** Optional — untuk mode bertipe `table`: fetch data dari backend saat mode dipilih */
   onFetchTable?: (mode: string) => Promise<{ rows: Record<string, unknown>[] }>;
@@ -105,6 +144,8 @@ interface GenericWizardModalProps {
   columnLabels?: Record<string, string>;
   /** Optional — id record parent aktif (untuk placeholder {record_id} di filter many2one) */
   recordId?: number | null;
+  /** Optional — data record parent (untuk mode `split`: baca source_field) */
+  recordData?: Record<string, unknown> | null;
 }
 
 function ModeCards({
@@ -311,6 +352,134 @@ function LineSelector({
   );
 }
 
+/** Tabel baris generic untuk mode split & editable_rows — kolom & perilaku
+ *  sepenuhnya dari config (metadata-driven), tanpa string khusus model. */
+interface WizardEditableTableProps {
+  columns: WizardEditableColumn[];
+  rows: Record<string, unknown>[];
+  currency?: string;
+  status?: { label: string; color: string };
+  notePrefix?: string;
+  onCellChange?: (idx: number, key: string, value: unknown) => void;
+  onRemoveRow?: (idx: number) => void;
+}
+
+function WizardEditableTable({
+  columns,
+  rows,
+  currency = '',
+  status,
+  notePrefix = 'Term ke-',
+  onCellChange,
+  onRemoveRow,
+}: WizardEditableTableProps) {
+  const fmt = (v: number) => `${currency}${Number(v || 0).toLocaleString('id-ID')}`;
+  return (
+    <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e8e8e8', borderRadius: 6 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: '#fafafa', borderBottom: '1px solid #e8e8e8' }}>
+            {columns.map((c) => (
+              <th
+                key={c.key}
+                style={{
+                  padding: '8px 10px',
+                  textAlign: c.type === 'number' ? 'right' : 'left',
+                  minWidth: c.type === 'date' ? 170 : c.type === 'number' ? 140 : c.type === 'text' ? 160 : undefined,
+                }}
+              >
+                {c.label}
+              </th>
+            ))}
+            {onRemoveRow && <th style={{ padding: '8px 10px', width: 40 }} />}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={columns.length + (onRemoveRow ? 1 : 0)} style={{ padding: 16, textAlign: 'center', color: '#999' }}>
+                Belum ada baris
+              </td>
+            </tr>
+          )}
+          {rows.map((r, idx) => (
+            <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
+              {columns.map((c) => {
+                const val = r[c.key];
+                const isEditable = !!onCellChange && c.editable;
+                return (
+                  <td
+                    key={c.key}
+                    style={{
+                      padding: c.type === 'date' || c.type === 'number' || c.type === 'text' ? '4px 10px' : '6px 10px',
+                      textAlign: c.type === 'number' ? 'right' : 'left',
+                    }}
+                  >
+                    {c.type === 'no' ? idx + 1
+                      : c.type === 'status' ? (status && <Tag color={status.color}>{status.label}</Tag>)
+                      : c.type === 'date' ? (
+                          isEditable ? (
+                            <DatePicker
+                              size="small"
+                              style={{ width: '100%' }}
+                              format={DATE_FORMAT}
+                              value={val ? dayjs(val as string) : null}
+                              onChange={(d) => onCellChange(idx, c.key, d ? d.format('YYYY-MM-DD') : '')}
+                            />
+                          ) : (
+                            dayjs(val as string).format('DD-MMM-YYYY')
+                          )
+                        )
+                      : c.type === 'number' ? (
+                          isEditable ? (
+                            <InputNumber
+                              size="small"
+                              min={0}
+                              style={{ width: '100%' }}
+                              value={Number(val) || 0}
+                              onChange={(v) => onCellChange(idx, c.key, v ?? 0)}
+                              formatter={(value) => {
+                                if (value === undefined || value === null || value === '') return '';
+                                return Number(value).toLocaleString('id-ID');
+                              }}
+                              parser={(value) => {
+                                if (!value) return undefined as unknown as number;
+                                return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+                              }}
+                            />
+                          ) : (
+                            fmt(Number(val) || 0)
+                          )
+                        )
+                      : c.type === 'text' ? (
+                          isEditable ? (
+                            <Input
+                              size="small"
+                              value={String(val ?? '')}
+                              placeholder={`${notePrefix}${idx + 1}`}
+                              onChange={(e) => onCellChange(idx, c.key, e.target.value)}
+                            />
+                          ) : (
+                            String(val ?? '')
+                          )
+                        )
+                      : String(val ?? '')}
+                  </td>
+                );
+              })}
+              {onRemoveRow && (
+                <td style={{ padding: '4px 6px' }}>
+                  <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={() => onRemoveRow(idx)} />
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function GenericWizardModal({
   visible,
   config,
@@ -320,6 +489,7 @@ export default function GenericWizardModal({
   onFetchTable,
   columnLabels,
   recordId,
+  recordData,
 }: GenericWizardModalProps) {
   const [selectedMode, setSelectedMode] = useState<string>(config.modes[0]?.value || '');
   const [selectedIds, setSelectedIds] = useState<number[]>(
@@ -352,25 +522,35 @@ export default function GenericWizardModal({
     const currentMode = config.modes.find((m) => m.value === selectedMode);
     const vals: Record<string, number | string> = {};
     currentMode?.inputs?.forEach((inp) => {
-      if (inp.default !== undefined) vals[inp.key] = inp.default;
+      if (inp.type === 'date' && inp.default === 'today') vals[inp.key] = dayjs().format('YYYY-MM-DD');
+      else if (inp.default !== undefined) vals[inp.key] = inp.default;
       else if (inp.type === 'selection') vals[inp.key] = inp.options?.[0]?.value ?? '';
-      else if (inp.type === 'date' || inp.type === 'text') vals[inp.key] = '';
+      else if (inp.type === 'date') vals[inp.key] = '';
+      else if (inp.type === 'text') vals[inp.key] = '';
       else vals[inp.key] = 0;
     });
     return vals;
   });
+  // Catatan per baris mode `split` (key: term_no) — direset tiap modal terbuka
+  const [splitNotes, setSplitNotes] = useState<Record<number, string>>({});
+  // Baris mode `editable_rows` (manual) — direset tiap modal terbuka
+  const [manualRows, setManualRows] = useState<{ due_date: string; amount: number; note: string }[]>([]);
 
   const handleModeChange = (value: string) => {
     setSelectedMode(value);
     const newMode = config.modes.find((m) => m.value === value);
     const vals: Record<string, number | string> = {};
     newMode?.inputs?.forEach((inp) => {
-      if (inp.default !== undefined) vals[inp.key] = inp.default;
+      if (inp.type === 'date' && inp.default === 'today') vals[inp.key] = dayjs().format('YYYY-MM-DD');
+      else if (inp.default !== undefined) vals[inp.key] = inp.default;
       else if (inp.type === 'selection') vals[inp.key] = inp.options?.[0]?.value ?? '';
-      else if (inp.type === 'date' || inp.type === 'text') vals[inp.key] = '';
+      else if (inp.type === 'date') vals[inp.key] = '';
+      else if (inp.type === 'text') vals[inp.key] = '';
       else vals[inp.key] = 0;
     });
     setExtraInputValues(vals);
+    setSplitNotes({});
+    setManualRows([{ due_date: '', amount: 0, note: '' }]);
   };
 
   const itemsFingerprintRef = useRef('');
@@ -410,6 +590,52 @@ export default function GenericWizardModal({
   const tableCfg = currentMode?.table;
   const tableTitle = tableCfg?.title || 'Data';
   const tableColumns = tableCfg?.columns || [];
+  // Konfigurasi mode split (pratinjau baris terbagi) — di-capture ke const
+  // lokal agar narrowing TypeScript tetap berlaku di dalam closure JSX
+  const splitCfg = currentMode?.split;
+  const manualCfg = currentMode?.editable_rows;
+
+  // Reset catatan split & baris manual tiap modal dibuka
+  useEffect(() => {
+    if (visible) {
+      setSplitNotes({});
+      setManualRows([{ due_date: '', amount: 0, note: '' }]);
+    }
+  }, [visible]);
+
+  // Baris pratinjau mode `split`: bagi source_field → count baris, tanggal
+  // bertahap dari date_input. Nominal hanya preview — backend menghitung ulang
+  // saat confirm (authoritative).
+  const splitRows = useMemo(() => {
+    if (!splitCfg) return [];
+    const sourceVal = Number((recordData ?? {})[splitCfg.source_field] ?? 0);
+    if (sourceVal <= 0) return [];
+    const count = Number(extraInputValues[splitCfg.count_input] ?? 0);
+    const dateStr = extraInputValues[splitCfg.date_input] as string | undefined;
+    if (!count || count < 1 || !dateStr) return [];
+    const base = Math.floor(sourceVal / count);
+    const step = splitCfg.date_step || 'month';
+    const rows: { term_no: number; due_date: dayjs.Dayjs; amount: number }[] = [];
+    for (let i = 0; i < count; i++) {
+      rows.push({
+        term_no: i + 1,
+        due_date: dayjs(dateStr).add(i, step),
+        amount: i === count - 1 ? sourceVal - base * (count - 1) : base,
+      });
+    }
+    return rows;
+  }, [splitCfg, recordData, extraInputValues]);
+
+  // ── Handler baris mode editable_rows (manual) ──
+  const handleManualRowChange = (idx: number, key: string, value: unknown) => {
+    setManualRows((prev) => prev.map((r, i) => (i === idx ? { ...r, [key]: value } : r)));
+  };
+  const handleAddManualRow = () => {
+    setManualRows((prev) => [...prev, { due_date: '', amount: 0, note: '' }]);
+  };
+  const handleRemoveManualRow = (idx: number) => {
+    setManualRows((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   const handleExtraInputChange = (key: string, value: number | string | null) => {
     setExtraInputValues((prev) => ({ ...prev, [key]: value ?? 0 }));
@@ -481,14 +707,66 @@ export default function GenericWizardModal({
     const m = mode || selectedMode;
     const modeCfg = config.modes.find((x) => x.value === m);
     if (modeCfg?.table) return; // mode tampilan tabel — read-only, tidak ada aksi
+    // Validasi mode split: jumlah termin & tanggal pertama wajib valid
+    if (modeCfg?.split) {
+      const count = Number(extraInputValues[modeCfg.split.count_input] ?? 0);
+      if (!count || count < 1) {
+        message.warning('Isi jumlah termin (minimal 1).');
+        return;
+      }
+      const dateStr = extraInputValues[modeCfg.split.date_input] as string | undefined;
+      if (!dateStr) {
+        message.warning('Pilih tanggal pertama.');
+        return;
+      }
+      const sourceVal = Number((recordData ?? {})[modeCfg.split.source_field] ?? 0);
+      if (sourceVal <= 0) {
+        message.warning('Nilai sumber 0 — tidak bisa dibagi.');
+        return;
+      }
+    }
+    // Validasi mode editable_rows (manual): minimal 1 baris lengkap &
+    // total harus sama dengan nilai sumber (sisa tagihan wajib 0)
+    if (modeCfg?.editable_rows) {
+      const sourceVal = Number((recordData ?? {})[modeCfg.editable_rows.source_field] ?? 0);
+      const filled = manualRows.filter((r) => r.due_date && Number(r.amount) > 0);
+      if (filled.length === 0) {
+        message.warning('Tambah minimal 1 baris cicilan (tanggal & nominal wajib).');
+        return;
+      }
+      const total = filled.reduce((s, r) => s + Number(r.amount), 0);
+      if (Math.abs(total - sourceVal) > 0.01) {
+        const currency = modeCfg.editable_rows.currency || '';
+        const fmt = (v: number) => `${currency}${Number(v || 0).toLocaleString('id-ID')}`;
+        message.warning(`Total cicilan harus sama dengan sisa tagihan (${fmt(sourceVal)}) — sisa tagihan wajib 0.`);
+        return;
+      }
+    }
     const selectedLines = selectedIds.map((id) => ({
       id,
       qty: qtys[id] ?? 0,
       ...(editableValues[id] || {}),
     }));
+    const payload: Record<string, unknown> = { ...extraInputValues };
+    if (modeCfg?.split) {
+      // Catatan per baris dikirim sebagai array (index 0 = termin 1)
+      payload.notes = splitRows.map((r) => (
+        splitNotes[r.term_no] || `${modeCfg.split?.note_prefix || 'Term ke-'}${r.term_no}`
+      ));
+    }
+    if (modeCfg?.editable_rows) {
+      // Baris manual dikirim apa adanya; backend memvalidasi ulang
+      payload.rows = manualRows
+        .filter((r) => r.due_date && Number(r.amount) > 0)
+        .map((r, i) => ({
+          due_date: r.due_date,
+          amount: Number(r.amount),
+          note: r.note || `${modeCfg.editable_rows?.note_prefix || 'Term ke-'}${i + 1}`,
+        }));
+    }
     setConfirming(true);
     try {
-      await onConfirm(m, selectedLines, extraInputValues);
+      await onConfirm(m, selectedLines, payload);
     } finally {
       setConfirming(false);
     }
@@ -542,9 +820,9 @@ export default function GenericWizardModal({
       open={visible}
       onOk={() => handleConfirm()}
       onCancel={onCancel}
-      okText={allModesShowTable ? undefined : "Confirm"}
+      okText={allModesShowTable ? undefined : (currentMode?.split || currentMode?.editable_rows ? "Konfirmasi" : "Confirm")}
       cancelText="Cancel"
-      width={640}
+      width={currentMode?.split || currentMode?.editable_rows ? 760 : 640}
       destroyOnClose
       confirmLoading={confirming}
       cancelButtonProps={{ disabled: confirming }}
@@ -578,7 +856,7 @@ export default function GenericWizardModal({
                       <Many2OneWizardInput
                         inp={inp}
                         value={extraInputValues[inp.key] as number | undefined}
-                        onChange={(v) => handleExtraInputChange(inp.key, v)}
+                        onChange={(v) => handleExtraInputChange(inp.key, v ?? null)}
                         many2oneOptions={many2oneOptions}
                         onFetch={handleFetchMany2One}
                       />
@@ -604,7 +882,7 @@ export default function GenericWizardModal({
                           min={inp.min ?? 0}
                           max={isPercentage ? 100 : inp.max}
                           addonAfter={isPercentage ? '%' : undefined}
-                          value={extraInputValues[inp.key] as number ?? (inp.default as number ?? 0)}
+                          value={(extraInputValues[inp.key] as number | undefined) ?? (typeof inp.default === 'number' ? inp.default : 0)}
                           onChange={(val) => handleExtraInputChange(inp.key, val)}
                           style={{ width: '100%' }}
                           formatter={(value) => {
@@ -696,6 +974,117 @@ export default function GenericWizardModal({
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {splitCfg && (
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+              Pratinjau
+            </Text>
+            {(() => {
+              const sourceVal = Number((recordData ?? {})[splitCfg.source_field] ?? 0);
+              const currency = splitCfg.currency || '';
+              const fmt = (v: number) => `${currency}${Number(v || 0).toLocaleString('id-ID')}`;
+              const total = splitRows.reduce((s, r) => s + r.amount, 0);
+              const sisa = sourceVal - total;
+              const prefix = splitCfg.note_prefix || 'Term ke-';
+              const rows = splitRows.map((r) => ({
+                term_no: r.term_no,
+                due_date: r.due_date.format('YYYY-MM-DD'),
+                amount: r.amount,
+                note: splitNotes[r.term_no] || `${prefix}${r.term_no}`,
+              }));
+              return (
+                <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                  <div>
+                    <Text strong>{splitCfg.source_label || 'Nilai Sumber'}: </Text>
+                    <Text strong style={{ color: '#1677ff' }}>{fmt(sourceVal)}</Text>
+                  </div>
+                  {sourceVal <= 0 && (
+                    <Alert type="warning" showIcon message="Nilai sumber 0 — tidak bisa dibagi." />
+                  )}
+                  {splitRows.length === 0 ? (
+                    <div style={{ padding: 12, textAlign: 'center', color: '#999', border: '1px dashed #d9d9d9', borderRadius: 6 }}>
+                      Isi jumlah termin & tanggal pertama untuk melihat pratinjau
+                    </div>
+                  ) : (
+                    <WizardEditableTable
+                      columns={splitCfg.columns || []}
+                      rows={rows}
+                      currency={currency}
+                      status={splitCfg.status}
+                      notePrefix={prefix}
+                      onCellChange={(idx, key, value) => {
+                        if (key === 'note') {
+                          const termNo = splitRows[idx]?.term_no;
+                          if (termNo != null) setSplitNotes((prev) => ({ ...prev, [termNo]: String(value) }));
+                        }
+                      }}
+                    />
+                  )}
+                  {splitRows.length > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Text type="secondary">Total ({splitRows.length} baris)</Text>
+                      <Text strong>{fmt(total)}</Text>
+                    </div>
+                  )}
+                  {splitRows.length > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Text strong>Sisa Tagihan setelah cicilan</Text>
+                      <Text strong style={{ color: sisa <= 0 ? '#52c41a' : '#ff4d4f' }}>
+                        {fmt(sisa)}
+                      </Text>
+                    </div>
+                  )}
+                </Space>
+              );
+            })()}
+          </div>
+        )}
+
+        {manualCfg && (
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+              {manualCfg.title || 'Baris'}
+            </Text>
+            {(() => {
+              const sourceVal = Number((recordData ?? {})[manualCfg.source_field] ?? 0);
+              const currency = manualCfg.currency || '';
+              const fmt = (v: number) => `${currency}${Number(v || 0).toLocaleString('id-ID')}`;
+              const total = manualRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+              const sisa = sourceVal - total;
+              const prefix = manualCfg.note_prefix || 'Term ke-';
+              return (
+                <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                  <div>
+                    <Text strong>{manualCfg.source_label || 'Sisa Tagihan'}: </Text>
+                    <Text strong style={{ color: '#1677ff' }}>{fmt(sourceVal)}</Text>
+                  </div>
+                  {sourceVal <= 0 && (
+                    <Alert type="warning" showIcon message="Nilai sumber 0 — tidak bisa membuat cicilan." />
+                  )}
+                  <WizardEditableTable
+                    columns={manualCfg.columns || []}
+                    rows={manualRows}
+                    currency={currency}
+                    status={manualCfg.status}
+                    notePrefix={prefix}
+                    onCellChange={handleManualRowChange}
+                    onRemoveRow={handleRemoveManualRow}
+                  />
+                  <Button size="small" icon={<PlusOutlined />} onClick={handleAddManualRow}>Tambah Baris</Button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Total ({manualRows.length} baris)</Text>
+                    <Text strong>{fmt(total)}</Text>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Text strong>Sisa Tagihan setelah cicilan</Text>
+                    <Text strong style={{ color: sisa <= 0 ? '#52c41a' : '#ff4d4f' }}>{fmt(sisa)}</Text>
+                  </div>
+                </Space>
+              );
+            })()}
           </div>
         )}
       </Space>

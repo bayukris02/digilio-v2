@@ -89,7 +89,15 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
     summaryRevision, recordData,
   } = ctx;
 
-  return tabs.map((tab) => ({
+  return tabs
+    .filter((tab) => {
+      // Tab opsional: hanya muncul kalau relasinya sudah punya data (mis. tab Cicilan)
+      if ((tab as any)?.show_when_has_data) {
+        return ((lineItems[(tab as any).relation] || []) as unknown[]).length > 0;
+      }
+      return true;
+    })
+    .map((tab) => ({
     key: tab.key,
     label: tab.label,
     children: tab.fields ? (

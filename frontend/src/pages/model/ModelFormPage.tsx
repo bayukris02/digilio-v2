@@ -621,6 +621,26 @@ export default function ModelFormPage({
     // ── If action has wizard config, show modal instead of calling API directly ──
     const wizardCfg = btn.wizard as Record<string, unknown> | undefined;
     if (wizardCfg) {
+      // Guard aksi: tanya backend dulu apakah aksi boleh dijalankan (backend
+      // membaca config fresh tiap request — tidak bergantung config cache).
+      // Kalau tidak boleh, tampilkan pesan error dari guard dan JANGAN buka
+      // wizard. Action tanpa guard → precheck lolos otomatis. Backend juga
+      // menjalankan guard lagi saat action dieksekusi (authoritative).
+      if (recordId && !isNew) {
+        try {
+          const guardRes = await modelApi.postAction(apiModelName, Number(recordId), actionName, { precheck: true });
+          if (guardRes?.error) {
+            message.error(guardRes.error as string);
+            setActionLoading(null);
+            return;
+          }
+        } catch (err: unknown) {
+          const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || (err as Error)?.message || 'Aksi tidak dapat dijalankan';
+          message.error(msg);
+          setActionLoading(null);
+          return;
+        }
+      }
       setActionWizardBtn(btn);
       setActionWizardVisible(true);
       setActionLoading(null);
@@ -860,7 +880,7 @@ export default function ModelFormPage({
   }, [apiModelName, recordId, isNew, form, config, recordData, lineItems, childConfigs, modelName, navigate]);
 
   // ── Action wizard confirm — called from GenericWizardModal ──
-  const handleWizardConfirm = useCallback(async (mode: string, selectedLines: Record<string, unknown>[], extraInputs?: Record<string, number>) => {
+  const handleWizardConfirm = useCallback(async (mode: string, selectedLines: Record<string, unknown>[], extraInputs?: Record<string, unknown>) => {
     if (!actionWizardBtn) return;
     const actionName = actionWizardBtn.action as string;
     if (!actionName) return;
@@ -1965,6 +1985,7 @@ export default function ModelFormPage({
           items={wizardItems}
           columnLabels={wizardColumnLabels}
           recordId={recordId ? Number(recordId) : null}
+          recordData={recordData}
           onConfirm={handleWizardConfirm}
           onFetchTable={handleFetchWizardTable}
           onCancel={() => { setActionWizardVisible(false); setActionWizardBtn(null); }}

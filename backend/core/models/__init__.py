@@ -46,6 +46,7 @@ from core.models.accounting.vendor_bill import VendorBill
 from core.models.accounting.vendor_bill_line import VendorBillLine
 from core.models.accounting.customer_invoice import CustomerInvoice
 from core.models.accounting.customer_invoice_line import CustomerInvoiceLine
+from core.models.accounting.customer_invoice_installment import CustomerInvoiceInstallment
 from core.models.accounting.expense import Expense
 from core.models.accounting.expense_line import ExpenseLine
 from core.models.accounting.transfer_cash_bank import TransferCashBank
@@ -86,7 +87,7 @@ __all__ = [
     'Sequence', 'SequenceDateRange',
     'ChartOfAccount', 'Jurnal', 'JurnalLine',
     'VendorBill', 'VendorBillLine',
-    'CustomerInvoice', 'CustomerInvoiceLine',
+    'CustomerInvoice', 'CustomerInvoiceLine', 'CustomerInvoiceInstallment',
     'Expense', 'ExpenseLine',
     'TransferCashBank', 'Deposit',
     'Asset', 'AssetDepreciationLine',

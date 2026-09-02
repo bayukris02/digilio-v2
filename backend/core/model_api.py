@@ -809,6 +809,39 @@ def model_action(request, model_name, record_id):
     if not action_method:
         return Response({'error': f'Action "{action_name}" not found on {model_name}'}, status=404)
 
+    # ── Action-level guard (config `guard` di action, pola sama seperti transisi) ──
+    # Dipakai mis. untuk memblokir aksi wizard sebelum dijalankan dengan pesan
+    # spesifik per kondisi. Dicari rekursif di form_view.header.actions (incl. children).
+    action_cfg = None
+    try:
+        cfg = model_cls.get_model_config() or {}
+        header = (cfg.get('form_view') or {}).get('header') or {}
+        stack = list(header.get('actions') or [])
+        while stack:
+            item = stack.pop(0)
+            if item.get('action') == action_name:
+                action_cfg = item
+                break
+            stack = list(item.get('children') or []) + stack
+    except Exception:
+        action_cfg = None
+
+    guard_name = (action_cfg or {}).get('guard')
+    if guard_name:
+        guard_method = getattr(obj, guard_name, None)
+        if guard_method:
+            try:
+                # Sediakan request data agar guard bisa baca flag (mis. 'precheck')
+                obj._action_request_data = request.data
+                guard_method()
+            except Exception as e:
+                return Response({'error': str(e)}, status=400)
+
+    # Precheck: frontend menanyakan apakah aksi boleh dijalankan (guard saja,
+    # action TIDAK dieksekusi). Dipakai sebelum modal wizard dibuka.
+    if request.data.get('precheck'):
+        return Response({'precheck': True})
+
     try:
         # Pass request data (minus 'action' key) to action method
         # Methods that don't need it can accept *args, **kwargs

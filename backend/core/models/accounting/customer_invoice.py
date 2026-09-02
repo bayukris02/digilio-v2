@@ -102,6 +102,13 @@ class CustomerInvoice(BaseModel):
             inverse_field='invoice_id',
         ),
 
+        # ── Cicilan ──
+        'installment_lines': One2ManyField(
+            label='Cicilan',
+            relation='accounting.customer_invoice_installment',
+            inverse_field='invoice_id',
+        ),
+
         # ── Payment fields ──
         'due_amount': MonetaryField(label='Sisa Tagihan', currency='IDR',
             compute='_compute_payment_summary', depends=['grand_total', 'paid_amount']),
@@ -156,7 +163,56 @@ class CustomerInvoice(BaseModel):
                 {
                     'label': 'Action', 'color': 'primary',
                     'children': [
-                        {'label': 'Buat Cicilan', 'action': 'create_installment'},
+                        {'label': 'Buat Cicilan', 'action': 'create_installment',
+                         'guard': '_guard_create_installment', 'wizard': {
+                            'title': 'Buat Cicilan',
+                            'modes': [
+                                {
+                                    'value': 'auto',
+                                    'label': 'Otomatis',
+                                    'inputs': [
+                                        {'key': 'tenor', 'label': 'Tenor Cicilan (bulan)', 'type': 'number', 'min': 1, 'max': 24},
+                                        {'key': 'first_date', 'label': 'Tanggal Tagihan Pertama', 'type': 'date', 'default': 'today'},
+                                    ],
+                                    'split': {
+                                        'source_label': 'Sisa Tagihan',
+                                        'source_field': 'due_amount',
+                                        'count_input': 'tenor',
+                                        'date_input': 'first_date',
+                                        'date_step': 'month',
+                                        'note_prefix': 'Cicilan ke-',
+                                        'currency': 'Rp ',
+                                        'status': {'label': 'Belum Dibayar', 'color': 'red'},
+                                        'columns': [
+                                            {'key': 'term_no', 'label': 'No', 'type': 'no'},
+                                            {'key': 'due_date', 'label': 'Tanggal Jatuh Tempo', 'type': 'date'},
+                                            {'key': 'amount', 'label': 'Nominal Tagihan', 'type': 'number'},
+                                            {'key': 'note', 'label': 'Catatan', 'type': 'text', 'editable': True},
+                                            {'key': 'payment_status', 'label': 'Status Payment', 'type': 'status'},
+                                        ],
+                                    },
+                                },
+                                {
+                                    'value': 'manual',
+                                    'label': 'Manual',
+                                    'editable_rows': {
+                                        'source_label': 'Sisa Tagihan',
+                                        'source_field': 'due_amount',
+                                        'title': 'Cicilan Manual',
+                                        'note_prefix': 'Cicilan ke-',
+                                        'currency': 'Rp ',
+                                        'status': {'label': 'Belum Dibayar', 'color': 'red'},
+                                        'columns': [
+                                            {'key': 'no', 'label': 'No', 'type': 'no'},
+                                            {'key': 'due_date', 'label': 'Tanggal Jatuh Tempo', 'type': 'date', 'editable': True},
+                                            {'key': 'amount', 'label': 'Nominal Tagihan', 'type': 'number', 'editable': True},
+                                            {'key': 'note', 'label': 'Catatan', 'type': 'text', 'editable': True},
+                                            {'key': 'payment_status', 'label': 'Status Payment', 'type': 'status'},
+                                        ],
+                                    },
+                                },
+                            ],
+                        }},
                     ],
                 },
             ],
@@ -180,6 +236,12 @@ class CustomerInvoice(BaseModel):
                         'model': 'accounting.customer_receipt',
                     },
                 },
+            },
+            {
+                'key': 'installments',
+                'label': 'Cicilan',
+                'relation': 'installment_lines',
+                'show_when_has_data': True,
             },
         ],
     }
@@ -252,6 +314,129 @@ class CustomerInvoice(BaseModel):
                 amount=float(line.received_amount or 0),
                 payment_date=r.payment_date,
             )
+
+    # ── Guard: Buat Cicilan ──
+
+    def _guard_create_installment(self):
+        """Cicilan hanya boleh dibuat jika invoice sudah confirmed & belum punya cicilan.
+
+        Dipanggil otomatis oleh core (config `guard` pada action) SEBELUM wizard
+        dibuka (precheck) maupun sebelum action dieksekusi — pesan error membedakan
+        guard mana yang gagal.
+        """
+        if getattr(self, 'status', None) != 'confirmed':
+            raise ValueError(
+                'Invoice belum dikonfirmasi — hanya faktur berstatus Confirmed '
+                'yang bisa dibuat cicilan.'
+            )
+        from core.models.accounting.customer_invoice_installment import CustomerInvoiceInstallment
+        if CustomerInvoiceInstallment.objects.filter(
+            invoice_id=self.pk, is_deleted=False
+        ).exists():
+            raise ValueError(
+                'Faktur ini sudah memiliki cicilan — hapus cicilan yang ada '
+                'terlebih dahulu jika ingin membuat ulang.'
+            )
+
+    # ── Action: Buat Cicilan ──
+
+    def _action_create_installment(self, data):
+        """Buat baris cicilan.
+
+        Dua mode:
+        - Otomatis (rows kosong): tenor + tanggal pertama → nominal dihitung
+          backend = floor(sisa / tenor); baris terakhir menyerap sisa pembulatan;
+          jatuh tempo = tanggal pertama + i bulan.
+        - Manual (rows dikirim user): baris (due_date, amount, note) divalidasi
+          ulang; total WAJIB sama dengan sisa tagihan (sisa tagihan = 0).
+
+        Pola replace: cicilan lama dihapus dulu, lalu dibuat ulang sehingga
+        hasil akhir selalu mencerminkan input terakhir user.
+        """
+        import math
+        from datetime import datetime
+
+        from dateutil.relativedelta import relativedelta
+
+        from core.models.accounting.customer_invoice_installment import CustomerInvoiceInstallment
+
+        due_amount = float(self.due_amount or 0)
+        if due_amount <= 0:
+            raise ValueError('Sisa tagihan 0 — tidak bisa membuat cicilan.')
+
+        # ── Manual: baris dikirim user ──
+        rows = data.get('rows') or []
+        if rows:
+            cleaned = []
+            for i, row in enumerate(rows, start=1):
+                due_date = (row.get('due_date') or '').strip()
+                amount = float(row.get('amount') or 0)
+                if not due_date:
+                    raise ValueError(f'Baris {i}: tanggal jatuh tempo wajib diisi.')
+                if amount <= 0:
+                    raise ValueError(f'Baris {i}: nominal harus lebih dari 0.')
+                try:
+                    datetime.strptime(due_date, '%Y-%m-%d')
+                except ValueError:
+                    raise ValueError(f'Baris {i}: format tanggal tidak valid.')
+                cleaned.append({
+                    'due_date': due_date,
+                    'amount': amount,
+                    'note': (row.get('note') or '').strip() or f'Cicilan ke-{i}',
+                })
+            total = sum(r['amount'] for r in cleaned)
+            if abs(total - due_amount) > 1:
+                raise ValueError(
+                    f'Total cicilan ({total:,.0f}) harus sama dengan sisa tagihan '
+                    f'({due_amount:,.0f}) — sisa tagihan wajib 0.'
+                )
+            CustomerInvoiceInstallment.objects.filter(
+                invoice_id=self.pk, is_deleted=False
+            ).update(is_deleted=True)
+            for i, r in enumerate(cleaned, start=1):
+                CustomerInvoiceInstallment.objects.create(
+                    invoice_id=self,
+                    term_no=i,
+                    due_date=r['due_date'],
+                    amount=r['amount'],
+                    note=r['note'],
+                    payment_status='unpaid',
+                )
+            return {'message': 'Cicilan berhasil dibuat.'}
+
+        # ── Otomatis: tenor + tanggal pertama ──
+        tenor = int(data.get('tenor') or 0)
+        first_date = data.get('first_date') or ''
+
+        if tenor <= 0:
+            raise ValueError('Tenor cicilan harus lebih dari 0 bulan.')
+        if not first_date:
+            raise ValueError('Tanggal tagihan pertama wajib diisi.')
+        try:
+            d = datetime.strptime(first_date, '%Y-%m-%d').date()
+        except ValueError:
+            raise ValueError('Format tanggal tagihan pertama tidak valid.')
+
+        base = math.floor(due_amount / tenor)
+
+        # Replace lama → baru
+        CustomerInvoiceInstallment.objects.filter(
+            invoice_id=self.pk, is_deleted=False
+        ).update(is_deleted=True)
+
+        notes = data.get('notes') or []
+        for i in range(1, tenor + 1):
+            amount = due_amount - base * (tenor - 1) if i == tenor else base
+            note = notes[i - 1] if i - 1 < len(notes) and notes[i - 1] else f'Cicilan ke-{i}'
+            CustomerInvoiceInstallment.objects.create(
+                invoice_id=self,
+                term_no=i,
+                due_date=d + relativedelta(months=i - 1),
+                amount=amount,
+                note=note,
+                payment_status='unpaid',
+            )
+        return {'message': 'Cicilan berhasil dibuat.'}
 
     # ── Computed Fields ──
 
