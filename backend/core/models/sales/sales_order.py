@@ -484,16 +484,16 @@ class SalesOrder(BaseModel):
                         subtotal = float(so_line.qty or 0) * float(so_line.price or 0)
                         disc_pct = float(getattr(so_line, 'discount_percentage', 0) or 0)
                         dpp = subtotal * dp_pct
-                        tax_ids = tuple(so_line._m2m_ids('taxes')) if hasattr(so_line, '_m2m_ids') else ()
-                        key = (tax_ids, disc_pct)
+                        tax_id = getattr(so_line, 'taxes_id', None)
+                        key = (tax_id, disc_pct)
                         if key not in groups:
-                            groups[key] = {'dpp': 0.0, 'tax_ids': tax_ids, 'disc_pct': disc_pct}
+                            groups[key] = {'dpp': 0.0, 'tax_id': tax_id, 'disc_pct': disc_pct}
                         groups[key]['dpp'] += dpp
 
                     from core.models.accounting.tax import taxes_total_rate
-                    for (tax_ids, disc_pct), data in groups.items():
+                    for (tax_id, disc_pct), data in groups.items():
                         price = data['dpp']
-                        tax_pct = taxes_total_rate(tax_ids)
+                        tax_pct = taxes_total_rate(tax_id)
                         # Buat label
                         parts = [f'DP {dp_value:.0f}%']
                         if disc_pct > 0:
@@ -506,10 +506,8 @@ class SalesOrder(BaseModel):
                             qty=1,
                             price=price,
                             discount_percentage=disc_pct,
+                            taxes_id=tax_id,
                         )
-                        if tax_ids:
-                            dp_line.taxes.set(tax_ids)
-                            dp_line.save()
 
                     # Paksa compute summary agar grand_total terisi
                     invoice._compute_summary()
@@ -644,11 +642,8 @@ class SalesOrder(BaseModel):
                             qty=qty,
                             uom=line.uom,
                             price=line.price,
+                            taxes_id=getattr(line, 'taxes_id', None),
                         )
-                        tax_ids = line._m2m_ids('taxes') if hasattr(line, '_m2m_ids') else []
-                        if tax_ids:
-                            inv_line.taxes.set(tax_ids)
-                            inv_line.save()
 
         # Trigger compute summary agar down_payment_amount & grand_total terisi
         invoice._compute_summary()
@@ -726,7 +721,7 @@ class SalesOrder(BaseModel):
                             'product': line.product,
                             'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
                             'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
-                            'tax_pct': taxes_total_rate(line._m2m_ids('taxes')) if hasattr(line, '_m2m_ids') else 0.0,
+                            'tax_pct': taxes_total_rate(getattr(line, 'taxes_id', None)),
                         })
 
         # ── Recompute per-line values dari raw data ──

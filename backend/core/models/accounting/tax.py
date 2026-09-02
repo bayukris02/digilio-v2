@@ -61,12 +61,21 @@ def _norm_tax_ids(value):
     out = []
     for v in value if isinstance(value, (list, tuple)) else [value]:
         if isinstance(v, dict):
-            out.append(v.get('id') or v.get('value'))
+            out.append(v.get('id') or v.get('pk') or v.get('value'))
         elif hasattr(v, 'pk'):
             out.append(v.pk)
         else:
             out.append(v)
-    return [x for x in out if x is not None]
+    # Hanya id numerik — buang ''/None/bukan angka (guard payload kosong).
+    clean = []
+    for x in out:
+        if x is None:
+            continue
+        try:
+            clean.append(int(float(x)))
+        except (TypeError, ValueError):
+            continue
+    return clean
 
 
 def taxes_total_rate(value):

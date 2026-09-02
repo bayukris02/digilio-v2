@@ -407,7 +407,18 @@ class Many2ManyField(BaseField):
                 out.append(v.pk)
             else:
                 out.append(v)
-        return [x for x in out if x is not None]
+        # Hanya id numerik — buang ''/None/bukan angka (guard dari payload
+        # grid kosong yang mengirim string kosong, mis. taxes: '' / ['']).
+        clean = []
+        for x in out:
+            if x is None:
+                continue
+            try:
+                num = int(float(x))
+            except (TypeError, ValueError):
+                continue
+            clean.append(num)
+        return clean
 
     def to_representation(self, value):
         # value = ManyRelatedManager (belum di-query sampai .all())

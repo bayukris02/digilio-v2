@@ -283,11 +283,8 @@ class QuickPurchase(BaseModel):
                     qty=float(line.qty or 0),
                     price=line.price,
                     discount_percentage=line.discount_percentage,
+                    taxes_id=getattr(line, 'taxes_id', None),
                 )
-                tax_ids = line._m2m_ids('taxes') if hasattr(line, '_m2m_ids') else []
-                if tax_ids:
-                    bill_line.taxes.set(tax_ids)
-                    bill_line.save()
             bill._compute_summary()
             bill.save(update_fields=['subtotal', 'discount', 'tax', 'grand_total'])
 
@@ -352,7 +349,7 @@ class QuickPurchase(BaseModel):
                             'price': float(getattr(line, 'price', 0) or 0),
                             'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
                             'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
-                            'tax_pct': taxes_total_rate(line._m2m_ids('taxes')) if hasattr(line, '_m2m_ids') else 0.0,
+                            'tax_pct': taxes_total_rate(getattr(line, 'taxes_id', None)),
                         })
 
         # ── Recompute per-line values dari raw data ──

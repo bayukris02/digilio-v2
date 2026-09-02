@@ -364,7 +364,7 @@ class PurchaseOrder(BaseModel):
                             'product': line.product,
                             'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
                             'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
-                            'tax_pct': taxes_total_rate(line._m2m_ids('taxes')) if hasattr(line, '_m2m_ids') else 0.0,
+                            'tax_pct': taxes_total_rate(getattr(line, 'taxes_id', None)),
                         })
 
         # ── Recompute per-line values dari raw data ──
@@ -398,6 +398,7 @@ class PurchaseOrder(BaseModel):
                 'subtotal_raw': subtotal,
                 'discount_amount': round(disc_amt, 2),
                 'discount_percentage': disc_pct,
+                'pricelist_price': None,
                 'tax_pct': float(line.get('tax_pct', 0) or 0) or taxes_total_rate(line.get('taxes')),
                 'tax_amount': 0,
                 'total': 0,
@@ -815,15 +816,15 @@ class PurchaseOrder(BaseModel):
                         subtotal = float(po_line.qty or 0) * float(po_line.price or 0)
                         disc_pct = float(getattr(po_line, 'discount_percentage', 0) or 0)
                         dpp = subtotal * dp_pct
-                        tax_ids = tuple(po_line._m2m_ids('taxes')) if hasattr(po_line, '_m2m_ids') else ()
-                        key = (tax_ids, disc_pct)
+                        tax_id = getattr(po_line, 'taxes_id', None)
+                        key = (tax_id, disc_pct)
                         if key not in groups:
-                            groups[key] = {'dpp': 0.0, 'tax_ids': tax_ids, 'disc_pct': disc_pct}
+                            groups[key] = {'dpp': 0.0, 'tax_id': tax_id, 'disc_pct': disc_pct}
                         groups[key]['dpp'] += dpp
 
-                    for (tax_ids, disc_pct), data in groups.items():
+                    for (tax_id, disc_pct), data in groups.items():
                         price = data['dpp']
-                        tax_pct = taxes_total_rate(tax_ids)
+                        tax_pct = taxes_total_rate(tax_id)
                         # Buat label
                         parts = [f'DP {dp_value:.0f}%']
                         if disc_pct > 0:
@@ -836,10 +837,8 @@ class PurchaseOrder(BaseModel):
                             qty=1,
                             price=price,
                             discount_percentage=disc_pct,
+                            taxes_id=tax_id,
                         )
-                        if tax_ids:
-                            dp_line.taxes.set(tax_ids)
-                            dp_line.save()
 
                     # Paksa compute summary agar grand_total terisi
                     bill._compute_summary()
@@ -999,11 +998,8 @@ class PurchaseOrder(BaseModel):
                             uom=line.uom,
                             price=line.price,
                             discount_percentage=line.discount_percentage,
+                            taxes_id=getattr(line, 'taxes_id', None),
                         )
-                        tax_ids = line._m2m_ids('taxes') if hasattr(line, '_m2m_ids') else []
-                        if tax_ids:
-                            bill_line.taxes.set(tax_ids)
-                            bill_line.save()
 
         # Trigger compute summary agar down_payment_amount & grand_total terisi
         bill._compute_down_payment()
