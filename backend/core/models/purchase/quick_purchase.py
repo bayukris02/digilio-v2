@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.db import models
 from core.fields import (
     CharField, TextField, DateField, FloatField, MonetaryField,
@@ -295,7 +297,7 @@ class QuickPurchase(BaseModel):
                 quick_purchase=self,
                 vendor=self.vendor,
                 status='done',
-                payment_date=self.payment_date or self.order_date,
+                payment_date=self.payment_date or self.order_date or date.today(),
                 payment_method=self.payment_method,
                 payment_ref=f'QP-{self.pk}',
                 currency='IDR',
