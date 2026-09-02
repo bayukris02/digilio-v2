@@ -4,6 +4,8 @@ export interface ReportRow {
   code: string;
   name: string;
   amount: number;
+  debit?: number;
+  credit?: number;
 }
 
 export interface ReportSection {
@@ -11,6 +13,8 @@ export interface ReportSection {
   title: string;
   rows: ReportRow[];
   subtotal: number;
+  debit_subtotal?: number;
+  credit_subtotal?: number;
 }
 
 export interface ReportTotal {
@@ -25,6 +29,8 @@ export interface ReportData {
   period: { date_from: string; date_to: string };
   sections: ReportSection[];
   totals: ReportTotal[];
+  show_sides?: boolean;
+  show_balance_col?: boolean;
 }
 
 export const reportApi = {

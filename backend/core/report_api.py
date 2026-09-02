@@ -60,6 +60,8 @@ def _build_report(config, date_from, date_to):
     date_field = config['date_field']
     normal_balance = config.get('normal_balance', {})
     leaves_only_default = config.get('leaves_only', True)
+    sides = config.get('sides', False)
+    balance_col = config.get('balance_col', False)
 
     # 1. Meta semua akun COA + deteksi parent
     accounts = list(account_model.objects.filter(is_deleted=False))
@@ -91,12 +93,16 @@ def _build_report(config, date_from, date_to):
 
     # 3. Bangun sections (rows akun + subtotal)
     sections = []
+    subtotals = {}
     for section in config.get('sections', []):
         account_types = section.get('account_types', [])
+        account_codes = section.get('account_codes')  # optional: filter kode akun persis
         leaves_only = section.get('leaves_only', leaves_only_default)
         rows = []
         for acc_id, meta in account_meta.items():
             if meta['type'] not in account_types:
+                continue
+            if account_codes is not None and meta['code'] not in account_codes:
                 continue
             if leaves_only and acc_id in parent_ids:
                 continue  # akun header (punya child) tidak ditampilkan
@@ -107,19 +113,37 @@ def _build_report(config, date_from, date_to):
             balance = (total_debit - total_credit) if normal == 'debit' else (total_credit - total_debit)
             if abs(balance) < 0.005:
                 balance = 0.0
-            rows.append({'code': meta['code'], 'name': meta['name'], 'amount': round(balance, 2)})
+            entry = {'code': meta['code'], 'name': meta['name'], 'amount': round(balance, 2)}
+            if sides:
+                # Kolom sisi debit/kredit mentah (untuk Neraca Saldo, Buku Besar, Arus Kas)
+                entry['debit'] = round(total_debit, 2)
+                entry['credit'] = round(total_credit, 2)
+            rows.append(entry)
         rows.sort(key=lambda r: r['code'])
         subtotal = round(sum(r['amount'] for r in rows), 2)
-        sections.append({
+        section_out = {
             'key': section['key'],
             'title': section['title'],
             'rows': rows,
             'subtotal': subtotal,
-        })
+        }
+        if sides:
+            debit_subtotal = round(sum(r['debit'] for r in rows), 2)
+            credit_subtotal = round(sum(r['credit'] for r in rows), 2)
+            section_out['debit_subtotal'] = debit_subtotal
+            section_out['credit_subtotal'] = credit_subtotal
+            # Token formula (mis. 'arus_kas_debit') agar totals bisa memakai sisi
+            subtotals[f"{section['key']}_debit"] = debit_subtotal
+            subtotals[f"{section['key']}_credit"] = credit_subtotal
+        subtotals[section['key']] = subtotal
+        sections.append(section_out)
 
-    # 4. Totals (formula dari subtotal section)
-    subtotals = {s['key']: s['subtotal'] for s in sections}
+    # 4. Totals: (a) total sisi debit/kredit global (opsional), (b) formula dari subtotal
     totals = []
+    for st in config.get('sides_totals', []):
+        side = st.get('side', 'debit')
+        amount = round(sum(s.get(f'{side}_subtotal', 0) for s in sections), 2)
+        totals.append({'key': st['key'], 'label': st['label'], 'amount': amount})
     for t in config.get('totals', []):
         try:
             amount = round(_eval_formula(t['formula'], subtotals), 2)
@@ -129,13 +153,18 @@ def _build_report(config, date_from, date_to):
             continue
         totals.append({'key': t['key'], 'label': t['label'], 'amount': amount})
 
-    return {
+    payload = {
         'key': config['key'],
         'title': config['title'],
         'period': {'date_from': date_from or '', 'date_to': date_to or ''},
         'sections': sections,
         'totals': totals,
-    }, None
+    }
+    if sides:
+        payload['show_sides'] = True
+    if balance_col:
+        payload['show_balance_col'] = True
+    return payload, None
 
 
 @api_view(['GET'])

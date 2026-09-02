@@ -107,17 +107,17 @@ export const router = createBrowserRouter([
       // Accounting report routes (coming soon)
       { path: 'accounting/dashboard', element: <GenericDashboardPage dashboardKey="accounting" /> },
       { path: 'accounting/laba_rugi', element: <FinancialReportPage reportKey="profit_loss" /> },
-      { path: 'accounting/neraca', element: <ComingSoon /> },
-      { path: 'accounting/cashflow', element: <ComingSoon /> },
+      { path: 'accounting/neraca', element: <FinancialReportPage reportKey="balance_sheet" /> },
+      { path: 'accounting/neraca_saldo', element: <FinancialReportPage reportKey="trial_balance" /> },
+      { path: 'accounting/buku_besar', element: <FinancialReportPage reportKey="general_ledger" /> },
+      { path: 'accounting/cashflow', element: <FinancialReportPage reportKey="cash_flow" /> },
+      { path: 'accounting/perubahan_modal', element: <FinancialReportPage reportKey="equity_changes" /> },
       // Accounting coming-soon routes
       { path: 'accounting/asset', element: <ModelListPage modelName="accounting.asset" basePath="/accounting/asset" /> },
       { path: 'accounting/asset/new', element: <ModelFormPage modelName="accounting.asset" basePath="/accounting/asset" /> },
       { path: 'accounting/asset/:recordId', element: <ModelFormPage modelName="accounting.asset" basePath="/accounting/asset" /> },
       { path: 'accounting/cost_center', element: <ComingSoon /> },
-      { path: 'accounting/neraca_saldo', element: <ComingSoon /> },
-      { path: 'accounting/buku_besar', element: <ComingSoon /> },
       { path: 'accounting/catatan_laporan', element: <ComingSoon /> },
-      { path: 'accounting/perubahan_modal', element: <ComingSoon /> },
       // Generic model pages — e.g., /purchase-order, /purchase-order/new, /purchase-order/1
       { path: ':modelName', element: <ModelListPage /> },
       { path: ':modelName/new', element: <ModelFormPage /> },
