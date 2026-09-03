@@ -24,6 +24,13 @@ class CustomerReceiptLine(BaseModel):
             domain={'customer': 'customer', 'status': 'confirmed'},
             autofill={'due_amount': 'due_amount', 'customer_name': 'customer'},
         ),
+        'installment_id': Many2OneField(
+            label='Cicilan',
+            relation='accounting.customer_invoice_installment',
+            required=False,
+            editable_statuses=[],
+            help_text='Baris cicilan yang dibayar (alur Input Penerimaan di tab Cicilan Faktur)',
+        ),
         'customer_name': TextField(
             label='Customer',
             virtual=True,

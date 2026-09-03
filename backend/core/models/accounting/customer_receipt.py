@@ -241,6 +241,9 @@ class CustomerReceipt(BaseModel):
                 invoice._run_compute()
                 invoice.save()
 
+        # Baris cicilan yang dialokasikan → Lunas/Sebagian
+        self._sync_installment_statuses()
+
     def _effect_cancel(self):
         """Reverse paid_amount pada invoice yang dialokasikan saat receipt di-cancel."""
         from core.models.accounting.customer_receipt_line import CustomerReceiptLine
@@ -253,6 +256,63 @@ class CustomerReceipt(BaseModel):
                 invoice.paid_amount = max((invoice.paid_amount or 0) - (line.received_amount or 0), 0)
                 invoice._run_compute()
                 invoice.save()
+
+        # Baris cicilan dihitung ulang TANPA receipt ini (akan berstatus cancelled)
+        self._sync_installment_statuses(reverse=True)
+
+    def _sync_installment_statuses(self, reverse=False):
+        """Update payment_status baris cicilan dari total alokasi receipt.
+
+        reverse=True dipakai saat cancel: alokasi receipt ini dikeluarkan
+        (status di DB belum berubah ketika effect berjalan).
+        Status: paid bila total diterima >= nominal cicilan, partial bila > 0.
+        """
+        from django.db.models import Sum
+        from core.models.accounting.customer_invoice_installment import CustomerInvoiceInstallment
+        from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+
+        qs = CustomerReceiptLine.objects.filter(
+            is_deleted=False
+        ).exclude(installment_id__isnull=True)
+        if reverse:
+            qs = qs.exclude(receipt_id=self.pk)
+        else:
+            qs = qs.filter(receipt_id__status__in=['confirmed', 'done'])
+
+        # Semua cicilan yang tersentuh: hasil agregasi qs + baris receipt ini
+        # (saat confirm baris ini ditambah manual; saat cancel dikecualikan
+        # sehingga totalnya 0 → status balik unpaid).
+        inst_ids = set()
+        totals = {}
+        for row in qs.values('installment_id_id').annotate(total=Sum('received_amount')):
+            inst_ids.add(row['installment_id_id'])
+            totals[row['installment_id_id']] = float(row['total'] or 0)
+        for line in CustomerReceiptLine.objects.filter(
+            receipt_id=self.pk, is_deleted=False
+        ).exclude(installment_id__isnull=True):
+            inst_ids.add(line.installment_id_id)
+            if not reverse:
+                totals[line.installment_id_id] = (
+                    totals.get(line.installment_id_id, 0) + float(line.received_amount or 0)
+                )
+
+        for inst_id in inst_ids:
+            inst = CustomerInvoiceInstallment.objects.filter(
+                pk=inst_id, is_deleted=False
+            ).first()
+            if not inst:
+                continue
+            total = totals.get(inst_id, 0.0)
+            nominal = float(inst.amount or 0)
+            if total + 0.005 >= nominal:
+                status = 'paid'
+            elif total > 0:
+                status = 'partial'
+            else:
+                status = 'unpaid'
+            if inst.payment_status != status:
+                inst.payment_status = status
+                inst.save(update_fields=['payment_status'])
 
     # ── Legacy Actions ──
 

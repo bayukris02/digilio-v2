@@ -242,6 +242,49 @@ class CustomerInvoice(BaseModel):
                 'label': 'Cicilan',
                 'relation': 'installment_lines',
                 'show_when_has_data': True,
+                'columns': ['term_no', 'due_date', 'amount', 'note', 'payment_status'],
+                'row_actions': [
+                    {
+                        'label': 'Terima',
+                        'actions': [
+                            {
+                                'label': 'Input Penerimaan',
+                                'action': 'receive_installment',
+                                'disable_when': {'field': 'payment_status', 'values': ['paid']},
+                                'wizard': {
+                                    'title': 'Input Penerimaan Cicilan',
+                                    'modes': [
+                                        {
+                                            'value': 'receipt',
+                                            'label': 'Penerimaan',
+                                            'row_info': {
+                                                'title': 'Informasi Cicilan',
+                                                'fields': [
+                                                    {'key': 'term_no', 'label': 'Cicilan Ke'},
+                                                    {'key': 'amount', 'label': 'Jumlah Cicilan', 'currency': True},
+                                                    {'key': '_paid', 'label': 'Sudah Dibayar', 'currency': True},
+                                                    {'key': '_remaining', 'label': 'Sisa Belum Dibayar', 'currency': True},
+                                                ],
+                                                'remaining': {
+                                                    'label': 'Sisa setelah penerimaan',
+                                                    'field': '_remaining',
+                                                    'input': 'received_amount',
+                                                    'currency': 'Rp ',
+                                                },
+                                            },
+                                            'inputs': [
+                                                {'key': 'payment_date', 'label': 'Tanggal Penerimaan', 'type': 'date', 'default': 'today'},
+                                                {'key': 'payment_method', 'label': 'Metode Pembayaran', 'type': 'many2one', 'relation': 'accounting.payment_method'},
+                                                {'key': 'payment_ref', 'label': 'Referensi Pembayaran', 'type': 'text'},
+                                                {'key': 'received_amount', 'label': 'Jumlah Diterima', 'type': 'number', 'min': 0, 'help': 'Kosongkan (0) jika langsung lunasi cicilan'},
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                ],
             },
         ],
     }
@@ -437,6 +480,93 @@ class CustomerInvoice(BaseModel):
                 payment_status='unpaid',
             )
         return {'message': 'Cicilan berhasil dibuat.'}
+
+    # ── Action: Input Penerimaan per Cicilan ──
+
+    def _action_receive_installment(self, data):
+        """Buat CustomerReceipt (draft) untuk satu baris cicilan.
+
+        Dipicu tombol 'Input Penerimaan' di tab Cicilan (row action → wizard).
+        data: mode, line_id (baris cicilan), payment_date, payment_method,
+        payment_ref, received_amount. Receipt dibuat draft lalu dibuka —
+        saat receipt di-Confirm (efek di customer_receipt), cicilan terkait
+        otomatis Lunas & summary Faktur (paid_amount/due_amount) ter-update.
+        """
+        from core.models.accounting.customer_invoice_installment import CustomerInvoiceInstallment
+        from core.models.accounting.customer_receipt import CustomerReceipt
+        from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+        from core.models.settings.sequence import Sequence
+
+        if getattr(self, 'status', None) not in ('confirmed', 'done'):
+            raise ValueError(
+                'Penerimaan hanya bisa diinput untuk Faktur berstatus Confirmed.'
+            )
+
+        line_id = data.get('line_id')
+        if not line_id:
+            raise ValueError('Baris cicilan tidak ditemukan — pilih lewat tombol pada baris Cicilan.')
+        try:
+            inst = CustomerInvoiceInstallment.objects.get(
+                pk=int(line_id), invoice_id=self.pk, is_deleted=False
+            )
+        except (CustomerInvoiceInstallment.DoesNotExist, ValueError, TypeError):
+            raise ValueError('Baris cicilan tidak valid untuk Faktur ini.')
+
+        # Nominal sudah diterima dari receipt confirmed/done utk cicilan ini
+        allocated = CustomerReceiptLine.objects.filter(
+            installment_id=inst.pk, is_deleted=False,
+            receipt_id__status__in=['confirmed', 'done'],
+        )
+        paid_before = float(sum((l.received_amount or 0) for l in allocated))
+        remaining = float(inst.amount or 0) - paid_before
+        if remaining <= 0:
+            raise ValueError(f'Cicilan ke-{inst.term_no} sudah Lunas.')
+
+        amount = float(data.get('received_amount') or 0)
+        if amount <= 0:
+            amount = remaining  # kosong/0 → lunasi cicilan
+        if amount > remaining + 0.005:
+            raise ValueError(
+                f'Jumlah diterima ({amount:,.0f}) melebihi sisa cicilan '
+                f'({remaining:,.0f}).'
+            )
+
+        payment_date = (data.get('payment_date') or '').strip()
+        if not payment_date:
+            raise ValueError('Tanggal Penerimaan wajib diisi.')
+        payment_method = data.get('payment_method') or None
+        if not payment_method:
+            raise ValueError('Metode Pembayaran wajib diisi.')
+
+        # Reference diisi otomatis Draft#{pk} oleh BaseModel.save()
+        # Sequence default: active sequence utk customer_receipt (agar Confirm
+        # langsung valid & reference jadi nomor resmi, tanpa pilih manual).
+        active_seq = Sequence.objects.filter(
+            model_ref='accounting.customer_receipt', active=True, is_deleted=False
+        ).first()
+        receipt = CustomerReceipt.objects.create(
+            customer=self.customer,
+            status='draft',
+            sequence_id=active_seq,
+            payment_date=payment_date,
+            payment_method_id=int(payment_method),
+            payment_ref=(data.get('payment_ref') or '').strip(),
+            currency='IDR',
+            total_amount=amount,
+        )
+        CustomerReceiptLine.objects.create(
+            receipt_id=receipt,
+            invoice_id=self,
+            installment_id=inst,
+            received_amount=amount,
+        )
+
+        return {
+            '_action_type': 'open_record',
+            'model': 'accounting.customer_receipt',
+            'record_id': receipt.pk,
+            'message': 'Penerimaan dibuat — Confirm untuk menandai cicilan Lunas.',
+        }
 
     # ── Computed Fields ──
 

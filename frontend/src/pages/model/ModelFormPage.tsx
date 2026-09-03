@@ -1346,17 +1346,26 @@ export default function ModelFormPage({
         flex: 0,
         cellRenderer: (params: ICellRendererParams) => {
           if (params.data?._isAddButton || params.node?.rowPinned) return null;
+          // Aksi diblokir per baris: config disable_when {field, values}
+          const isBlocked = (a: { label: string; action?: string; wizard?: Record<string, unknown> }) => {
+            const dw = (a as Record<string, unknown> & { disable_when?: { field?: string; values?: string[] } })?.disable_when;
+            return !!(dw?.field && dw.values?.includes((params.data as Record<string, unknown>)?.[dw.field] as string));
+          };
           const openAction = (a: { label: string; action?: string; wizard?: Record<string, unknown> }) => {
-            setActionWizardBtn({ label: a.label, action: a.action || '', wizard: a.wizard as Record<string, unknown>, rowId: params.data?.id ?? null });
+            if (isBlocked(a)) return;
+            setActionWizardBtn({ label: a.label, action: a.action || '', wizard: a.wizard as Record<string, unknown>, rowId: params.data?.id ?? null, rowData: params.data ?? null });
             setActionWizardVisible(true);
           };
           // 1 action → button langsung (wizard multi-mode); >1 → dropdown
           if (actions.length === 1) {
+            const blocked = isBlocked(actions[0]);
             return (
               <Button
                 size="small"
                 type="primary"
                 ghost
+                disabled={blocked}
+                title={blocked ? 'Cicilan sudah Lunas' : undefined}
                 style={{ fontSize: 11, padding: '0 8px', height: 22, lineHeight: '20px' }}
                 onClick={() => openAction(actions[0])}
               >
@@ -1371,6 +1380,7 @@ export default function ModelFormPage({
                 items: actions.map((a) => ({
                   key: a.label,
                   label: a.label,
+                  disabled: isBlocked(a),
                   onClick: () => openAction(a),
                 })),
               }}
@@ -2026,6 +2036,7 @@ export default function ModelFormPage({
           columnLabels={wizardColumnLabels}
           recordId={recordId ? Number(recordId) : null}
           recordData={recordData}
+          rowData={(actionWizardBtn as Record<string, unknown> & { rowData?: Record<string, unknown> | null })?.rowData ?? null}
           onConfirm={handleWizardConfirm}
           onFetchTable={handleFetchWizardTable}
           onCancel={() => { setActionWizardVisible(false); setActionWizardBtn(null); }}

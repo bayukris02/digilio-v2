@@ -43,3 +43,17 @@ class CustomerInvoiceInstallment(BaseModel):
         app_label = 'core'
         verbose_name = 'Cicilan'
         verbose_name_plural = 'Cicilan'
+
+    def to_record(self):
+        """Sertakan _paid/_remaining (dari receipt confirmed/done) — dipakai
+        info wizard Input Penerimaan & blokir tombol saat lunas."""
+        data = super().to_record()
+        from django.db.models import Sum
+        from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+        total = CustomerReceiptLine.objects.filter(
+            installment_id=self.pk, is_deleted=False,
+            receipt_id__status__in=['confirmed', 'done'],
+        ).aggregate(total=Sum('received_amount'))['total'] or 0
+        data['_paid'] = float(total or 0)
+        data['_remaining'] = max(float(self.amount or 0) - float(total or 0), 0)
+        return data

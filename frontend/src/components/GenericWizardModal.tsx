@@ -74,6 +74,18 @@ interface WizardMode {
   label: string;
   icon?: string;
   inputs?: WizardInput[];
+  /** Info baris asal (row action): nilai statis dari record baris + sisa
+   *  dinamis yang berkurang mengikuti input wizard. Metadata-driven. */
+  row_info?: {
+    title?: string;
+    fields: Array<{ key: string; label: string; currency?: boolean }>;
+    remaining?: {
+      label: string;
+      field: string;
+      input: string;
+      currency?: string;
+    };
+  };
   table?: {
     title?: string;
     columns: WizardTableColumn[];
@@ -91,6 +103,8 @@ interface WizardInput {
   max?: number;
   options?: { value: string; label: string }[];
   relation?: string;
+  /** Keterangan kecil di bawah kontrol (gaya help_text form) */
+  help?: string;
   /** Query params tambahan saat fetch options many2one — value string bisa
    *  berisi placeholder `{record_id}` yang diganti id record aktif. */
   filter?: Record<string, string>;
@@ -146,6 +160,8 @@ interface GenericWizardModalProps {
   recordId?: number | null;
   /** Optional — data record parent (untuk mode `split`: baca source_field) */
   recordData?: Record<string, unknown> | null;
+  /** Optional — record baris asal (row action) untuk mode `row_info` */
+  rowData?: Record<string, unknown> | null;
 }
 
 function ModeCards({
@@ -490,6 +506,7 @@ export default function GenericWizardModal({
   columnLabels,
   recordId,
   recordData,
+  rowData,
 }: GenericWizardModalProps) {
   const [selectedMode, setSelectedMode] = useState<string>(config.modes[0]?.value || '');
   const [selectedIds, setSelectedIds] = useState<number[]>(
@@ -896,10 +913,56 @@ export default function GenericWizardModal({
                         />
                       );
                     })()}
+                  {inp.help && (
+                    <div style={{ fontSize: 12, fontStyle: 'italic', color: '#888', marginTop: 2, lineHeight: 1.4 }}>
+                      {inp.help}
+                    </div>
+                  )}
                   </div>
                 </Col>
               ))}
             </Row>
+          </div>
+        )}
+
+        {currentMode?.row_info && (
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+              {currentMode.row_info.title || 'Informasi'}
+            </Text>
+            {(() => {
+              const ri = currentMode.row_info;
+              const fmt = (v: unknown, currency?: boolean): string => {
+                const num = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : Number.NaN;
+                if (Number.isNaN(num)) return String(v ?? '');
+                return currency ? `Rp ${num.toLocaleString('id-ID')}` : String(num);
+              };
+              let sisa: number | null = null;
+              if (ri.remaining && rowData) {
+                const base = Number(rowData?.[ri.remaining.field] ?? 0);
+                const inp = Number(extraInputValues[ri.remaining.input] ?? 0);
+                sisa = base - inp;
+              }
+              return (
+                <div style={{ background: '#f6f8fa', border: '1px solid #e8e8e8', borderRadius: 6, padding: '10px 12px' }}>
+                  {(ri.fields || []).map((f) => (
+                    <div key={f.key} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <Text style={{ fontSize: 13 }}>{f.label}</Text>
+                      <Text strong style={{ fontSize: 13 }}>{fmt(rowData?.[f.key], f.currency)}</Text>
+                    </div>
+                  ))}
+                  {ri.remaining && sisa !== null && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, borderTop: '1px dashed #d9d9d9', paddingTop: 6 }}>
+                      <Text style={{ fontSize: 13 }}>{ri.remaining.label}</Text>
+                      <Text strong style={{ fontSize: 13, color: sisa < 0 ? '#ff4d4f' : (sisa <= 0 ? '#52c41a' : '#1677ff') }}>
+                        {(ri.remaining.currency || '') + Math.max(sisa, 0).toLocaleString('id-ID')}
+                        {sisa < 0 ? ' (melebihi sisa)' : sisa <= 0 ? ' (cicilan lunas)' : ''}
+                      </Text>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
