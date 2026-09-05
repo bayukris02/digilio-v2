@@ -183,7 +183,7 @@ class Project(BaseModel):
                 'key': 'unit_details',
                 'label': 'Detail Unit',
                 'relation': 'unit_details',
-                'columns': ['name', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
+                'columns': ['customer', 'unit_id', 'selling_price', 'est_cost', 'est_margin'],
             },
         ],
     }
