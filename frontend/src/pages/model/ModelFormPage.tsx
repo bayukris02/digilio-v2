@@ -314,10 +314,15 @@ export default function ModelFormPage({
 
   // ── Fetch child model configs for relation tabs + init line items + many2one options ──
   useEffect(() => {
-    if (!config?.form_view?.notebook) return;
-    const relationTabs = config.form_view.notebook.filter(
-      (tab: { relation?: string }) => tab.relation,
-    );
+    if (!config) return;
+    // Relation tabs bisa datang dari header.tabs (tab table di header form,
+    // mis. Blok di Project) maupun notebook — gabungkan keduanya.
+    const fv: any = config.form_view;
+    const relationTabs = [
+      ...(((fv?.header?.tabs) || []) as Array<{ relation?: string }>),
+      ...(((fv?.notebook) || []) as Array<{ relation?: string }>),
+    ].filter((tab) => tab.relation);
+    if (relationTabs.length === 0) return;
     // Akumulasi line items dari SEMUA tab dulu (hindari closure stale saat
     // multi-tab: pakai setLineItems sekali di akhir, bukan per tab)
     const pendingLines: Record<string, Record<string, unknown>[]> = {};
@@ -409,7 +414,12 @@ export default function ModelFormPage({
   const headerFormValues = Form.useWatch([], form);
   useEffect(() => {
     if (!config || !Object.keys(childConfigs).length) return;
-    const tabs = config?.form_view?.notebook || [];
+    // Sama seperti fetch awal: relation tabs boleh dari header.tabs (Blok) atau notebook
+    const fv: any = config?.form_view;
+    const tabs = [
+      ...(((fv?.header?.tabs) || []) as Array<{ relation?: string; columns?: any[] }>),
+      ...(((fv?.notebook) || []) as Array<{ relation?: string; columns?: any[] }>),
+    ];
     tabs.forEach((tab: { relation?: string; columns?: any[] }) => {
       if (!tab.relation) return;
       const childCfg = childConfigs[tab.relation];
@@ -1154,21 +1164,24 @@ export default function ModelFormPage({
           },
         };
       }
-      // Selection: colored Tag badge (only when colors defined) + dropdown editor
+      // Selection: tanpa colors → label polos (seperti many2one); ada colors → Tag badge
       if (field.type === 'selection') {
         col.cellEditor = 'agSelectCellEditor';
         col.cellEditorParams = {
           values: (field.options || []).map((o: { value: string }) => o.value),
         };
+        const labelOf = (v: unknown) => field.options?.find(
+          (o: { value: string; label: string }) => o.value === v,
+        )?.label ?? (v == null ? '' : String(v));
         const fieldColors = (childCfg.fields[key] as Record<string, unknown>)?.colors as Record<string, string> | undefined;
         if (fieldColors) {
           col.cellRenderer = (params: ICellRendererParams) => {
-            const label = field.options?.find(
-              (o: { value: string; label: string }) => o.value === params.value,
-            )?.label || params.value;
+            const label = labelOf(params.value);
             const color = fieldColors[params.value as string] || 'default';
             return <Tag color={color}>{label}</Tag>;
           };
+        } else {
+          col.valueFormatter = (params) => labelOf(params.value);
         }
       }
       // Many2One: show display name, rich select editor with search

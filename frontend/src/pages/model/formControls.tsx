@@ -541,6 +541,15 @@ export const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, un
           const o = (Array.isArray(opt) ? opt[0] : opt) as Record<string, unknown> | undefined;
           if (o) commit({ ...o, value: Number(val) });
         }}
+        onSelect={(val, opt) => {
+          // antd onChange TIDAK dipanggil saat opsi yang SAMA dipilih ulang
+          // (nilai tidak berubah) → commit manual dengan object BARU supaya
+          // AG Grid melihat cell berubah & autofill/compute API berjalan lagi.
+          if (Number(val) === Number(currentId)) {
+            const o = (Array.isArray(opt) ? opt[0] : opt) as Record<string, unknown> | undefined;
+            if (o) commit({ ...o, value: Number(val) });
+          }
+        }}
         notFoundContent={search ? 'Data tidak ditemukan' : 'Ketik untuk mencari data lain...'}
         dropdownRender={(menu) => (
           <div

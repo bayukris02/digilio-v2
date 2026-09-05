@@ -40,6 +40,26 @@ class Project(BaseModel):
             relation='settings.company',
             required=False,
         ),
+        'harga_tanah_m2': MonetaryField(
+            label='Harga Tanah Per m²',
+            currency='IDR',
+            help_text='Harga tanah per m² — dipakai menghitung Harga Jual Dasar Unit Tersedia',
+        ),
+        'harga_bangunan_l1_m2': MonetaryField(
+            label='Harga Bangunan L1 Per m²',
+            currency='IDR',
+            help_text='Harga bangunan per m² untuk unit Lantai 1',
+        ),
+        'harga_bangunan_l2_m2': MonetaryField(
+            label='Harga Bangunan L2 Per m²',
+            currency='IDR',
+            help_text='Harga bangunan per m² untuk unit Lantai 2',
+        ),
+        'blocks': One2ManyField(
+            label='Blok',
+            relation='project.block',
+            inverse_field='project_id',
+        ),
         'lines': One2ManyField(
             label='Baris Proyek',
             relation='project.project_line',
@@ -74,7 +94,14 @@ class Project(BaseModel):
                 {
                     'key': 'details',
                     'label': 'Detail',
-                    'fields': ['project_manager', 'contract_value', 'client', 'location', 'executing_entity'],
+                    'fields': ['project_manager', 'contract_value', 'client', 'location', 'executing_entity',
+                               'harga_tanah_m2', 'harga_bangunan_l1_m2', 'harga_bangunan_l2_m2'],
+                },
+                {
+                    'key': 'blocks',
+                    'label': 'Blok',
+                    'relation': 'blocks',
+                    'columns': ['name'],
                 },
             ],
             'actions': [
@@ -175,9 +202,10 @@ class Project(BaseModel):
             },
             {
                 'key': 'units',
-                'label': 'Progress Penjualan',
+                'label': 'Unit Tersedia',
                 'relation': 'units',
-                'columns': ['unit_id', 'qty_available', 'qty_sold', 'sold_percentage'],
+                'columns': ['unit_id', 'luas_tanah', 'luas_bangunan', 'jenis_bangunan',
+                            'harga_jual_dasar', 'qty_available', 'qty_sold', 'sold_percentage'],
             },
             {
                 'key': 'unit_details',

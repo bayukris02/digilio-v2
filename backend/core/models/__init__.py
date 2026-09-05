@@ -58,6 +58,7 @@ from core.models.accounting.asset import Asset
 from core.models.accounting.asset_depreciation_line import AssetDepreciationLine
 from core.models.project.project import Project
 from core.models.project.project_line import ProjectLine
+from core.models.project.block import Block
 from core.models.project.unit import Unit
 from core.models.project.unit_progress import UnitProgress
 from core.models.project.dokumen import Dokumen
@@ -100,6 +101,6 @@ __all__ = [
     'SalesPricelist', 'SalesPricelistLine',
     'OrderTemplate', 'OrderTemplateLine',
     'VendorPricelist',
-    'Project', 'ProjectLine', 'Unit', 'UnitProgress', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory', 'ProjectUnit', 'ProjectUnitDetail',
+    'Project', 'ProjectLine', 'Unit', 'UnitProgress', 'Dokumen', 'Milestone', 'MilestoneLine', 'ProjectCategory', 'ProjectUnit', 'ProjectUnitDetail', 'Block',
     'UnitDetailPayment', 'UnitDetailProgress',
 ]

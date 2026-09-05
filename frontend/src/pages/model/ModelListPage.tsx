@@ -164,15 +164,18 @@ export default function ModelListPage({
         );
       } else if (field.type === 'selection') {
         col.filter = 'agTextColumnFilter';
+        const labelOf = (v: unknown) => field.options?.find(
+          (o: { value: string; label: string }) => o.value === v,
+        )?.label ?? (v == null ? '' : String(v));
         const fieldColors = (field as Record<string, unknown>).colors as Record<string, string> | undefined;
         if (fieldColors) {
           col.cellRenderer = (params: ICellRendererParams) => {
-            const label = field.options?.find(
-              (o: { value: string; label: string }) => o.value === params.value,
-            )?.label || params.value;
+            const label = labelOf(params.value);
             const color = fieldColors[params.value as string] || 'default';
             return <Tag color={color}>{label}</Tag>;
           };
+        } else {
+          col.valueFormatter = (params) => labelOf(params.value);
         }
       } else if (field.type === 'boolean') {
         col.cellRenderer = (params: ICellRendererParams) => (
