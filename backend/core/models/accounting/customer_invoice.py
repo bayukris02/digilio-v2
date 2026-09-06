@@ -67,6 +67,8 @@ class CustomerInvoice(BaseModel):
             label='Penjualan',
             relation='sales.order',
             required=False,
+            domain={'customer': 'customer'},
+            help_text='Sales Order milik customer invoice ini (opsional)',
         ),
         'quick_sales': Many2OneField(
             label='Quick Sales',
