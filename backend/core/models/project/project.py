@@ -204,7 +204,7 @@ class Project(BaseModel):
                 'key': 'units',
                 'label': 'Unit Tersedia',
                 'relation': 'units',
-                'columns': ['unit_id', 'luas_tanah', 'luas_bangunan', 'jenis_bangunan',
+                'columns': ['unit_id', 'block_id', 'luas_tanah', 'luas_bangunan', 'jenis_bangunan',
                             'harga_jual_dasar', 'qty_available', 'qty_sold', 'sold_percentage'],
             },
             {

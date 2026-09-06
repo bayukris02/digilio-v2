@@ -19,7 +19,7 @@ import Chatter from '../../components/Chatter';
 import QuickViewModal from '../../components/QuickViewModal';
 import GenericWizardModal from '../../components/GenericWizardModal';
 import ProgressBar from '../../components/ProgressBar';
-import { SmartButton, renderField, Many2OneCellEditor, Many2ManyCellEditor } from './formControls';
+import { SmartButton, renderField, Many2OneCellEditor, Many2ManyCellEditor, resolveMany2oneDomain } from './formControls';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard';
 import { useFormChangeHandler } from './useFormChangeHandler';
 import { useModelFormActions, collectRequiredErrors } from './useModelFormActions';
@@ -350,18 +350,13 @@ export default function ModelFormPage({
                 ? (tab.columns as any[]).find((c) => typeof c === 'object' && c.name === fKey)
                 : undefined;
               const displayField = (tabColumn as any)?.display_field;
-              // domain: filter pre-fetch options berdasarkan field header
+              // domain: filter pre-fetch options berdasarkan field header;
+              // literal '{record_id}' → id record yang sedang dibuka
               const domain = (fMeta as any)?.domain as Record<string, string> | undefined;
-              const extraParams: Record<string, string> = {};
-              if (domain) {
-                Object.entries(domain).forEach(([relatedField, headerField]) => {
-                  const isFormField = config?.fields?.[headerField] != null;
-                  const headerVal = isFormField ? form.getFieldValue(headerField) : headerField;
-                  if (headerVal != null) {
-                    extraParams[relatedField] = String(headerVal);
-                  }
-                });
-              }
+              const extraParams = resolveMany2oneDomain(
+                domain, config, form,
+                recordData?.id != null ? Number(recordData.id) : null,
+              );
               modelApi.listRecords(relName, undefined, undefined, extraParams).then((response) => {
                 const opts = response.results.map((r) => ({
                   ...r,  // spread all fields (price, description, uom, etc.) for autofill
@@ -427,14 +422,10 @@ export default function ModelFormPage({
       Object.entries(childCfg.fields).forEach(([fKey, fMeta]: [string, any]) => {
         if (fMeta.type !== 'many2one' || !fMeta.relation || !fMeta.domain) return;
         const domain = fMeta.domain as Record<string, string>;
-        const extraParams: Record<string, string> = {};
-        Object.entries(domain).forEach(([relatedField, headerField]) => {
-          const isFormField = config?.fields?.[headerField] != null;
-          const headerVal = isFormField ? form.getFieldValue(headerField) : headerField;
-          if (headerVal != null) {
-            extraParams[relatedField] = String(headerVal);
-          }
-        });
+        const extraParams = resolveMany2oneDomain(
+          domain, config, form,
+          recordData?.id != null ? Number(recordData.id) : null,
+        );
         if (!Object.keys(extraParams).length) return;
         const tabColumn = Array.isArray(tab.columns)
           ? tab.columns.find((c: any) => typeof c === 'object' && c.name === fKey)

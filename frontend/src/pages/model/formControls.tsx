@@ -56,6 +56,36 @@ import { DATE_FORMAT } from '../../utils/format';
 const { TextArea } = Input;
 
 // Many2one dropdown pagination: fetch bertahap 25 per halaman
+/** Resolve many2one domain → query params filter.
+ *
+ * domain = {related_field: header_field} — header_field berupa:
+ *  - nama field header form → nilainya diambil dari form (mis. warehouse)
+ *  - literal '{record_id}'  → diganti id record yang sedang dibuka
+ *    (konvensi sama dgn filter many2one di GenericWizardModal)
+ *  - literal lain           → dipakai apa adanya (mis. status='confirmed')
+ */
+export function resolveMany2oneDomain(
+  domain: Record<string, string> | undefined,
+  config: ModelConfig | undefined,
+  form: any,
+  recordIdNum?: number | null,
+): Record<string, string> {
+  const extraParams: Record<string, string> = {};
+  if (!domain) return extraParams;
+  Object.entries(domain).forEach(([relatedField, headerField]) => {
+    if (headerField === '{record_id}') {
+      if (recordIdNum != null) extraParams[relatedField] = String(recordIdNum);
+      return;
+    }
+    const isFormField = config?.fields?.[headerField] != null;
+    const headerVal = isFormField ? form?.getFieldValue(headerField) : headerField;
+    if (headerVal != null) {
+      extraParams[relatedField] = String(headerVal);
+    }
+  });
+  return extraParams;
+}
+
 export const M2O_PAGE_SIZE = 25;
 
 // ─── Smart Button Component ────────────────

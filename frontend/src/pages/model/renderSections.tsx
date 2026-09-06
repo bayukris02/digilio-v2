@@ -39,7 +39,7 @@ import { AgGridReact } from 'ag-grid-react';
 import type { CellValueChangedEvent } from 'ag-grid-community';
 import { themeBalham } from 'ag-grid-community';
 import { modelApi, type ModelConfig } from '../../api/models';
-import { renderField, M2O_PAGE_SIZE } from './formControls';
+import { renderField, M2O_PAGE_SIZE, resolveMany2oneDomain } from './formControls';
 
 export type TabConfig = {
   key: string;
@@ -231,18 +231,13 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
                 const fieldMeta = childCfg.fields[fieldName];
                 if ((fieldMeta?.type === 'many2one' || fieldMeta?.type === 'many2many') && fieldMeta.relation) {
                   // domain: filter related records berdasarkan field header
-                  // definisi di Many2OneField: domain={'vendor': 'vendor'}
+                  // definisi di Many2OneField: domain={'vendor': 'vendor'} —
+                  // literal '{record_id}' → id record yang sedang dibuka
                   const domain = (fieldMeta as any)?.domain as Record<string, string> | undefined;
-                  const extraParams: Record<string, string> = {};
-                  if (domain) {
-                    Object.entries(domain).forEach(([relatedField, headerField]) => {
-                      const isFormField = config?.fields?.[headerField] != null;
-                      const headerVal = isFormField ? form.getFieldValue(headerField) : headerField;
-                      if (headerVal != null) {
-                        extraParams[relatedField] = String(headerVal);
-                      }
-                    });
-                  }
+                  const extraParams = resolveMany2oneDomain(
+                    domain, config, form,
+                    recordData?.id != null ? Number(recordData.id) : null,
+                  );
                   modelApi.listRecords(fieldMeta.relation, 1, M2O_PAGE_SIZE, extraParams)
                     .then((response) => {
                       const opts = response.results.map((r) => ({

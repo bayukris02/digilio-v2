@@ -26,6 +26,14 @@ class ProjectUnit(BaseModel):
             required=True,
             help_text='Pilih unit dari master Unit',
         ),
+        'block_id': Many2OneField(
+            label='Blok',
+            relation='project.block',
+            required=False,
+            domain={'project_id': '{record_id}'},
+            allow_duplicate=True,
+            help_text='Pilih Blok dari data tab Blok pada header proyek ini',
+        ),
         'luas_tanah': FloatField(
             label='Luas Tanah (m²)',
             editable_statuses=[],
@@ -77,14 +85,14 @@ class ProjectUnit(BaseModel):
     }
 
     _list_view = {
-        'columns': ['unit_id', 'luas_tanah', 'luas_bangunan', 'jenis_bangunan',
+        'columns': ['unit_id', 'block_id', 'luas_tanah', 'luas_bangunan', 'jenis_bangunan',
                     'harga_jual_dasar', 'qty_available', 'qty_sold', 'sold_percentage'],
         'default_sort': ['id'],
     }
 
     _form_view = {
         'header': {
-            'fields': ['unit_id', 'luas_tanah', 'luas_bangunan', 'jenis_bangunan',
+            'fields': ['unit_id', 'block_id', 'luas_tanah', 'luas_bangunan', 'jenis_bangunan',
                        'harga_jual_dasar', 'qty_available', 'qty_sold', 'sold_percentage'],
             'smart_buttons': [],
         },
