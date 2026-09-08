@@ -134,8 +134,7 @@ class VendorBill(BaseModel):
                     'key': 'general',
                     'label': 'Umum',
                     'fields': ['reference', 'project', 'project_line', 'purchase_order', 'vendor', 'code', 'address',
-                               'bill_date', 'due_date', 'status', 'sequence_id',
-                               'payment_status'],
+                               'bill_date', 'due_date', 'sequence_id'],
                 },
                 {
                     'key': 'details',
