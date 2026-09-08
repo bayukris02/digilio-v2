@@ -886,7 +886,14 @@ export default function ModelFormPage({
       // sini — kalau di-reset dulu, effect notebook sempat rebuild dari
       // record lama (kosong) dan refetch tidak reload lagi.
       if (result._action_type === 'refresh') {
-        setReloadKey((prev) => prev + 1);
+        if (isNew && currentRecordId) {
+          // Record baru dibuat lalu langsung di-action (mis. Confirm PO):
+          // pindah ke URL record tersebut — efek fetch di sana akan memuat
+          // state terbaru (tanpa ini halaman tetap di /new status Draft).
+          navigate(`${basePath}/${currentRecordId}`, { replace: true });
+        } else {
+          setReloadKey((prev) => prev + 1);
+        }
         if (result.message) {
           message.success(result.message as string);
         } else {
