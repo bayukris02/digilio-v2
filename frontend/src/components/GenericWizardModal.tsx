@@ -84,6 +84,10 @@ interface WizardMode {
       field: string;
       input: string;
       currency?: string;
+      /** Teks saat sisa <= 0 (default 'cicilan lunas'); mis. 'lunas' untuk pembayaran */
+      done_text?: string;
+      /** Teks saat input melebihi sisa (default 'melebihi sisa') */
+      over_text?: string;
     };
   };
   table?: {
@@ -933,13 +937,20 @@ export default function GenericWizardModal({
             {(() => {
               const ri = currentMode.row_info;
               const fmt = (v: unknown, currency?: boolean): string => {
+                // Many2One {id,name} / {id,label} → tampilkan nama
+                if (v && typeof v === 'object' && !Array.isArray(v)) {
+                  const obj = v as { name?: unknown; label?: unknown; display_name?: unknown };
+                  v = obj.name ?? obj.label ?? obj.display_name ?? String(v);
+                }
                 const num = typeof v === 'string' ? parseFloat(v) : typeof v === 'number' ? v : Number.NaN;
                 if (Number.isNaN(num)) return String(v ?? '');
                 return currency ? `Rp ${num.toLocaleString('id-ID')}` : String(num);
               };
+              // Header action (tanpa rowData) → pakai data record (Vendor/Customer/No/Sisa)
+              const src = rowData ?? recordData;
               let sisa: number | null = null;
-              if (ri.remaining && rowData) {
-                const base = Number(rowData?.[ri.remaining.field] ?? 0);
+              if (ri.remaining && src) {
+                const base = Number(src?.[ri.remaining.field] ?? 0);
                 const inp = Number(extraInputValues[ri.remaining.input] ?? 0);
                 sisa = base - inp;
               }
@@ -948,7 +959,7 @@ export default function GenericWizardModal({
                   {(ri.fields || []).map((f) => (
                     <div key={f.key} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
                       <Text style={{ fontSize: 13 }}>{f.label}</Text>
-                      <Text strong style={{ fontSize: 13 }}>{fmt(rowData?.[f.key], f.currency)}</Text>
+                      <Text strong style={{ fontSize: 13 }}>{fmt(src?.[f.key], f.currency)}</Text>
                     </div>
                   ))}
                   {ri.remaining && sisa !== null && (
@@ -956,7 +967,7 @@ export default function GenericWizardModal({
                       <Text style={{ fontSize: 13 }}>{ri.remaining.label}</Text>
                       <Text strong style={{ fontSize: 13, color: sisa < 0 ? '#ff4d4f' : (sisa <= 0 ? '#52c41a' : '#1677ff') }}>
                         {(ri.remaining.currency || '') + Math.max(sisa, 0).toLocaleString('id-ID')}
-                        {sisa < 0 ? ' (melebihi sisa)' : sisa <= 0 ? ' (cicilan lunas)' : ''}
+                        {sisa < 0 ? ` (${ri.remaining.over_text || 'melebihi sisa'})` : sisa <= 0 ? ` (${ri.remaining.done_text || 'cicilan lunas'})` : ''}
                       </Text>
                     </div>
                   )}

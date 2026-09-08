@@ -60,6 +60,10 @@ export default function ModelFormPage({
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [recordData, setRecordData] = useState<Record<string, unknown> | null>(null);
+  // Salinan record SEBELUM normalisasi many2one→id — dipakai GenericWizardModal
+  // untuk row_info header action (Vendor/Customer/Reference/Sisa tetap tampil
+  // dengan nama, bukan id).
+  const [recordDataRaw, setRecordDataRaw] = useState<Record<string, unknown> | null>(null);
   const [lineItems, setLineItems] = useState<Record<string, Record<string, unknown>[]>>({});
   // Revision counter untuk memaksa SummaryCard recompute setelah child compute
   const [summaryRevision, setSummaryRevision] = useState(0);
@@ -193,6 +197,7 @@ export default function ModelFormPage({
       modelApi.getRecord(apiModelName, Number(recordId))
         .then((record) => {
           if (ignore) return;
+          setRecordDataRaw({ ...record });
           // Reload paksa notebook: reset line items + owner ref supaya baris
           // di-rebuild dari record terbaru (dipakai aksi `_action_type: 'refresh'`
           // yang mengubah/regenerate baris notebook, mis. Hitung Depresiasi).
@@ -764,6 +769,9 @@ export default function ModelFormPage({
         message.error(result.error as string);
         return;
       }
+      // Salinan MENTAH sebelum normalisasi (many2one tetap {id,name}) — dipakai
+      // GenericWizardModal row_info header action (Vendor/Customer/Reference).
+      const rawResult = { ...result };
       // Convert dates + normalize many2one before setting form values
       if (config) {
         Object.entries(config.fields).forEach(([key, field]) => {
@@ -780,6 +788,7 @@ export default function ModelFormPage({
       delete recordData._action_type;
       delete recordData.message;
       delete recordData.url;
+      setRecordDataRaw(rawResult);
       form.setFieldsValue(recordData);
       setRecordData(recordData);
       syncSaveSnapshot();
@@ -1494,6 +1503,7 @@ export default function ModelFormPage({
         const result = await modelApi.updateRecord(apiModelName, Number(recordId), prepared);
         // Normalize response dates & many2one
         if (config) {
+          setRecordDataRaw({ ...result });
           Object.entries(config.fields).forEach(([key, field]) => {
             if (field.type === 'date' && result[key]) {
               result[key] = parseDate(result[key] as string);
@@ -2039,7 +2049,7 @@ export default function ModelFormPage({
           items={wizardItems}
           columnLabels={wizardColumnLabels}
           recordId={recordId ? Number(recordId) : null}
-          recordData={recordData}
+          recordData={recordDataRaw ?? recordData}
           rowData={(actionWizardBtn as Record<string, unknown> & { rowData?: Record<string, unknown> | null })?.rowData ?? null}
           onConfirm={handleWizardConfirm}
           onFetchTable={handleFetchWizardTable}

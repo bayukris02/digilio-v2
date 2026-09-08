@@ -161,6 +161,38 @@ class CustomerInvoice(BaseModel):
                     ],
                 },
                 {'label': 'Confirm', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
+                {'label': 'Proses Pembayaran', 'color': 'primary', 'action': 'process_payment', 'states': ['confirmed'],
+                 'wizard': {
+                    'title': 'Proses Pembayaran',
+                    'modes': [
+                        {
+                            'value': 'payment',
+                            'label': 'Proses Pembayaran',
+                            'icon': 'SendOutlined',
+                            'row_info': {
+                                'title': 'Informasi Faktur',
+                                'fields': [
+                                    {'key': 'customer', 'label': 'Customer'},
+                                    {'key': 'reference', 'label': 'No Faktur'},
+                                ],
+                                'remaining': {
+                                    'label': 'Sisa Tagihan',
+                                    'field': 'due_amount',
+                                    'input': 'nominal',
+                                    'currency': 'Rp ',
+                                    'done_text': 'lunas',
+                                },
+                            },
+                            'inputs': [
+                                {'key': 'nominal', 'label': 'Nominal Pembayaran', 'type': 'number', 'min': 0, 'default': 0,
+                                 'help': 'Isi 0 untuk menerima lunas (sisa tagihan). Isi lebih kecil untuk pembayaran sebagian.'},
+                                {'key': 'payment_method', 'label': 'Metode Pembayaran', 'type': 'many2one', 'relation': 'accounting.payment_method'},
+                                {'key': 'payment_date', 'label': 'Tanggal Pembayaran', 'type': 'date', 'default': 'today'},
+                                {'key': 'payment_ref', 'label': 'Ref Pembayaran', 'type': 'text'},
+                            ],
+                        },
+                    ],
+                 }},
                 {'label': 'Cancel', 'color': 'primary', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
                 {
                     'label': 'Action', 'color': 'primary',
@@ -568,6 +600,74 @@ class CustomerInvoice(BaseModel):
             'model': 'accounting.customer_receipt',
             'record_id': receipt.pk,
             'message': 'Penerimaan dibuat — Confirm untuk menandai cicilan Lunas.',
+        }
+
+    # ── Action: Proses Pembayaran (langsung dari Faktur) ──
+
+    def _action_process_payment(self, data=None):
+        """Buat CustomerReceipt (draft) untuk faktur ini, lalu open record.
+
+        Dipicu tombol 'Proses Pembayaran' di header Faktur → wizard input
+        nominal (0 = lunas / parsial), metode, tanggal, ref pembayaran.
+        Customer/No Faktur/Sisa ditampilkan otomatis dari invoice ini.
+        Receipt dibuat draft lalu dibuka — saat di-Confirm (efek di
+        customer_receipt), paid_amount faktur ter-update & status jadi
+        Lunas/Sebagian.
+        """
+        from django.db import transaction
+        from core.models.accounting.customer_receipt import CustomerReceipt
+        from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+        from core.models.settings.sequence import Sequence
+
+        if getattr(self, 'status', None) not in ('confirmed', 'done'):
+            raise ValueError('Pembayaran hanya bisa diinput untuk Faktur berstatus Confirmed.')
+
+        remaining = float(self.due_amount or 0)
+        if remaining <= 0:
+            raise ValueError('Sisa tagihan 0 — tidak bisa membuat pembayaran.')
+
+        amount = float((data or {}).get('nominal') or 0)
+        if amount <= 0:
+            amount = remaining  # 0/kosong → terima lunas
+        if amount > remaining + 0.005:
+            raise ValueError(
+                f'Nominal pembayaran ({amount:,.0f}) melebihi sisa tagihan '
+                f'({remaining:,.0f}).'
+            )
+
+        payment_date = ((data or {}).get('payment_date') or '').strip()
+        if not payment_date:
+            raise ValueError('Tanggal Pembayaran wajib diisi.')
+        payment_method = (data or {}).get('payment_method') or None
+        if not payment_method:
+            raise ValueError('Metode Pembayaran wajib diisi.')
+
+        active_seq = Sequence.objects.filter(
+            model_ref='accounting.customer_receipt', active=True, is_deleted=False
+        ).first()
+
+        with transaction.atomic():
+            receipt = CustomerReceipt.objects.create(
+                customer=self.customer,
+                status='draft',
+                sequence_id=active_seq,
+                payment_date=payment_date,
+                payment_method_id=int(payment_method),
+                payment_ref=((data or {}).get('payment_ref') or '').strip(),
+                currency='IDR',
+                total_amount=amount,
+            )
+            CustomerReceiptLine.objects.create(
+                receipt_id=receipt,
+                invoice_id=self,
+                received_amount=amount,
+            )
+
+        return {
+            '_action_type': 'open_record',
+            'model': 'accounting.customer_receipt',
+            'record_id': receipt.pk,
+            'message': 'Penerimaan dibuat — Confirm untuk mengupdate status faktur.',
         }
 
     # ── Computed Fields ──
