@@ -29,7 +29,7 @@ Cara pakai dari model (contoh delivery_order):
     # Cek stok minus sebelum posting:
     warnings = StockEngine.check_negative(lines)
 """
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 from core.model_meta import ErpModelBase
 
@@ -154,6 +154,123 @@ class StockEngine:
                     'deficit': required - available,
                 })
         return warnings
+
+    @classmethod
+    def stock_balance(cls, date_from=None, date_to=None, location_id=None):
+        """
+        Laporan Stock Balance — agregasi row ledger aktif per produk.
+
+        date_from/date_to: rentang periode (objek date atau string 'YYYY-MM-DD').
+        - opening = saldo row dengan date < date_from (0 bila date_from None)
+        - qty_in  = SUM(quantity > 0) dalam periode
+        - qty_out = |SUM(quantity < 0)| dalam periode
+        - closing = opening + qty_in - qty_out
+        Tanpa rentang: seluruh row dianggap periode → closing = on-hand total.
+        location_id opsional: batasi ke satu lokasi.
+
+        Return: {key, title, period, rows, totals}
+          rows: [{product_id, code, name, uom, opening, qty_in, qty_out, closing}]
+          totals: {opening, qty_in, qty_out, closing}
+        """
+        from datetime import datetime, date as date_cls
+
+        def _norm(v):
+            if v is None:
+                return None
+            if isinstance(v, date_cls):
+                return v
+            try:
+                return datetime.strptime(str(v)[:10], '%Y-%m-%d').date()
+            except ValueError:
+                return None
+
+        ledger_cls = cls._ledger_cls()
+        if ledger_cls is None:
+            return cls._empty_balance(date_from, date_to)
+
+        d_from = _norm(date_from)
+        d_to = _norm(date_to)
+
+        base = ledger_cls.objects.filter(is_deleted=False)
+        if location_id is not None:
+            base = base.filter(location_id=location_id)
+
+        # opening: row sebelum periode
+        opening_map = {}
+        if d_from:
+            agg = base.filter(date__lt=d_from).values('product_id').annotate(total=Sum('quantity'))
+            opening_map = {r['product_id']: float(r['total'] or 0) for r in agg}
+
+        # pergerakan dalam periode
+        mov_qs = base
+        if d_from:
+            mov_qs = mov_qs.filter(date__gte=d_from)
+        if d_to:
+            mov_qs = mov_qs.filter(date__lte=d_to)
+
+        in_map = {r['product_id']: float(r['total'] or 0) for r in
+                  mov_qs.filter(quantity__gt=0).values('product_id').annotate(total=Sum('quantity'))}
+        out_map = {r['product_id']: -float(r['total'] or 0) for r in
+                   mov_qs.filter(quantity__lt=0).values('product_id').annotate(total=Sum('quantity'))}
+
+        product_ids = set(opening_map) | set(in_map) | set(out_map)
+
+        # meta produk (code/name/uom) sekali query
+        product_cls = ErpModelBase._model_registry.get('inventory.product')
+        meta = {}
+        if product_cls is not None and product_ids:
+            prods = product_cls.objects.filter(id__in=product_ids, is_deleted=False)
+            for p in prods:
+                meta[p.pk] = {
+                    'code': getattr(p, 'code', None) or '',
+                    'name': str(p),
+                    'uom': str(getattr(p, 'uom', '') or ''),
+                }
+
+        def _round(v):
+            return round(v, 3)
+
+        rows = []
+        for pid in sorted(product_ids):
+            opening = opening_map.get(pid, 0.0)
+            qty_in = in_map.get(pid, 0.0)
+            qty_out = out_map.get(pid, 0.0)
+            m = meta.get(pid, {'code': '', 'name': f'#{pid}', 'uom': ''})
+            rows.append({
+                'product_id': pid,
+                'code': m['code'],
+                'name': m['name'],
+                'uom': m['uom'],
+                'opening': _round(opening),
+                'qty_in': _round(qty_in),
+                'qty_out': _round(qty_out),
+                'closing': _round(opening + qty_in - qty_out),
+            })
+
+        totals = {
+            'opening': _round(sum(r['opening'] for r in rows)),
+            'qty_in': _round(sum(r['qty_in'] for r in rows)),
+            'qty_out': _round(sum(r['qty_out'] for r in rows)),
+            'closing': _round(sum(r['closing'] for r in rows)),
+        }
+        return {
+            'key': 'stock_balance',
+            'title': 'Stock Balance',
+            'period': {'date_from': str(d_from) if d_from else '',
+                       'date_to': str(d_to) if d_to else ''},
+            'rows': rows,
+            'totals': totals,
+        }
+
+    @classmethod
+    def _empty_balance(cls, date_from=None, date_to=None):
+        return {
+            'key': 'stock_balance',
+            'title': 'Stock Balance',
+            'period': {'date_from': date_from or '', 'date_to': date_to or ''},
+            'rows': [],
+            'totals': {'opening': 0.0, 'qty_in': 0.0, 'qty_out': 0.0, 'closing': 0.0},
+        }
 
     # ── Helpers ──
 

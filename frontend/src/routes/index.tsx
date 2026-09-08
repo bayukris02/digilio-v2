@@ -11,6 +11,7 @@ import ModelListPage from '../pages/model/ModelListPage';
 import ModelFormPage from '../pages/model/ModelFormPage';
 import GenericDashboardPage from '../pages/dashboard/DashboardPage';
 import FinancialReportPage from '../pages/base/FinancialReportPage';
+import StockBalancePage from '../pages/base/StockBalancePage';
 import ComingSoon from '../pages/ComingSoon';
 
 export const router = createBrowserRouter([
@@ -93,6 +94,7 @@ export const router = createBrowserRouter([
       { path: 'inventory.stock_ledger/:recordId', element: <ModelFormPage modelName="inventory.stock_ledger" basePath="/inventory.stock_ledger" readOnly /> },
       { path: 'inventory/pivot', element: <ComingSoon /> },
       { path: 'inventory/detail', element: <ComingSoon /> },
+      { path: 'inventory/stock_balance', element: <StockBalancePage /> },
       // Project custom routes
       { path: 'project/dashboard', element: <GenericDashboardPage dashboardKey="project" /> },
       // Project Update = menu alias → konten model project.project (URL tetap /project/progress, read-only)
