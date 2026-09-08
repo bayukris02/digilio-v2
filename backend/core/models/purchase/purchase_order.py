@@ -241,7 +241,17 @@ class PurchaseOrder(BaseModel):
                     'wizard': {
                         'title': 'Buat Tagihan',
                         'modes': [
-                            {'value': 'bill_all', 'label': '📄 Tagihan Regular', 'icon': 'FileTextOutlined'},
+                            {'value': 'bill_all', 'label': '📄 Tagihan Regular', 'icon': 'FileTextOutlined',
+                             'dp_checklist': {
+                                 'title': 'Potong DP (Down Payment)',
+                                 'items_key': '_bill_details',
+                                 'filter': {'is_dp': True},
+                                 'label_key': 'ref',
+                                 'amount_key': 'amount',
+                                 'payload_key': 'apply_dp_ids',
+                                 'help': 'Centang DP yang ingin dipotong dari tagihan Regular ini. '
+                                         'DP tidak boleh melebihi total tagihan (guard).',
+                             }},
                             {'value': 'bill_dp', 'label': '💵 Down Payment', 'icon': 'DollarOutlined',
                              'inputs': [
                                  {'key': 'dp_value', 'label': 'DP', 'type': 'number', 'default': 0, 'min': 0},
@@ -597,6 +607,10 @@ class PurchaseOrder(BaseModel):
                 'label': 'DP Bill' if bill.is_down_payment else 'Bill',
                 'ref': bill.reference or f'#{bill.pk}',
                 'amount': float(bill.grand_total or 0),
+                'is_dp': bill.is_down_payment,
+                'status': bill.status,
+                'payment_status': bill.payment_status,
+                'deduct_dp': bool(bill.deduct_dp),
             })
 
         # bill_method: jika None di PO, tampilkan dari Vendor
@@ -1001,16 +1015,47 @@ class PurchaseOrder(BaseModel):
                             taxes_id=getattr(line, 'taxes_id', None),
                         )
 
+            # ── DP opt-in (checklist wizard): tagihan Regular boleh memotong DP ──
+            # apply_dp_ids = id DP bill yang dicentang user. Tanpa centang →
+            # tagihan TIDAK motong DP (grand_total = nilai barang, bukan minus).
+            dp_total = 0.0
+            apply_dp_ids = (data or {}).get('apply_dp_ids') or []
+            if apply_dp_ids:
+                dp_qs = VendorBill.objects.filter(
+                    pk__in=[int(x) for x in apply_dp_ids],
+                    purchase_order=self,
+                    is_down_payment=True,
+                    is_deleted=False,
+                ).exclude(status='cancelled')
+                dp_total = sum(float(b.grand_total or 0) for b in dp_qs)
+
+            # Hitung summary DULU tanpa DP → dapat nilai tagihan murni
+            bill._compute_summary()
+            if dp_total > 0.005:
+                bill_base = float(bill.grand_total or 0)
+                if dp_total > bill_base + 0.005:
+                    raise ValueError(
+                        f'DP sebesar Rp {dp_total:,.0f} lebih besar dari total tagihan '
+                        f'Rp {bill_base:,.0f} — DP tidak bisa dipotong pada tagihan ini. '
+                        'Buat tagihan tanpa centang DP, atau tagih nilai yang lebih besar.'
+                    )
+                # Aktifkan potong DP → down_payment_amount ikut terhitung
+                bill.deduct_dp = True
+                bill._compute_down_payment()
+                bill._compute_summary()
+
         # Trigger compute summary agar down_payment_amount & grand_total terisi
-        bill._compute_down_payment()
-        bill._compute_summary()
-        bill.save(update_fields=['subtotal', 'discount', 'tax', 'grand_total'])
+        bill.save(update_fields=['subtotal', 'discount', 'tax', 'grand_total', 'down_payment_amount', 'deduct_dp'])
+
+        msg = 'Tagihan berhasil dibuat'
+        if dp_total > 0.005:
+            msg = f'Tagihan berhasil dibuat — DP dipotong Rp {dp_total:,.0f}'
 
         return {
             '_action_type': 'open_record',
             'model': 'accounting.vendor_bill',
             'record_id': bill.pk,
-            'message': 'Tagihan berhasil dibuat',
+            'message': msg,
         }
 
     def _action_print(self, *args, **kwargs):

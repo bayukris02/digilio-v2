@@ -96,6 +96,20 @@ interface WizardMode {
   };
   split?: WizardSplitConfig;
   editable_rows?: WizardEditableRowsConfig;
+  /** Checklist dari data record (mis. daftar DP bill pada PO). Item diambil
+   *  dari recordData[items_key], difilter `filter`, ditampilkan sebagai
+   *  checkbox + nominal; id yang dicentang dikirim via payload_key.
+   *  Metadata-driven — tanpa string model di komponen. */
+  dp_checklist?: {
+    title?: string;
+    items_key: string;
+    /** Filter item: semua key/value harus cocok (mis. {is_dp: true}) */
+    filter?: Record<string, unknown>;
+    label_key?: string;
+    amount_key?: string;
+    payload_key: string;
+    help?: string;
+  };
 }
 
 interface WizardInput {
@@ -583,6 +597,7 @@ export default function GenericWizardModal({
     setExtraInputValues(buildInputValues(newMode));
     setSplitNotes({});
     setManualRows([{ due_date: '', amount: 0, note: '' }]);
+    setDpChecked([]);
   };
 
   const itemsFingerprintRef = useRef('');
@@ -647,12 +662,33 @@ export default function GenericWizardModal({
   const splitCfg = currentMode?.split;
   const manualCfg = currentMode?.editable_rows;
 
+  // ── DP checklist (mis. daftar DP bill PO di wizard Buat Tagihan) ──
+  const dpChecklistCfg = currentMode?.dp_checklist;
+  const dpItems = useMemo(() => {
+    if (!dpChecklistCfg || !recordData) return [];
+    const raw = (recordData as Record<string, unknown>)[dpChecklistCfg.items_key];
+    if (!Array.isArray(raw)) return [];
+    const filt = dpChecklistCfg.filter || {};
+    return (raw as Record<string, unknown>[]).filter((it) =>
+      Object.entries(filt).every(([k, v]) => (it as Record<string, unknown>)[k] === v)
+    );
+  }, [dpChecklistCfg, recordData]);
+  const [dpChecked, setDpChecked] = useState<number[]>([]);
+  const toggleDp = (id: number) => {
+    setDpChecked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+  const dpCheckedTotal = dpItems
+    .filter((it) => dpChecked.includes(Number((it as Record<string, unknown>).id)))
+    .reduce((s, it) => s + Number((it as Record<string, unknown>)[dpChecklistCfg?.amount_key || 'amount'] || 0), 0);
+  const fmtRp = (v: number) => `Rp ${Number(v || 0).toLocaleString('id-ID')}`;
+
   // Reset nilai input, catatan split & baris manual tiap modal dibuka
   useEffect(() => {
     if (visible) {
       setExtraInputValues(buildInputValues(config.modes.find((m) => m.value === selectedMode)));
       setSplitNotes({});
       setManualRows([{ due_date: '', amount: 0, note: '' }]);
+      setDpChecked([]);
     }
   }, [visible]);
 
@@ -838,6 +874,12 @@ export default function GenericWizardModal({
           amount: Number(r.amount),
           note: r.note || `${modeCfg.editable_rows?.note_prefix || 'Term ke-'}${i + 1}`,
         }));
+    }
+    if (modeCfg?.dp_checklist) {
+      // DP yang dicentang dikirim sebagai array id (payload_key dari config)
+      payload[modeCfg.dp_checklist.payload_key] = dpItems
+        .filter((it) => dpChecked.includes(Number((it as Record<string, unknown>).id)))
+        .map((it) => Number((it as Record<string, unknown>).id));
     }
     setConfirming(true);
     try {
@@ -1033,6 +1075,44 @@ export default function GenericWizardModal({
                 </div>
               );
             })()}
+          </div>
+        )}
+
+        {dpChecklistCfg && dpItems.length > 0 && (
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+              {dpChecklistCfg.title || 'Potong DP'}
+            </Text>
+            <div style={{ background: '#f6f8fa', border: '1px solid #e8e8e8', borderRadius: 6, padding: '8px 12px' }}>
+              {dpItems.map((it) => {
+                const id = Number((it as Record<string, unknown>).id);
+                const labelKey = dpChecklistCfg?.label_key || 'label';
+                const amountKey = dpChecklistCfg?.amount_key || 'amount';
+                return (
+                  <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                    <span>
+                      <input
+                        type="checkbox"
+                        checked={dpChecked.includes(id)}
+                        onChange={() => toggleDp(id)}
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={{ fontSize: 13 }}>{String((it as Record<string, unknown>)[labelKey] ?? `#${id}`)}</Text>
+                    </span>
+                    <Text strong style={{ fontSize: 13 }}>{fmtRp(Number((it as Record<string, unknown>)[amountKey] || 0))}</Text>
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #d9d9d9', marginTop: 6, paddingTop: 6 }}>
+                <Text style={{ fontSize: 13 }}>Total DP dipotong</Text>
+                <Text strong style={{ fontSize: 13, color: dpCheckedTotal > 0 ? '#1677ff' : '#999' }}>{fmtRp(dpCheckedTotal)}</Text>
+              </div>
+              {dpChecklistCfg?.help && (
+                <div style={{ fontSize: 12, fontStyle: 'italic', color: '#888', marginTop: 4, lineHeight: 1.4 }}>
+                  {dpChecklistCfg.help}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

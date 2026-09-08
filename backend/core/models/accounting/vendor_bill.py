@@ -86,8 +86,13 @@ class VendorBill(BaseModel):
 
         # ── Down Payment ──
         'is_down_payment': BooleanField(label='Tagihan DP', default=False),
+        'deduct_dp': BooleanField(
+            label='Potong DP dari Tagihan ini',
+            default=False,
+            help_text='Kurangi jumlah DP PO dari total tagihan ini (dicentang via wizard Buat Tagihan mode Regular).',
+        ),
         'down_payment_amount': MonetaryField(label='Jumlah DP', currency='IDR',
-            compute='_compute_down_payment', depends=['purchase_order']),
+            compute='_compute_down_payment', depends=['purchase_order', 'deduct_dp']),
 
         # ── Summary fields ──
         'subtotal': MonetaryField(label='Subtotal', currency='IDR',
@@ -279,16 +284,22 @@ class VendorBill(BaseModel):
         self.grand_total = after_line_disc - manual_disc_amt + line_tax - dp_amount
 
     def _compute_down_payment(self):
-        """Cari DP bill untuk PO yang sama, ambil grand_total-nya."""
-        if not self.purchase_order or self.is_down_payment:
+        """Hitung jumlah DP PO yang dipotong dari tagihan ini.
+
+        DP hanya dipotong bila tagihan ini di-opt-in (`deduct_dp=True`) — diatur
+        lewat wizard Buat Tagihan mode Regular (checklist DP). Tanpa opt-in,
+        tagihan regular TIDAK otomatis mengurangi DP (mencegah grand_total
+        minus saat tagihan dibuat parsial).
+        """
+        if (not self.purchase_order or self.is_down_payment or not self.deduct_dp):
             self.down_payment_amount = 0
             return
-        dp_bill = self.__class__.objects.filter(
+        dp_bills = self.__class__.objects.filter(
             purchase_order=self.purchase_order,
             is_down_payment=True,
             is_deleted=False,
-        ).first()
-        self.down_payment_amount = dp_bill.grand_total if dp_bill else 0
+        ).exclude(status='cancelled')
+        self.down_payment_amount = sum(float(b.grand_total or 0) for b in dp_bills)
 
     def _compute_payment_summary(self):
         """Hitung due_amount & payment_status berdasarkan grand_total dan paid_amount."""
