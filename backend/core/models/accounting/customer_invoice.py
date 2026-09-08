@@ -162,7 +162,7 @@ class CustomerInvoice(BaseModel):
                 },
                 {'label': 'Confirm', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {'label': 'Proses Pembayaran', 'color': 'primary', 'action': 'process_payment', 'states': ['confirmed'],
-                 'wizard': {
+                 'guard': '_guard_process_payment', 'wizard': {
                     'title': 'Proses Pembayaran',
                     'modes': [
                         {
@@ -171,10 +171,7 @@ class CustomerInvoice(BaseModel):
                             'icon': 'SendOutlined',
                             'row_info': {
                                 'title': 'Informasi Faktur',
-                                'fields': [
-                                    {'key': 'customer', 'label': 'Customer'},
-                                    {'key': 'reference', 'label': 'No Faktur'},
-                                ],
+                                'fields': [],
                                 'remaining': {
                                     'label': 'Sisa Tagihan',
                                     'field': 'due_amount',
@@ -184,11 +181,16 @@ class CustomerInvoice(BaseModel):
                                 },
                             },
                             'inputs': [
-                                {'key': 'nominal', 'label': 'Nominal Pembayaran', 'type': 'number', 'min': 0, 'default': 0,
-                                 'help': 'Isi 0 untuk menerima lunas (sisa tagihan). Isi lebih kecil untuk pembayaran sebagian.'},
+                                {'key': 'nominal', 'label': 'Nominal Pembayaran', 'type': 'number', 'min': 0,
+                                 'default_from_field': 'due_amount'},
                                 {'key': 'payment_method', 'label': 'Metode Pembayaran', 'type': 'many2one', 'relation': 'accounting.payment_method'},
                                 {'key': 'payment_date', 'label': 'Tanggal Pembayaran', 'type': 'date', 'default': 'today'},
                                 {'key': 'payment_ref', 'label': 'Ref Pembayaran', 'type': 'text'},
+                                {'key': 'mark_paid', 'label': 'Tandai Lunas', 'type': 'boolean',
+                                 'show_if': {'field': '_has_remaining', 'value': True}},
+                                {'key': 'diff_account', 'label': 'Akun Selisih (COA)', 'type': 'many2one', 'relation': 'accounting.chart_of_account',
+                                 'show_if': {'field': 'mark_paid', 'value': True},
+                                 'help': 'Wajib dipilih jika Tandai Lunas aktif.'},
                             ],
                         },
                     ],
@@ -604,12 +606,37 @@ class CustomerInvoice(BaseModel):
 
     # ── Action: Proses Pembayaran (langsung dari Faktur) ──
 
+    def _guard_process_payment(self):
+        """Proses Pembayaran hanya untuk Faktur Confirmed yang masih punya sisa.
+
+        Dipanggil otomatis oleh core (config `guard` pada action) SEBELUM
+        wizard dibuka (precheck) maupun sebelum action dieksekusi. Kalau
+        gagal, frontend menampilkan notif dan popup tidak dibuka.
+        """
+        if getattr(self, 'status', None) != 'confirmed':
+            raise ValueError(
+                'Pembayaran hanya bisa diinput untuk Faktur berstatus Confirmed.'
+            )
+        if float(self.due_amount or 0) <= 0:
+            raise ValueError(
+                'Faktur ini sudah Lunas — tidak ada sisa tagihan yang bisa dibayar.'
+            )
+
     def _action_process_payment(self, data=None):
         """Buat CustomerReceipt (draft) untuk faktur ini, lalu open record.
 
         Dipicu tombol 'Proses Pembayaran' di header Faktur → wizard input
         nominal (0 = lunas / parsial), metode, tanggal, ref pembayaran.
         Customer/No Faktur/Sisa ditampilkan otomatis dari invoice ini.
+
+        Selisih nominal vs sisa tagihan (kurang bayar) ditangani lewat flag
+        `mark_paid` (wizard 'Tandai Lunas'):
+          - mark_paid false → nominal diterima sebagian, faktur tetap Sebagian
+          - mark_paid true (+ `diff_account`) → selisih diakui ke akun COA,
+            alokasi penuh sisa → faktur Lunas saat Confirm
+        Lebih bayar: tanpa mapping kelebihan mengendap sebagai Sisa Alokasi
+        penerimaan; dengan mark_paid + akun, kelebihan dicatat ke akun COA.
+
         Receipt dibuat draft lalu dibuka — saat di-Confirm (efek di
         customer_receipt), paid_amount faktur ter-update & status jadi
         Lunas/Sebagian.
@@ -619,21 +646,43 @@ class CustomerInvoice(BaseModel):
         from core.models.accounting.customer_receipt_line import CustomerReceiptLine
         from core.models.settings.sequence import Sequence
 
-        if getattr(self, 'status', None) not in ('confirmed', 'done'):
-            raise ValueError('Pembayaran hanya bisa diinput untuk Faktur berstatus Confirmed.')
+        self._guard_process_payment()
 
         remaining = float(self.due_amount or 0)
-        if remaining <= 0:
-            raise ValueError('Sisa tagihan 0 — tidak bisa membuat pembayaran.')
-
         amount = float((data or {}).get('nominal') or 0)
         if amount <= 0:
             amount = remaining  # 0/kosong → terima lunas
-        if amount > remaining + 0.005:
-            raise ValueError(
-                f'Nominal pembayaran ({amount:,.0f}) melebihi sisa tagihan '
-                f'({remaining:,.0f}).'
-            )
+
+        mark_paid = bool((data or {}).get('mark_paid'))
+        diff_account = (data or {}).get('diff_account') or None
+
+        # ── Hitung alokasi line, total kas, & selisih mapping ──
+        diff_amount = 0.0
+        allocation = amount   # nilai yang dialokasikan ke invoice ini (line)
+        total = amount        # total kas pada dokumen penerimaan
+        if amount < remaining - 0.005:
+            if mark_paid:
+                # Kurang bayar + Tandai Lunas: selisih diakui ke akun COA,
+                # invoice dialokasi penuh sisa (kas + selisih dari akun) → Lunas.
+                if not diff_account:
+                    raise ValueError('Pilih Akun Selisih (COA) untuk menandai Lunas.')
+                diff_amount = remaining - amount
+                allocation = remaining
+                total = remaining
+        elif amount > remaining + 0.005:
+            if mark_paid:
+                # Lebih bayar + Tandai Lunas: kelebihan dicatat ke akun COA.
+                if not diff_account:
+                    raise ValueError('Pilih Akun Selisih (COA) untuk menandai Lunas.')
+                diff_amount = amount - remaining
+                allocation = remaining
+                total = amount
+            else:
+                # Lebih bayar tanpa mapping: hanya sisa yang dialokasikan;
+                # kelebihan mengendap sebagai Sisa Alokasi penerimaan.
+                allocation = remaining
+                total = amount
+        # amount == remaining (±toleransi) → lunas penuh, tanpa selisih.
 
         payment_date = ((data or {}).get('payment_date') or '').strip()
         if not payment_date:
@@ -655,19 +704,34 @@ class CustomerInvoice(BaseModel):
                 payment_method_id=int(payment_method),
                 payment_ref=((data or {}).get('payment_ref') or '').strip(),
                 currency='IDR',
-                total_amount=amount,
+                total_amount=total,
+                difference_amount=diff_amount,
+                difference_account_id=int(diff_account) if diff_account else None,
             )
             CustomerReceiptLine.objects.create(
                 receipt_id=receipt,
                 invoice_id=self,
-                received_amount=amount,
+                received_amount=allocation,
+            )
+
+        msg = 'Penerimaan dibuat — Confirm untuk mengupdate status faktur.'
+        if diff_amount > 0 and mark_paid:
+            arah = 'kurang' if amount < remaining else 'lebih'
+            msg = (
+                f'Faktur ditandai Lunas — selisih {arah} bayar Rp {diff_amount:,.0f} '
+                f'dimapping ke akun. Confirm untuk mengupdate status faktur.'
+            )
+        elif amount > remaining + 0.005:
+            msg = (
+                'Penerimaan dibuat — kelebihan tidak dimapping & tersimpan sebagai '
+                'Sisa Alokasi. Confirm untuk mengupdate status faktur.'
             )
 
         return {
             '_action_type': 'open_record',
             'model': 'accounting.customer_receipt',
             'record_id': receipt.pk,
-            'message': 'Penerimaan dibuat — Confirm untuk mengupdate status faktur.',
+            'message': msg,
         }
 
     # ── Computed Fields ──

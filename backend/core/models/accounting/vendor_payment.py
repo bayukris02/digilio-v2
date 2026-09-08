@@ -91,6 +91,16 @@ class VendorPayment(BaseModel):
             label='Sisa Alokasi', currency='IDR',
             compute='_compute_summary',
         ),
+        'difference_amount': MonetaryField(
+            label='Selisih Mapping', currency='IDR', default=0,
+            help_text='Selisih kurang/lebih bayar yang dimapping ke akun COA saat input lewat Proses Pembayaran.',
+        ),
+        'difference_account': Many2OneField(
+            label='Akun Selisih (COA)',
+            relation='accounting.chart_of_account',
+            required=False,
+            help_text='Akun tujuan mapping selisih kurang/lebih bayar.',
+        ),
 
         'payment_lines': One2ManyField(
             label='Baris Pembayaran',

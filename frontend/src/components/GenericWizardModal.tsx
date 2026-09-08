@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select, DatePicker, Input, Spin, Alert, message } from 'antd';
+import { Modal, Radio, Card, Row, Col, Space, Typography, Tag, InputNumber, Button, Select, DatePicker, Input, Spin, Alert, message, Switch } from 'antd';
 import { HomeOutlined, FileTextOutlined, SendOutlined, BarChartOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ProgressBar from './ProgressBar';
@@ -103,12 +103,18 @@ interface WizardInput {
   label: string;
   type: string;
   default?: number | string;
+  /** Default diambil dari field record aktif (mis. 'due_amount') — mengalahkan `default` */
+  default_from_field?: string;
   min?: number;
   max?: number;
   options?: { value: string; label: string }[];
   relation?: string;
   /** Keterangan kecil di bawah kontrol (gaya help_text form) */
   help?: string;
+  /** Field hanya dirender jika input lain (field) bernilai value —
+   *  conditional visibility antar-input wizard (metadata-driven).
+   *  field '_has_remaining' khusus: true = sisa tagihan setelah input > 0. */
+  show_if?: { field: string; value: string | number | boolean };
   /** Query params tambahan saat fetch options many2one — value string bisa
    *  berisi placeholder `{record_id}` yang diganti id record aktif. */
   filter?: Record<string, string>;
@@ -539,11 +545,17 @@ export default function GenericWizardModal({
   const [tableData, setTableData] = useState<{ rows: Record<string, unknown>[]; loading: boolean; error?: string }>({ rows: [], loading: false });
   // Loading state tombol confirm — dicegah double-click selama onConfirm async berjalan
   const [confirming, setConfirming] = useState(false);
-  const [extraInputValues, setExtraInputValues] = useState<Record<string, number | string>>(() => {
-    const currentMode = config.modes.find((m) => m.value === selectedMode);
-    const vals: Record<string, number | string> = {};
-    currentMode?.inputs?.forEach((inp) => {
+  // Nilai default input wizard per mode — dukung boolean & default_from_field
+  // (ambil dari field record aktif, mis. nominal = sisa tagihan).
+  const buildInputValues = (mode: WizardMode | undefined): Record<string, number | string | boolean> => {
+    const vals: Record<string, number | string | boolean> = {};
+    mode?.inputs?.forEach((inp) => {
       if (inp.type === 'date' && inp.default === 'today') vals[inp.key] = dayjs().format('YYYY-MM-DD');
+      else if (inp.type === 'boolean') vals[inp.key] = false;
+      else if (inp.default_from_field) {
+        const raw = (recordData ?? {})[inp.default_from_field];
+        vals[inp.key] = raw != null && raw !== '' ? Number(raw) : (typeof inp.default === 'number' ? inp.default : 0);
+      }
       else if (inp.default !== undefined) vals[inp.key] = inp.default;
       else if (inp.type === 'selection') vals[inp.key] = inp.options?.[0]?.value ?? '';
       else if (inp.type === 'date') vals[inp.key] = '';
@@ -551,7 +563,11 @@ export default function GenericWizardModal({
       else vals[inp.key] = 0;
     });
     return vals;
-  });
+  };
+
+  const [extraInputValues, setExtraInputValues] = useState<Record<string, number | string | boolean>>(() =>
+    buildInputValues(config.modes.find((m) => m.value === selectedMode))
+  );
   // Catatan per baris mode `split` (key: term_no) — direset tiap modal terbuka
   const [splitNotes, setSplitNotes] = useState<Record<number, string>>({});
   // Baris mode `editable_rows` (manual) — direset tiap modal terbuka
@@ -560,16 +576,7 @@ export default function GenericWizardModal({
   const handleModeChange = (value: string) => {
     setSelectedMode(value);
     const newMode = config.modes.find((m) => m.value === value);
-    const vals: Record<string, number | string> = {};
-    newMode?.inputs?.forEach((inp) => {
-      if (inp.type === 'date' && inp.default === 'today') vals[inp.key] = dayjs().format('YYYY-MM-DD');
-      else if (inp.default !== undefined) vals[inp.key] = inp.default;
-      else if (inp.type === 'selection') vals[inp.key] = inp.options?.[0]?.value ?? '';
-      else if (inp.type === 'date') vals[inp.key] = '';
-      else if (inp.type === 'text') vals[inp.key] = '';
-      else vals[inp.key] = 0;
-    });
-    setExtraInputValues(vals);
+    setExtraInputValues(buildInputValues(newMode));
     setSplitNotes({});
     setManualRows([{ due_date: '', amount: 0, note: '' }]);
   };
@@ -606,6 +613,26 @@ export default function GenericWizardModal({
   const progressColumns = config.line_selection?.progress_columns || [];
   const currentMode = config.modes.find((m) => m.value === selectedMode);
   const extraInputs = currentMode?.inputs || [];
+  // Sisa tagihan setelah input wizard (row_info.remaining) — dipakai untuk
+  // show_if '_has_remaining' (field hanya muncul selama sisa masih > 0).
+  const infoSrc = rowData ?? recordData;
+  const remainingAfterInput = (() => {
+    const ri = currentMode?.row_info;
+    if (!ri?.remaining || !infoSrc) return null;
+    const base = Number((infoSrc ?? {})[ri.remaining.field] ?? 0);
+    const inp = Number(extraInputValues[ri.remaining.input] ?? 0);
+    return base - inp;
+  })();
+  const hasRemaining = remainingAfterInput !== null && remainingAfterInput > 0.005;
+  // Input yang benar-benar dirender — hormati show_if (conditional visibility)
+  const visibleExtraInputs = extraInputs.filter((inp) => {
+    const si = inp.show_if;
+    if (!si) return true;
+    if (si.field === '_has_remaining') {
+      return (si.value === true || si.value === 'true') ? hasRemaining : !hasRemaining;
+    }
+    return String(extraInputValues[si.field] ?? '') === String(si.value);
+  });
   // Konfigurasi mode tabel (read-only view) — di-capture ke const lokal agar
   // narrowing TypeScript tetap berlaku di dalam closure JSX
   const tableCfg = currentMode?.table;
@@ -616,9 +643,10 @@ export default function GenericWizardModal({
   const splitCfg = currentMode?.split;
   const manualCfg = currentMode?.editable_rows;
 
-  // Reset catatan split & baris manual tiap modal dibuka
+  // Reset nilai input, catatan split & baris manual tiap modal dibuka
   useEffect(() => {
     if (visible) {
+      setExtraInputValues(buildInputValues(config.modes.find((m) => m.value === selectedMode)));
       setSplitNotes({});
       setManualRows([{ due_date: '', amount: 0, note: '' }]);
     }
@@ -658,8 +686,8 @@ export default function GenericWizardModal({
     setManualRows((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleExtraInputChange = (key: string, value: number | string | null) => {
-    setExtraInputValues((prev) => ({ ...prev, [key]: value ?? 0 }));
+  const handleExtraInputChange = (key: string, value: number | string | boolean | null) => {
+    setExtraInputValues((prev) => ({ ...prev, [key]: value ?? (typeof value === 'boolean' ? false : 0) }));
   };
 
   const handleToggle = (id: number) => {
@@ -857,11 +885,11 @@ export default function GenericWizardModal({
           </div>
         )}
 
-        {extraInputs.length > 0 && (
+        {visibleExtraInputs.length > 0 && (
           <div>
             <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>Input</Text>
             <Row gutter={16}>
-              {extraInputs.map((inp) => (
+              {visibleExtraInputs.map((inp) => (
                 <Col span={12} key={inp.key}>
                   <div style={{ marginBottom: 0 }}>
                     {inp.label && <Text style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>{inp.label}</Text>}
@@ -893,6 +921,11 @@ export default function GenericWizardModal({
                         rows={3}
                         value={extraInputValues[inp.key] as string ?? ''}
                         onChange={(e) => handleExtraInputChange(inp.key, e.target.value)}
+                      />
+                    ) : inp.type === 'boolean' ? (
+                      <Switch
+                        checked={!!extraInputValues[inp.key]}
+                        onChange={(v) => handleExtraInputChange(inp.key, v)}
                       />
                     ) : (() => {
                       const isDpValue = inp.key === 'dp_value';
