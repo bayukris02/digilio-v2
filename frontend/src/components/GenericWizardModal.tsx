@@ -105,6 +105,10 @@ interface WizardInput {
   default?: number | string;
   /** Default diambil dari field record aktif (mis. 'due_amount') — mengalahkan `default` */
   default_from_field?: string;
+  /** Input tanggal tidak boleh lebih awal dari field tanggal pada record
+   *  (mis. payment_date vs invoice_date) — kalau lebih awal, muncul konfirmasi
+   *  Lanjut/Batal sebelum submit. */
+  min_date_from?: string;
   min?: number;
   max?: number;
   options?: { value: string; label: string }[];
@@ -796,6 +800,28 @@ export default function GenericWizardModal({
       qty: qtys[id] ?? 0,
       ...(editableValues[id] || {}),
     }));
+    // ── Guard tanggal dokumen: input tanggal lebih awal dari tanggal dokumen
+    // → user harus klik Lanjut (lanjutkan) atau Batal (batalkan proses).
+    for (const inp of extraInputs) {
+      if (inp.type === 'date' && inp.min_date_from && infoSrc) {
+        const docDate = String((infoSrc as Record<string, unknown>)[inp.min_date_from] ?? '');
+        const inpDate = String(extraInputValues[inp.key] ?? '');
+        if (docDate && inpDate && dayjs(inpDate).isBefore(dayjs(docDate), 'day')) {
+          const lanjut = await new Promise<boolean>((resolve) => {
+            Modal.confirm({
+              title: `${inp.label} sebelum tanggal dokumen`,
+              content: `${inp.label}: ${dayjs(inpDate).format(DATE_FORMAT)} lebih awal dari tanggal dokumen (${dayjs(docDate).format(DATE_FORMAT)}). Lanjutkan proses?`,
+              okText: 'Lanjut',
+              cancelText: 'Batal',
+              onOk: () => resolve(true),
+              onCancel: () => resolve(false),
+            });
+          });
+          if (!lanjut) return;
+          break;
+        }
+      }
+    }
     const payload: Record<string, unknown> = { ...extraInputValues };
     if (modeCfg?.split) {
       // Catatan per baris dikirim sebagai array (index 0 = termin 1)

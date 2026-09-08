@@ -138,9 +138,8 @@ class CustomerInvoice(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['reference', 'sales_order', 'customer', 'code', 'address',
-                               'invoice_date', 'due_date', 'status', 'sequence_id',
-                               'payment_status'],
+                    'fields': ['reference', 'sales_order', 'customer', 'address',
+                               'invoice_date', 'due_date', 'sequence_id'],
                 },
                 {
                     'key': 'details',
@@ -162,6 +161,7 @@ class CustomerInvoice(BaseModel):
                 },
                 {'label': 'Confirm', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {'label': 'Proses Pembayaran', 'color': 'primary', 'action': 'process_payment', 'states': ['confirmed'],
+                 'hide_when_paid': True,
                  'guard': '_guard_process_payment', 'wizard': {
                     'title': 'Proses Pembayaran',
                     'modes': [
@@ -184,7 +184,7 @@ class CustomerInvoice(BaseModel):
                                 {'key': 'nominal', 'label': 'Nominal Pembayaran', 'type': 'number', 'min': 0,
                                  'default_from_field': 'due_amount'},
                                 {'key': 'payment_method', 'label': 'Metode Pembayaran', 'type': 'many2one', 'relation': 'accounting.payment_method'},
-                                {'key': 'payment_date', 'label': 'Tanggal Pembayaran', 'type': 'date', 'default': 'today'},
+                                {'key': 'payment_date', 'label': 'Tanggal Pembayaran', 'type': 'date', 'default': 'today', 'min_date_from': 'invoice_date'},
                                 {'key': 'payment_ref', 'label': 'Ref Pembayaran', 'type': 'text'},
                                 {'key': 'mark_paid', 'label': 'Tandai Lunas', 'type': 'boolean',
                                  'show_if': {'field': '_has_remaining', 'value': True}},
@@ -637,9 +637,9 @@ class CustomerInvoice(BaseModel):
         Lebih bayar: tanpa mapping kelebihan mengendap sebagai Sisa Alokasi
         penerimaan; dengan mark_paid + akun, kelebihan dicatat ke akun COA.
 
-        Receipt dibuat draft lalu dibuka — saat di-Confirm (efek di
-        customer_receipt), paid_amount faktur ter-update & status jadi
-        Lunas/Sebagian.
+        Receipt dibuat & langsung dikonfirmasi otomatis (efek di
+        customer_receipt) — paid_amount faktur ter-update & status jadi
+        Lunas/Sebagian seketika.
         """
         from django.db import transaction
         from core.models.accounting.customer_receipt import CustomerReceipt
@@ -694,6 +694,10 @@ class CustomerInvoice(BaseModel):
         active_seq = Sequence.objects.filter(
             model_ref='accounting.customer_receipt', active=True, is_deleted=False
         ).first()
+        if not active_seq:
+            raise ValueError(
+                'Tidak ada Sequence aktif untuk Penerimaan — aktifkan sequence terlebih dahulu.'
+            )
 
         with transaction.atomic():
             receipt = CustomerReceipt.objects.create(
@@ -713,18 +717,23 @@ class CustomerInvoice(BaseModel):
                 invoice_id=self,
                 received_amount=allocation,
             )
+            # Langsung konfirmasi (bukan draft): nomor resmi diterbitkan &
+            # paid_amount/status faktur ter-update seketika.
+            receipt.status = 'confirmed'
+            receipt._effect_confirm()
+            receipt.save()
 
-        msg = 'Penerimaan dibuat — Confirm untuk mengupdate status faktur.'
+        msg = 'Penerimaan dibuat & otomatis dikonfirmasi — status faktur ter-update.'
         if diff_amount > 0 and mark_paid:
             arah = 'kurang' if amount < remaining else 'lebih'
             msg = (
                 f'Faktur ditandai Lunas — selisih {arah} bayar Rp {diff_amount:,.0f} '
-                f'dimapping ke akun. Confirm untuk mengupdate status faktur.'
+                f'dimapping ke akun. Penerimaan otomatis dikonfirmasi.'
             )
         elif amount > remaining + 0.005:
             msg = (
-                'Penerimaan dibuat — kelebihan tidak dimapping & tersimpan sebagai '
-                'Sisa Alokasi. Confirm untuk mengupdate status faktur.'
+                'Penerimaan dibuat & otomatis dikonfirmasi — kelebihan tidak dimapping '
+                '& tersimpan sebagai Sisa Alokasi.'
             )
 
         return {

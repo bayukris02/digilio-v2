@@ -575,6 +575,10 @@ export default function ModelFormPage({
     const currentStatus = recordData?.status as string | undefined;
     if (!currentStatus) return all;
     return all.filter((btn: Record<string, unknown>) => {
+      // Tombol disembunyikan saat dokumen sudah Lunas (config `hide_when_paid`)
+      if ((btn as Record<string, unknown>).hide_when_paid && (recordData as Record<string, unknown> | null)?.payment_status === 'paid') {
+        return false;
+      }
       const states = btn.states as string[] | undefined;
       if (!states || states.length === 0) return true;
       return states.includes(currentStatus);
@@ -583,6 +587,17 @@ export default function ModelFormPage({
 
   // ── Editable / read-only mode ──
   const currentStatus = recordData?.status as string | undefined;
+  // Dokumen lunas → watermark/ribbon di header (label diambil dari config
+  // field `payment_status`, bukan hardcode) + tombol Proses Pembayaran
+  // disembunyikan via config action `hide_when_paid`.
+  const isPaid = !isNew && (recordData as Record<string, unknown> | null)?.payment_status === 'paid';
+  const paidFieldCfg = isPaid
+    ? (config?.fields as Record<string, Record<string, unknown>> | undefined)?.['payment_status']
+    : undefined;
+  const paidLabel = isPaid
+    ? String(((paidFieldCfg?.options as Array<{ value: string; label: string }> | undefined) || [])
+        .find((o) => o.value === 'paid')?.label || 'Lunas')
+    : '';
   const stateConfig = currentStatus ? (config?.states as Record<string, {allow_edit?: boolean}> | undefined)?.[currentStatus] : undefined;
   // readOnly prop (menu alias seperti Project Update) digabung dengan status config
   const isReadOnly = readOnly || (!!currentStatus && stateConfig?.allow_edit === false);
@@ -1604,8 +1619,42 @@ export default function ModelFormPage({
           display: 'flex',
           flexDirection: 'column',
           gap: 4,
+          position: 'relative',
         }}
       >
+        {/* Watermark dokumen lunas — melapisi seluruh header, tidak menghalangi klik */}
+        {isPaid && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              zIndex: 300,
+            }}
+          >
+            <span
+              style={{
+                transform: 'rotate(-10deg)',
+                fontSize: 84,
+                fontWeight: 800,
+                lineHeight: 1,
+                color: 'rgba(82,196,26,0.12)',
+                border: '6px solid rgba(82,196,26,0.5)',
+                borderRadius: 20,
+                padding: '6px 44px',
+                letterSpacing: 20,
+                whiteSpace: 'nowrap',
+                textTransform: 'uppercase',
+                userSelect: 'none',
+              }}
+            >
+              {paidLabel}
+            </span>
+          </div>
+        )}
         {/* Row 1: Breadcrumb | ◀▶ (right, above stepper) */}
         <div
           style={{

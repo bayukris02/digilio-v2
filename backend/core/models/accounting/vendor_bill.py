@@ -150,6 +150,7 @@ class VendorBill(BaseModel):
             {'label': 'Print', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
             {'label': 'Confirm', 'icon': 'CheckOutlined', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
             {'label': 'Proses Pembayaran', 'color': 'primary', 'action': 'process_payment', 'states': ['confirmed'],
+             'hide_when_paid': True,
              'guard': '_guard_process_payment', 'wizard': {
                 'title': 'Proses Pembayaran',
                 'modes': [
@@ -172,7 +173,7 @@ class VendorBill(BaseModel):
                             {'key': 'nominal', 'label': 'Nominal Pembayaran', 'type': 'number', 'min': 0,
                              'default_from_field': 'due_amount'},
                             {'key': 'payment_method', 'label': 'Metode Pembayaran', 'type': 'many2one', 'relation': 'accounting.payment_method'},
-                            {'key': 'payment_date', 'label': 'Tanggal Pembayaran', 'type': 'date', 'default': 'today'},
+                            {'key': 'payment_date', 'label': 'Tanggal Pembayaran', 'type': 'date', 'default': 'today', 'min_date_from': 'bill_date'},
                             {'key': 'payment_ref', 'label': 'Ref Pembayaran', 'type': 'text'},
                             {'key': 'mark_paid', 'label': 'Tandai Lunas', 'type': 'boolean',
                              'show_if': {'field': '_has_remaining', 'value': True}},
@@ -369,9 +370,9 @@ class VendorBill(BaseModel):
         Lebih bayar: tanpa mapping kelebihan mengendap sebagai Sisa Alokasi
         pembayaran; dengan mark_paid + akun, kelebihan dicatat ke akun COA.
 
-        Payment dibuat draft lalu dibuka — saat di-Confirm (efek di
-        vendor_payment), paid_amount tagihan ter-update & status jadi Lunas/
-        Sebagian.
+        Payment dibuat & langsung dikonfirmasi otomatis (efek di
+        vendor_payment) — paid_amount tagihan ter-update & status jadi Lunas/
+        Sebagian seketika.
         """
         from django.db import transaction
         from core.models.accounting.vendor_payment import VendorPayment
@@ -426,6 +427,10 @@ class VendorBill(BaseModel):
         active_seq = Sequence.objects.filter(
             model_ref='accounting.vendor_payment', active=True, is_deleted=False
         ).first()
+        if not active_seq:
+            raise ValueError(
+                'Tidak ada Sequence aktif untuk Pembayaran — aktifkan sequence terlebih dahulu.'
+            )
 
         with transaction.atomic():
             payment = VendorPayment.objects.create(
@@ -445,18 +450,23 @@ class VendorBill(BaseModel):
                 bill_id=self,
                 paid_amount=allocation,
             )
+            # Langsung konfirmasi (bukan draft): nomor resmi diterbitkan &
+            # paid_amount/status tagihan ter-update seketika.
+            payment.status = 'confirmed'
+            payment._effect_confirm()
+            payment.save()
 
-        msg = 'Pembayaran dibuat — Confirm untuk mengupdate status tagihan.'
+        msg = 'Pembayaran dibuat & otomatis dikonfirmasi — status tagihan ter-update.'
         if diff_amount > 0 and mark_paid:
             arah = 'kurang' if amount < remaining else 'lebih'
             msg = (
                 f'Tagihan ditandai Lunas — selisih {arah} bayar Rp {diff_amount:,.0f} '
-                f'dimapping ke akun. Confirm untuk mengupdate status tagihan.'
+                f'dimapping ke akun. Pembayaran otomatis dikonfirmasi.'
             )
         elif amount > remaining + 0.005:
             msg = (
-                'Pembayaran dibuat — kelebihan tidak dimapping & tersimpan sebagai '
-                'Sisa Alokasi. Confirm untuk mengupdate status tagihan.'
+                'Pembayaran dibuat & otomatis dikonfirmasi — kelebihan tidak dimapping '
+                '& tersimpan sebagai Sisa Alokasi.'
             )
 
         return {
