@@ -559,6 +559,7 @@ export const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, un
         dropdownStyle={{ minWidth: 300 }}
         listHeight={160}
         placeholder="Ketik untuk mencari..."
+        allowClear
         value={selected ? Number(selected.value) : undefined}
         options={options.map((o) => ({ ...o, value: Number(o.value), label: String(o.label ?? o.name ?? '') }))}
         onSearch={(v) => setSearch(v)}
@@ -568,6 +569,14 @@ export const Many2OneCellEditor = forwardRef<{ getValue: () => Record<string, un
           if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) loadMore();
         }}
         onChange={(val, opt) => {
+          // Tombol clear (allowClear): kosongkan cell → null
+          if (val == null || val === '') {
+            selectedRef.current = null;
+            setSelected(null);
+            onValueChange?.(null);
+            stopEditing?.();
+            return;
+          }
           const o = (Array.isArray(opt) ? opt[0] : opt) as Record<string, unknown> | undefined;
           if (o) commit({ ...o, value: Number(val) });
         }}

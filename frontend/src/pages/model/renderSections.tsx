@@ -310,6 +310,21 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
                   items[idx] = { ...items[idx], ...autofilledLine };
                   return { ...prev, [relationField]: items };
                 });
+              } else if (editedField?.type === 'many2one' && editedField.relation) {
+                // Pilihan many2one dikosongkan → field autofill ikut dikosongkan
+                const autofillMap = ((editedField as Record<string, unknown>)?.autofill || {}) as Record<string, string>;
+                const clearedLine = { ...updatedLine };
+                Object.keys(autofillMap).forEach((targetField) => {
+                  if (childFields?.[targetField]) clearedLine[targetField] = undefined;
+                });
+                autofilledLine = clearedLine;
+                setLineItems((prev) => {
+                  const items = [...(prev[relationField] || [])];
+                  const idx = items.findIndex((item) => item._key === params.data._key);
+                  if (idx < 0) return prev;
+                  items[idx] = { ...items[idx], ...clearedLine };
+                  return { ...prev, [relationField]: items };
+                });
               }
               // 3. Call backend compute API — single source of truth
               const childModelName = (config?.fields?.[relationField] as Record<string, string>)?.relation || '';
