@@ -205,11 +205,18 @@ class VendorBill(BaseModel):
                     'inputs': ['manual_discount'],
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],
-                    'child_details': {
-                        'label': 'Pembayaran',
-                        'data_key': '_payment_details',
-                        'model': 'accounting.vendor_payment',
-                    },
+                    'child_details': [
+                        {
+                            'label': 'Pembayaran',
+                            'data_key': '_payment_details',
+                            'model': 'accounting.vendor_payment',
+                        },
+                        {
+                            'label': 'Refund',
+                            'data_key': '_refund_details',
+                            'model': 'accounting.refund',
+                        },
+                    ],
                 },
             },
         ],
@@ -301,14 +308,50 @@ class VendorBill(BaseModel):
         ).exclude(status='cancelled')
         self.down_payment_amount = sum(float(b.grand_total or 0) for b in dp_bills)
 
+    # ── Refund terkait (dari pembayaran tagihan ini) ──
+
+    def _refund_payment_ids(self):
+        """Id vendor_payment yang mengalokasikan ke tagihan ini (exclude cancelled)."""
+        from core.models.accounting.vendor_payment_line import VendorPaymentLine
+        return list(
+            VendorPaymentLine.objects.filter(
+                bill_id=self.pk, is_deleted=False
+            ).exclude(payment_id__status='cancelled')
+            .values_list('payment_id', flat=True).distinct()
+        )
+
+    def _refunded_total(self):
+        """Total refund pembayaran tagihan ini — mengurangi pembayaran efektif."""
+        from django.db.models import Sum
+        from core.models.accounting.refund import Refund
+        ids = self._refund_payment_ids()
+        if not ids:
+            return 0.0
+        total = Refund.objects.filter(
+            is_deleted=False, vendor_payment_id__in=ids
+        ).aggregate(t=Sum('amount'))['t'] or 0
+        return float(total)
+
+    def _refund_rows(self):
+        """Refund (aktif) yang menempel pada pembayaran tagihan ini."""
+        from core.models.accounting.refund import Refund
+        ids = self._refund_payment_ids()
+        if not ids:
+            return []
+        return list(Refund.objects.filter(
+            is_deleted=False, vendor_payment_id__in=ids
+        ).order_by('refund_date', 'id'))
+
     def _compute_payment_summary(self):
-        """Hitung due_amount & payment_status berdasarkan grand_total dan paid_amount."""
+        """Hitung due_amount & payment_status — pembayaran efektif = paid − refund."""
         paid = float(getattr(self, 'paid_amount', 0) or 0)
+        refunded = self._refunded_total()
+        effective_paid = max(paid - refunded, 0)
         grand = float(getattr(self, 'grand_total', 0) or 0)
-        self.due_amount = max(grand - paid, 0)
-        if paid <= 0:
+        self.due_amount = max(grand - effective_paid, 0)
+        if effective_paid <= 0:
             self.payment_status = 'unpaid'
-        elif paid >= grand:
+        elif effective_paid >= grand:
             self.payment_status = 'paid'
         else:
             self.payment_status = 'partial'
@@ -527,4 +570,14 @@ class VendorBill(BaseModel):
                 'ref': p.reference or f'#{p.pk}',
                 'amount': float(line.paid_amount or 0),
             })
+        # Refund pembayaran — ditampilkan minus (mengurangi pembayaran efektif)
+        data['_refund_details'] = [
+            {
+                'id': r.pk,
+                'label': 'Refund',
+                'ref': r.reference or f'#{r.pk}',
+                'amount': -float(r.amount or 0),
+            }
+            for r in self._refund_rows()
+        ]
         return data

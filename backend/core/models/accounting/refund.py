@@ -157,6 +157,35 @@ class Refund(BaseModel):
             year = int(date_raw[:4]) if len(date_raw) >= 4 and date_raw[:4].isdigit() else date_cls.today().year
             self.reference = f'RFND/{year}/{self.pk:05d}'
             self.save(update_fields=['reference'])
+        self._refresh_source_docs()
+
+    def _refresh_source_docs(self):
+        """Perbarui due_amount & payment_status invoice/bill yang tersentuh refund.
+
+        Refund mengurangi pembayaran/penerimaan efektif → sisa tagihan naik.
+        Dipanggil setelah refund dibuat/diubah/soft-delete (save).
+        """
+        try:
+            if self.vendor_payment_id:
+                from core.models.accounting.vendor_payment_line import VendorPaymentLine
+                from core.models.accounting.vendor_bill import VendorBill
+                bill_ids = list(VendorPaymentLine.objects.filter(
+                    payment_id=self.vendor_payment_id, is_deleted=False
+                ).values_list('bill_id', flat=True))
+                for bill in VendorBill.objects.filter(pk__in=bill_ids, is_deleted=False):
+                    bill._run_compute()
+                    bill.save()
+            elif self.customer_receipt_id:
+                from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+                from core.models.accounting.customer_invoice import CustomerInvoice
+                inv_ids = list(CustomerReceiptLine.objects.filter(
+                    receipt_id=self.customer_receipt_id, is_deleted=False
+                ).values_list('invoice_id', flat=True))
+                for inv in CustomerInvoice.objects.filter(pk__in=inv_ids, is_deleted=False):
+                    inv._run_compute()
+                    inv.save()
+        except Exception:
+            pass
 
     def __str__(self):
         ref = self.reference or f'#{self.pk}'

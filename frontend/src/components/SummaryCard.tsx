@@ -6,6 +6,12 @@ import { modelApi } from '../api/models';
 
 const { Text } = Typography;
 
+interface ChildDetailsCfg {
+  label: string;
+  data_key: string;
+  model: string;
+}
+
 interface SummaryConfig {
   columns?: Record<string, string>;
   subtotal?: string;
@@ -14,11 +20,7 @@ interface SummaryConfig {
   compute_deps?: string[];
   grand_total?: string;
   after_grand_total?: string[];
-  child_details?: {
-    label: string;
-    data_key: string;
-    model: string;
-  };
+  child_details?: ChildDetailsCfg | ChildDetailsCfg[];
 }
 
 interface SummaryCardProps {
@@ -49,6 +51,18 @@ export default function SummaryCard({ summary: rawSummary, lineItems, fields, fo
 
   // Skip render if no subtotal and no grand_total (columns-only mode)
   const hasCard = !!(summary.subtotal || summary.grand_total);
+
+  // Child Details bisa dict tunggal ATAU array (beberapa daftar di satu summary,
+  // mis. Pembayaran + Refund di Invoice/Bill) — generic & backward compatible.
+  const childBlocks: ChildDetailsCfg[] = useMemo(() => {
+    const cfg = (summary as SummaryConfig).child_details;
+    if (!cfg) return [];
+    return Array.isArray(cfg) ? cfg : [cfg];
+  }, [summary]);
+  const childItemsTotal = childBlocks.reduce(
+    (n, b) => n + (((recordData?.[b.data_key] as unknown[])?.length) ?? 0),
+    0,
+  );
 
   // Local state for input fields (synced to form)
   const [rates, setRates] = useState<Record<string, number>>(() => {
@@ -301,29 +315,35 @@ export default function SummaryCard({ summary: rawSummary, lineItems, fields, fo
         </div>
       )}
 
-      {/* Child Details — daftar bill downstream (DP, Regular) yg bisa diklik */}
-      {summary.child_details && recordData && (
+      {/* Child Details — daftar child document di bawah summary (Pembayaran/Refund/dst) */}
+      {childBlocks.length > 0 && recordData && childItemsTotal > 0 && (
         <>
           <Divider style={{ margin: '6px 0' }} />
-          {(recordData[summary.child_details.data_key] as Array<{id: number; label: string; ref: string; amount: number}>)?.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 4,
-                cursor: 'pointer',
-              }}
-              onClick={() => onNavigate?.(summary.child_details!.model, item.id)}
-            >
-              <Text style={{ fontSize: 12, minWidth: 80 }}>
-                {item.label}{' '}
-                <Typography.Link style={{ fontSize: 12 }}>{item.ref}</Typography.Link>
-              </Text>
-              <Text style={{ fontSize: 12 }}>
-                {fmtIDR(item.amount)}
-              </Text>
+          {childBlocks.map((block) => (
+            <div key={block.data_key}>
+              {(recordData[block.data_key] as Array<{ id: number; label: string; ref: string; amount: number }> | undefined)?.map(
+                (item) => (
+                  <div
+                    key={`${block.data_key}-${item.id}`}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 4,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => onNavigate?.(block.model, item.id)}
+                  >
+                    <Text style={{ fontSize: 12, minWidth: 80 }}>
+                      {item.label}{' '}
+                      <Typography.Link style={{ fontSize: 12 }}>{item.ref}</Typography.Link>
+                    </Text>
+                    <Text style={{ fontSize: 12 }}>
+                      {fmtIDR(item.amount)}
+                    </Text>
+                  </div>
+                ),
+              )}
             </div>
           ))}
         </>
@@ -336,10 +356,7 @@ export default function SummaryCard({ summary: rawSummary, lineItems, fields, fo
         // Pakai computed (dari compute API) dulu, fallback ke recordData (initial render)
         const val = computed[fieldName] ?? (recordData as Record<string, unknown>)?.[fieldName] ?? 0;
         // Sembunyikan setelah_grand_total hanya jika ada child_details config tapi datanya kosong
-        const childItems = summary.child_details
-          ? ((recordData as Record<string, unknown>)?.[summary.child_details.data_key] as Array<unknown>)
-          : undefined;
-        if (summary.child_details && (!childItems || childItems.length === 0)) return null;
+        if (childBlocks.length > 0 && childItemsTotal === 0) return null;
         return (
           <div
             key={fieldName}

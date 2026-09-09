@@ -266,11 +266,18 @@ class CustomerInvoice(BaseModel):
                     'inputs': ['manual_discount'],
                     'grand_total': 'grand_total',
                     'after_grand_total': ['due_amount'],
-                    'child_details': {
-                        'label': 'Pembayaran',
-                        'data_key': '_receipt_details',
-                        'model': 'accounting.customer_receipt',
-                    },
+                    'child_details': [
+                        {
+                            'label': 'Penerimaan',
+                            'data_key': '_receipt_details',
+                            'model': 'accounting.customer_receipt',
+                        },
+                        {
+                            'label': 'Refund',
+                            'data_key': '_refund_details',
+                            'model': 'accounting.refund',
+                        },
+                    ],
                 },
             },
             {
@@ -795,14 +802,50 @@ class CustomerInvoice(BaseModel):
         ).first()
         self.down_payment_amount = dp_inv.grand_total if dp_inv else 0
 
+    # ── Refund terkait (dari penerimaan faktur ini) ──
+
+    def _refund_receipt_ids(self):
+        """Id customer_receipt yang mengalokasikan ke faktur ini (exclude cancelled)."""
+        from core.models.accounting.customer_receipt_line import CustomerReceiptLine
+        return list(
+            CustomerReceiptLine.objects.filter(
+                invoice_id=self.pk, is_deleted=False
+            ).exclude(receipt_id__status='cancelled')
+            .values_list('receipt_id', flat=True).distinct()
+        )
+
+    def _refunded_total(self):
+        """Total refund penerimaan faktur ini — mengurangi penerimaan efektif."""
+        from django.db.models import Sum
+        from core.models.accounting.refund import Refund
+        ids = self._refund_receipt_ids()
+        if not ids:
+            return 0.0
+        total = Refund.objects.filter(
+            is_deleted=False, customer_receipt_id__in=ids
+        ).aggregate(t=Sum('amount'))['t'] or 0
+        return float(total)
+
+    def _refund_rows(self):
+        """Refund (aktif) yang menempel pada penerimaan faktur ini."""
+        from core.models.accounting.refund import Refund
+        ids = self._refund_receipt_ids()
+        if not ids:
+            return []
+        return list(Refund.objects.filter(
+            is_deleted=False, customer_receipt_id__in=ids
+        ).order_by('refund_date', 'id'))
+
     def _compute_payment_summary(self):
-        """Hitung due_amount & payment_status berdasarkan grand_total dan paid_amount."""
+        """Hitung due_amount & payment_status — penerimaan efektif = paid − refund."""
         paid = float(getattr(self, 'paid_amount', 0) or 0)
+        refunded = self._refunded_total()
+        effective_paid = max(paid - refunded, 0)
         grand = float(getattr(self, 'grand_total', 0) or 0)
-        self.due_amount = max(grand - paid, 0)
-        if paid <= 0:
+        self.due_amount = max(grand - effective_paid, 0)
+        if effective_paid <= 0:
             self.payment_status = 'unpaid'
-        elif paid >= grand:
+        elif effective_paid >= grand:
             self.payment_status = 'paid'
         else:
             self.payment_status = 'partial'
@@ -848,4 +891,14 @@ class CustomerInvoice(BaseModel):
                 'ref': r.reference or f'#{r.pk}',
                 'amount': float(line.received_amount or 0),
             })
+        # Refund penerimaan — ditampilkan minus (mengurangi penerimaan efektif)
+        data['_refund_details'] = [
+            {
+                'id': r.pk,
+                'label': 'Refund',
+                'ref': r.reference or f'#{r.pk}',
+                'amount': -float(r.amount or 0),
+            }
+            for r in self._refund_rows()
+        ]
         return data
