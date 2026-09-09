@@ -57,7 +57,7 @@ export interface StockBalanceData {
 }
 
 export const stockBalanceApi = {
-  get: (params?: { date?: string; location?: number }) =>
+  get: (params?: { date?: string; warehouses?: string; product?: number }) =>
     api.get<StockBalanceData>('/stock/balance/', { params }).then((r) => r.data),
 };
 
@@ -81,11 +81,11 @@ export interface StockCardRow {
 export interface StockCardData {
   key: string;
   title: string;
-  filters: { product_id: number | null; location_id: number | null; date_from: string; date_to: string };
+  filters: { product_id: number | null; warehouse_ids: number[]; date_from: string; date_to: string };
   rows: StockCardRow[];
 }
 
 export const stockCardApi = {
-  get: (params?: { product?: number; location?: number; date_from?: string; date_to?: string }) =>
+  get: (params?: { product?: number; warehouses?: string; date_from?: string; date_to?: string }) =>
     api.get<StockCardData>('/stock/card/', { params }).then((r) => r.data),
 };

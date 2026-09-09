@@ -165,14 +165,34 @@ class StockEngine:
         return warnings
 
     @classmethod
-    def stock_balance(cls, date=None, location_id=None):
+    def _resolve_location_ids(cls, warehouse_ids):
+        """Resolve pilihan gudang → id lokasi (stock di-track per lokasi).
+
+        warehouse_ids: list id inventory.warehouse (kosong = semua lokasi).
+        Return list id warehouse_location atau None (semua).
+        """
+        if not warehouse_ids:
+            return None
+        loc_cls = ErpModelBase._model_registry.get('inventory.warehouse_location')
+        if loc_cls is None:
+            return None
+        return list(
+            loc_cls.objects
+            .filter(is_deleted=False, warehouse_id__in=warehouse_ids)
+            .values_list('id', flat=True)
+        )
+
+    @classmethod
+    def stock_balance(cls, date=None, warehouse_ids=None, product_id=None):
         """
         Laporan Stock Balance — saldo stok per produk pada SATU tanggal.
 
         date: objek date / string 'YYYY-MM-DD' (None = tanpa batas tanggal,
         artinya seluruh row aktif = saldo terkini).
         Saldo = SUM(quantity) row ledger aktif dengan date <= tanggal tsb
-        (soft-delete tidak dihitung). location_id None = semua lokasi.
+        (soft-delete tidak dihitung).
+        warehouse_ids: list id gudang (None/kosong = semua gudang).
+        product_id: batasi ke satu produk (opsional).
 
         Return: {key, title, date, rows, totals}
           rows: [{product_id, code, name, uom, qty}]
@@ -201,8 +221,11 @@ class StockEngine:
 
         d = _norm(date)
         base = ledger_cls.objects.filter(is_deleted=False)
-        if location_id is not None:
-            base = base.filter(location_id=location_id)
+        if product_id is not None:
+            base = base.filter(product_id=product_id)
+        loc_ids = cls._resolve_location_ids(warehouse_ids)
+        if loc_ids is not None:
+            base = base.filter(location_id__in=loc_ids)
         if d is not None:
             base = base.filter(date__lte=d)
 
@@ -243,11 +266,13 @@ class StockEngine:
         }
 
     @classmethod
-    def stock_card(cls, product_id=None, location_id=None, date_from=None, date_to=None):
+    def stock_card(cls, product_id=None, warehouse_ids=None, date_from=None, date_to=None):
         """
         Laporan Kartu Stok — detail pergerakan per (produk, lokasi) dari row
         stock ledger aktif, lengkap dengan saldo berjalan.
 
+        warehouse_ids: list id gudang (None/kosong = semua gudang) — lokasi di
+        luar gudang terpilih tidak ikut.
         date_from/date_to: batas periode tampil. Saldo berjalan tetap dihitung
         dari seluruh row aktif (termasuk sebelum date_from) sehingga angka
         saldo = stok nyata setelah pergerakan tsb.
@@ -284,7 +309,7 @@ class StockEngine:
 
         filters = {
             'product_id': product_id,
-            'location_id': location_id,
+            'warehouse_ids': warehouse_ids or [],
             'date_from': str(_norm(date_from) or ''),
             'date_to': str(_norm(date_to) or ''),
         }
@@ -300,8 +325,9 @@ class StockEngine:
         qs = ledger_cls.objects.filter(is_deleted=False)
         if product_id is not None:
             qs = qs.filter(product_id=product_id)
-        if location_id is not None:
-            qs = qs.filter(location_id=location_id)
+        loc_ids = cls._resolve_location_ids(warehouse_ids)
+        if loc_ids is not None:
+            qs = qs.filter(location_id__in=loc_ids)
         if d_to is not None:
             qs = qs.filter(date__lte=d_to)
 
