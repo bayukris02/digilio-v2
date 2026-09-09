@@ -1,24 +1,32 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Typography, Space, Button, DatePicker, Select, Table, Card, message } from 'antd';
+import { Typography, Space, Button, DatePicker, Select, Table, Card, message, Tag } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import { stockBalanceApi } from '../../api/report';
 import { modelApi } from '../../api/models';
 
 const { Title, Text } = Typography;
-const { RangePicker } = DatePicker;
 
 const fmtQty = (v: number) =>
   Number(v ?? 0).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 
+// Preset tanggal relatif terhadap hari ini
+const PRESETS: { key: string; label: string; offsetDays: number }[] = [
+  { key: 'today', label: 'Hari Ini', offsetDays: 0 },
+  { key: 'yesterday', label: 'Kemarin', offsetDays: 1 },
+  { key: 'lastweek', label: 'Minggu Lalu', offsetDays: 7 },
+  { key: 'lastmonth', label: 'Bulan Lalu', offsetDays: 30 },
+];
+
 /**
- * Stock Balance — laporan saldo stok per produk, bersumber dari row stock
- * ledger (agregasi di core/stock_engine.py -> StockEngine.stock_balance).
+ * Stock Balance — saldo stok per produk pada SATU tanggal pilihan
+ * (preset Hari Ini / Kemarin / Minggu Lalu / Bulan Lalu / tanggal custom).
+ * Sumber: row stock ledger aktif (agregasi di core/stock_engine.py).
  * Route: /inventory/stock_balance
  */
 export default function StockBalancePage() {
-  const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
+  const [date, setDate] = useState<Dayjs>(() => dayjs().startOf('day'));
   const [locationId, setLocationId] = useState<number | undefined>(undefined);
 
   const locationsQuery = useQuery({
@@ -36,17 +44,13 @@ export default function StockBalancePage() {
     [locationsQuery.data],
   );
 
+  const today = useMemo(() => dayjs().startOf('day'), []);
+
   const query = useQuery({
-    queryKey: [
-      'stock-balance',
-      dateRange?.[0]?.format('YYYY-MM-DD') ?? '',
-      dateRange?.[1]?.format('YYYY-MM-DD') ?? '',
-      locationId ?? '',
-    ],
+    queryKey: ['stock-balance', date?.format('YYYY-MM-DD') ?? '', locationId ?? ''],
     queryFn: () =>
       stockBalanceApi.get({
-        date_from: dateRange?.[0]?.format('YYYY-MM-DD'),
-        date_to: dateRange?.[1]?.format('YYYY-MM-DD'),
+        date: date?.format('YYYY-MM-DD') ?? undefined,
         location: locationId,
       }),
     staleTime: 30 * 1000,
@@ -55,9 +59,12 @@ export default function StockBalancePage() {
   const loading = query.isLoading;
   const refreshing = query.isFetching && !query.isLoading;
 
-  const onDateChange = useCallback((dates: [dayjs.Dayjs | null, dayjs.Dayjs | null] | null) => {
-    setDateRange(dates);
-  }, []);
+  const activePreset = PRESETS.find((p) => date?.isSame(today.subtract(p.offsetDays, 'day'), 'day'));
+  const dateLabel = activePreset
+    ? activePreset.label
+    : date
+      ? date.format('DD MMM YYYY')
+      : '—';
 
   const onRefresh = useCallback(() => {
     query.refetch();
@@ -68,41 +75,20 @@ export default function StockBalancePage() {
   }
 
   const data = query.data;
-  const periodText =
-    data?.period?.date_from && data?.period?.date_to
-      ? `${data.period.date_from} s/d ${data.period.date_to}`
-      : 'Semua periode';
+  const locationLabel =
+    locationId !== undefined
+      ? locationOptions.find((o) => o.value === locationId)?.label ?? `#${locationId}`
+      : 'Semua Lokasi';
 
   const columns = [
-    { title: 'Kode', dataIndex: 'code', width: 110 },
+    { title: 'Kode', dataIndex: 'code', width: 120 },
     { title: 'Produk', dataIndex: 'name' },
     { title: 'Satuan', dataIndex: 'uom', width: 90 },
     {
-      title: 'Saldo Awal',
-      dataIndex: 'opening',
+      title: dateLabel,
+      dataIndex: 'qty',
       align: 'right' as const,
-      width: 130,
-      render: (v: number) => fmtQty(v),
-    },
-    {
-      title: 'Masuk',
-      dataIndex: 'qty_in',
-      align: 'right' as const,
-      width: 110,
-      render: (v: number) => fmtQty(v),
-    },
-    {
-      title: 'Keluar',
-      dataIndex: 'qty_out',
-      align: 'right' as const,
-      width: 110,
-      render: (v: number) => fmtQty(v),
-    },
-    {
-      title: 'Saldo Akhir',
-      dataIndex: 'closing',
-      align: 'right' as const,
-      width: 130,
+      width: 140,
       render: (v: number) => <Text strong>{fmtQty(v)}</Text>,
     },
   ];
@@ -116,10 +102,10 @@ export default function StockBalancePage() {
               {data?.title ?? 'Stock Balance'}
             </Title>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              {periodText}
+              Saldo stok per <Tag style={{ marginRight: 0 }}>{dateLabel}</Tag> · {locationLabel}
             </Text>
           </div>
-          <Space>
+          <Space wrap>
             <Select
               size="small"
               allowClear
@@ -132,15 +118,36 @@ export default function StockBalancePage() {
               loading={locationsQuery.isLoading}
               onChange={(v) => setLocationId(v)}
             />
-            <RangePicker
-              size="small"
-              value={dateRange}
-              onChange={(dates) => onDateChange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null] | null)}
-            />
             <Button size="small" icon={<ReloadOutlined spin={refreshing} />} onClick={onRefresh} loading={refreshing}>
               Refresh
             </Button>
           </Space>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Tanggal:
+          </Text>
+          {PRESETS.map((p) => {
+            const presetDate = today.subtract(p.offsetDays, 'day');
+            const active = !!date?.isSame(presetDate, 'day');
+            return (
+              <Button
+                key={p.key}
+                size="small"
+                type={active ? 'primary' : 'default'}
+                onClick={() => setDate(presetDate)}
+              >
+                {p.label}
+              </Button>
+            );
+          })}
+          <DatePicker
+            size="small"
+            value={date}
+            allowClear={false}
+            onChange={(d) => setDate((d ?? dayjs()).startOf('day'))}
+          />
         </div>
 
         {loading ? (
@@ -153,7 +160,7 @@ export default function StockBalancePage() {
               columns={columns}
               dataSource={data?.rows ?? []}
               pagination={false}
-              locale={{ emptyText: 'Tidak ada pergerakan stok' }}
+              locale={{ emptyText: 'Tidak ada stok pada tanggal tersebut' }}
               summary={() => {
                 const t = data?.totals;
                 return (
@@ -162,16 +169,7 @@ export default function StockBalancePage() {
                       <Text strong>Total</Text>
                     </Table.Summary.Cell>
                     <Table.Summary.Cell index={3} align="right">
-                      <Text strong>{fmtQty(t?.opening ?? 0)}</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={4} align="right">
-                      <Text strong>{fmtQty(t?.qty_in ?? 0)}</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={5} align="right">
-                      <Text strong>{fmtQty(t?.qty_out ?? 0)}</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={6} align="right">
-                      <Text strong>{fmtQty(t?.closing ?? 0)}</Text>
+                      <Text strong>{fmtQty(t?.qty ?? 0)}</Text>
                     </Table.Summary.Cell>
                   </Table.Summary.Row>
                 );

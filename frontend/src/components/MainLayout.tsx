@@ -105,6 +105,7 @@ const menuItems = [
       { type: 'group', label: 'REPORT', children: [
         { key: '/inventory.stock_ledger', label: 'Stock Ledger' },
         { key: '/inventory/stock_balance', label: 'Stock Balance' },
+        { key: '/inventory/stock_card', label: 'Stock Card' },
         { key: '/inventory/pivot', label: 'Inventory Pivot' },
         { key: '/inventory/detail', label: 'Inventory Detail' },
       ]},
