@@ -11,6 +11,18 @@ class Deposit(BaseModel):
 
     _model_name = 'accounting.deposit'
 
+    # ── Document Flow ──
+    _document_flow = {
+        'children': [
+            {
+                'model': 'accounting.refund',
+                'label': 'Refund',
+                'icon': 'UndoOutlined',
+                'source_field_in_child': 'deposit',
+            },
+        ],
+    }
+
     _fields = {
         'deposit_type': SelectionField(
             label='Tipe Deposit',
@@ -59,7 +71,35 @@ class Deposit(BaseModel):
                     ],
                 },
             ],
-            'smart_buttons': [],
+            'smart_buttons': [
+                {'label': 'Refund', 'model': 'accounting.refund', 'icon': 'UndoOutlined'},
+            ],
+            'actions': [
+                {'label': 'Refund', 'color': 'primary', 'action': 'refund', 'wizard': {
+                    'title': 'Refund Deposit',
+                    'modes': [
+                        {
+                            'value': 'refund',
+                            'label': 'Catat Refund',
+                            'icon': 'UndoOutlined',
+                            'row_info': {
+                                'title': 'Deposit',
+                                'fields': [
+                                    {'key': 'amount', 'label': 'Nominal Deposit', 'currency': True},
+                                ],
+                            },
+                            'inputs': [
+                                {'key': 'amount', 'label': 'Nominal Refund', 'type': 'number', 'min': 0,
+                                 'help': 'Maksimal = Nominal Deposit dikurangi refund yang sudah dicatat.'},
+                                {'key': 'refund_date', 'label': 'Tanggal Refund', 'type': 'date', 'default': 'today'},
+                                {'key': 'payment_method', 'label': 'Kas/Bank', 'type': 'many2one',
+                                 'relation': 'accounting.payment_method'},
+                                {'key': 'notes', 'label': 'Catatan', 'type': 'text'},
+                            ],
+                        },
+                    ],
+                 }},
+            ],
         },
     }
 
@@ -81,6 +121,19 @@ class Deposit(BaseModel):
             },
         }
         return config
+
+    # ── Refund ──
+
+    def _action_refund(self, data=None):
+        """Catat refund (partial) dari deposit ini."""
+        from core.models.accounting.refund import create_refund
+        refund = create_refund(self, data, source_field='deposit', total_field='amount')
+        return {
+            '_action_type': 'open_record',
+            'model': 'accounting.refund',
+            'record_id': refund.pk,
+            'message': f'Refund Rp {float(refund.amount):,.0f} dicatat untuk {self}.',
+        }
 
     def __str__(self):
         label = 'Terima' if self.deposit_type == 'terima' else 'Bayar'

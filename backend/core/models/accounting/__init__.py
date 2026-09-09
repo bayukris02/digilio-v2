@@ -18,3 +18,4 @@ from core.models.accounting.expense import Expense
 from core.models.accounting.expense_line import ExpenseLine
 from core.models.accounting.transfer_cash_bank import TransferCashBank
 from core.models.accounting.deposit import Deposit
+from core.models.accounting.refund import Refund

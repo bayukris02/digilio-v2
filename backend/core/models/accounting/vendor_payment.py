@@ -12,6 +12,18 @@ class VendorPayment(BaseModel):
     _model_name = 'accounting.vendor_payment'
     _display_name = 'reference'
 
+    # ── Document Flow ──
+    _document_flow = {
+        'children': [
+            {
+                'model': 'accounting.refund',
+                'label': 'Refund',
+                'icon': 'UndoOutlined',
+                'source_field_in_child': 'vendor_payment',
+            },
+        ],
+    }
+
     # ── State Machine ──
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
@@ -127,10 +139,38 @@ class VendorPayment(BaseModel):
                                'total_amount', 'status', 'sequence_id'],
                 },
             ],
-            'smart_buttons': [],
+            'smart_buttons': [
+                {'label': 'Refund', 'model': 'accounting.refund', 'icon': 'UndoOutlined'},
+            ],
             'actions': [
                 {'label': 'Print', 'color': 'green', 'action': 'print'},
                 {'label': 'Confirm', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
+                {'label': 'Refund', 'color': 'primary', 'action': 'refund', 'states': ['confirmed', 'done'],
+                 'guard': '_guard_refund', 'wizard': {
+                    'title': 'Refund Pembayaran Vendor',
+                    'modes': [
+                        {
+                            'value': 'refund',
+                            'label': 'Catat Refund',
+                            'icon': 'UndoOutlined',
+                            'row_info': {
+                                'title': 'Transaksi',
+                                'fields': [
+                                    {'key': 'reference', 'label': 'Referensi'},
+                                    {'key': 'total_amount', 'label': 'Total Pembayaran', 'currency': True},
+                                ],
+                            },
+                            'inputs': [
+                                {'key': 'amount', 'label': 'Nominal Refund', 'type': 'number', 'min': 0,
+                                 'help': 'Maksimal = Total Pembayaran dikurangi refund yang sudah dicatat.'},
+                                {'key': 'refund_date', 'label': 'Tanggal Refund', 'type': 'date', 'default': 'today'},
+                                {'key': 'payment_method', 'label': 'Kas/Bank', 'type': 'many2one',
+                                 'relation': 'accounting.payment_method'},
+                                {'key': 'notes', 'label': 'Catatan', 'type': 'text'},
+                            ],
+                        },
+                    ],
+                 }},
                 {'label': 'Cancel', 'color': 'primary', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
                 {'label': 'Action', 'color': 'primary'},
             ],
@@ -241,6 +281,27 @@ class VendorPayment(BaseModel):
                 bill.paid_amount = max((bill.paid_amount or 0) - (line.paid_amount or 0), 0)
                 bill._run_compute()
                 bill.save()
+
+    # ── Refund ──
+
+    def _guard_refund(self):
+        if self.status not in ('confirmed', 'done'):
+            raise ValueError(
+                'Refund hanya bisa dicatat untuk pembayaran berstatus Confirmed/Done.')
+
+    def _action_refund(self, data=None):
+        """Catat refund (partial) dari pembayaran vendor ini."""
+        from core.models.accounting.refund import create_refund
+        refund = create_refund(
+            self, data, source_field='vendor_payment',
+            total_field='total_amount', statuses=('confirmed', 'done'),
+        )
+        return {
+            '_action_type': 'open_record',
+            'model': 'accounting.refund',
+            'record_id': refund.pk,
+            'message': f'Refund Rp {float(refund.amount):,.0f} dicatat untuk {self.reference}.',
+        }
 
     # ── Legacy Actions ──
 

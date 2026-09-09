@@ -12,6 +12,18 @@ class CustomerReceipt(BaseModel):
     _model_name = 'accounting.customer_receipt'
     _display_name = 'reference'
 
+    # ── Document Flow ──
+    _document_flow = {
+        'children': [
+            {
+                'model': 'accounting.refund',
+                'label': 'Refund',
+                'icon': 'UndoOutlined',
+                'source_field_in_child': 'customer_receipt',
+            },
+        ],
+    }
+
     # ── State Machine ──
     _states = {
         'draft': {'allow_edit': True, 'allow_delete': True, 'label': 'Draft', 'color': 'default'},
@@ -127,10 +139,38 @@ class CustomerReceipt(BaseModel):
                                'total_amount', 'status', 'sequence_id'],
                 },
             ],
-            'smart_buttons': [],
+            'smart_buttons': [
+                {'label': 'Refund', 'model': 'accounting.refund', 'icon': 'UndoOutlined'},
+            ],
             'actions': [
                 {'label': 'Print', 'icon': 'FileTextOutlined', 'color': 'green', 'action': 'print'},
                 {'label': 'Confirm', 'icon': 'CheckOutlined', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
+                {'label': 'Refund', 'color': 'primary', 'action': 'refund', 'states': ['confirmed', 'done'],
+                 'guard': '_guard_refund', 'wizard': {
+                    'title': 'Refund Penerimaan Customer',
+                    'modes': [
+                        {
+                            'value': 'refund',
+                            'label': 'Catat Refund',
+                            'icon': 'UndoOutlined',
+                            'row_info': {
+                                'title': 'Transaksi',
+                                'fields': [
+                                    {'key': 'reference', 'label': 'Referensi'},
+                                    {'key': 'total_amount', 'label': 'Total Penerimaan', 'currency': True},
+                                ],
+                            },
+                            'inputs': [
+                                {'key': 'amount', 'label': 'Nominal Refund', 'type': 'number', 'min': 0,
+                                 'help': 'Maksimal = Total Penerimaan dikurangi refund yang sudah dicatat.'},
+                                {'key': 'refund_date', 'label': 'Tanggal Refund', 'type': 'date', 'default': 'today'},
+                                {'key': 'payment_method', 'label': 'Kas/Bank', 'type': 'many2one',
+                                 'relation': 'accounting.payment_method'},
+                                {'key': 'notes', 'label': 'Catatan', 'type': 'text'},
+                            ],
+                        },
+                    ],
+                 }},
                 {'label': 'Cancel', 'icon': 'StopOutlined', 'color': 'primary', 'action': 'cancel', 'states': ['draft', 'confirmed', 'done']},
                 {'label': 'Action', 'icon': 'MoreOutlined', 'color': 'primary'},
             ],
@@ -323,6 +363,27 @@ class CustomerReceipt(BaseModel):
             if inst.payment_status != status:
                 inst.payment_status = status
                 inst.save(update_fields=['payment_status'])
+
+    # ── Refund ──
+
+    def _guard_refund(self):
+        if self.status not in ('confirmed', 'done'):
+            raise ValueError(
+                'Refund hanya bisa dicatat untuk penerimaan berstatus Confirmed/Done.')
+
+    def _action_refund(self, data=None):
+        """Catat refund (partial) dari penerimaan customer ini."""
+        from core.models.accounting.refund import create_refund
+        refund = create_refund(
+            self, data, source_field='customer_receipt',
+            total_field='total_amount', statuses=('confirmed', 'done'),
+        )
+        return {
+            '_action_type': 'open_record',
+            'model': 'accounting.refund',
+            'record_id': refund.pk,
+            'message': f'Refund Rp {float(refund.amount):,.0f} dicatat untuk {self.reference}.',
+        }
 
     # ── Legacy Actions ──
 
