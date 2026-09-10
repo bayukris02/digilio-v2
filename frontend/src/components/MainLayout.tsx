@@ -1,21 +1,57 @@
-import { useState } from 'react';
-import { Layout, Menu, Button } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Layout, Menu, Button, Empty, Spin } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined, LogoutOutlined } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
-import { menuItems, topLevelItems, getModuleKey, findParentKey, findChildLabel } from '../config/menu';
+import {
+  menuItems, getModuleKey, findParentKey, findChildLabel,
+  filterMenuByAccess, isPathAllowed, firstMenuKey, type AccessGrant,
+} from '../config/menu';
 
 const { Header, Sider, Content } = Layout;
 
 export default function MainLayout() {
   const [sidebar1Collapsed, setSidebar1Collapsed] = useState(true);
+  const [accessReady, setAccessReady] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((s) => s.logout);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const access = useAuthStore((s) => s.access);
+  const loadAccess = useAuthStore((s) => s.loadAccess);
+
+  // Muat hak akses (role) sekali setelah login / refresh halaman
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setAccessReady(false);
+      return;
+    }
+    let alive = true;
+    loadAccess()
+      .catch(() => { /* gagal → tanpa role (hanya Dashboard) */ })
+      .finally(() => { if (alive) setAccessReady(true); });
+    return () => { alive = false; };
+  }, [isAuthenticated, loadAccess]);
+
+  const grant = useMemo<AccessGrant>(() => ({
+    all: access?.all_access ?? false,
+    menu_keys: access?.menu_keys ?? [],
+    section_keys: access?.section_keys ?? [],
+  }), [access]);
+
+  // Menu yang tampil = menu asli disaring hak akses role
+  const visibleItems = useMemo(() => filterMenuByAccess(menuItems, grant), [grant]);
+  const visibleTopItems = useMemo(
+    () => visibleItems.map(({ key, icon, label }) => ({ key, icon, label })),
+    [visibleItems],
+  );
+  const pathAllowed = useMemo(
+    () => isPathAllowed(location.pathname, grant),
+    [location.pathname, grant],
+  );
 
   const currentModule = getModuleKey(location.pathname);
-  const selectedItem = menuItems.find((m) => m.key === currentModule);
+  const selectedItem = visibleItems.find((m) => m.key === currentModule);
   const subItems: any[] = selectedItem?.children || [];
   const selectedModuleLabel = selectedItem?.label;
   // Highlight parent submenu (mis. "Laporan Keuangan") saat salah satu child-nya aktif;
@@ -52,6 +88,15 @@ export default function MainLayout() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Tunggu hak akses termuat agar menu & guard tidak berkedip
+  if (!accessReady) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Spin />
+      </div>
+    );
   }
 
   return (
@@ -201,17 +246,15 @@ export default function MainLayout() {
           mode="inline"
           selectedKeys={[currentModule]}
           inlineCollapsed={sidebar1Collapsed}
-          items={topLevelItems}
+          items={visibleTopItems}
           onClick={({ key }) => {
             if (key === '/') {
               navigate('/');
             } else {
-              // Navigate to first child of selected module (skip group headers)
-              const module = menuItems.find((m) => m.key === key);
-              const firstChild = module?.children?.find((c) => c && (c as { key?: string }).key);
-              if (firstChild) {
-                navigate((firstChild as { key: string }).key);
-              }
+              // Buka menu pertama modul (tembus header grup OPERATION/…, yang tak punya route)
+              const module = visibleItems.find((m) => m.key === key);
+              const target = firstMenuKey(module?.children);
+              if (target) navigate(target);
             }
           }}
         />
@@ -282,7 +325,11 @@ export default function MainLayout() {
           </Button>
         </Header>
         <Content style={{ margin: 12, overflow: 'auto', height: 'calc(100vh - 48px)' }}>
-          <Outlet />
+          {pathAllowed ? <Outlet /> : (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Empty description="Anda tidak punya akses ke halaman ini" />
+            </div>
+          )}
         </Content>
       </Layout>
     </Layout>

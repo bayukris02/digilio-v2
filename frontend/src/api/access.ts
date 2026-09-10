@@ -24,12 +24,38 @@ export interface PermissionsPayload {
   section_keys: string[];
 }
 
+export interface AccessUser {
+  id: number;
+  username: string;
+  display_name: string;
+  active: boolean;
+  role_id: number | null;
+  role_name: string | null;
+}
+
+/** Hak akses user yang sedang login (`GET /access/me/`). */
+export interface MyAccess {
+  id: number;
+  username: string;
+  display_name: string;
+  /** superuser/staff → tanpa pembatasan role */
+  all_access: boolean;
+  role_id: number | null;
+  role_name: string | null;
+  menu_keys: string[];
+  section_keys: string[];
+}
+
 export const accessApi = {
   listRoles: async (): Promise<AccessRole[]> => (await api.get('/access/roles/')).data,
+  getMe: async (): Promise<MyAccess> => (await api.get('/access/me/')).data,
   createRole: async (data: RoleInput): Promise<AccessRole> => (await api.post('/access/roles/', data)).data,
   updateRole: async (id: number, data: Partial<RoleInput>): Promise<AccessRole> =>
     (await api.patch(`/access/roles/${id}/`, data)).data,
   deleteRole: async (id: number): Promise<{ deleted: boolean }> => (await api.delete(`/access/roles/${id}/`)).data,
   savePermissions: async (id: number, data: PermissionsPayload): Promise<AccessRole> =>
     (await api.put(`/access/roles/${id}/permissions/`, data)).data,
+  listUsers: async (): Promise<AccessUser[]> => (await api.get('/access/users/')).data,
+  setUserRole: async (userId: number, roleId: number | null): Promise<{ user_id: number; role_id: number | null }> =>
+    (await api.put(`/access/users/${userId}/role/`, { role_id: roleId })).data,
 };

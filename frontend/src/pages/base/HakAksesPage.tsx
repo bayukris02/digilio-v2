@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Typography, Button, Card, Input, Modal, Form, Checkbox, Tabs, Empty, Popconfirm,
-  Tag, message, Spin,
+  Tag, message, Spin, Select,
 } from 'antd';
 import { accessApi, type AccessRole, type RoleInput } from '../../api/access';
-import { buildAccessTree, type AccessModule, type AccessSection } from '../../config/menu';
+import { buildAccessTree, type AccessModule, type AccessSection, type AccessSubgroup } from '../../config/menu';
 
 const { Title, Text } = Typography;
 
@@ -95,25 +95,62 @@ export default function HakAksesPage() {
     onError: (e: Error) => message.error(e.message || 'Gagal menghapus role.'),
   });
 
+  // ── Penugasan role ke user ──
+  const usersQuery = useQuery({ queryKey: ['access-users'], queryFn: accessApi.listUsers });
+  const users = usersQuery.data ?? [];
+
+  const setRoleMutation = useMutation({
+    mutationFn: (payload: { userId: number; roleId: number | null }) =>
+      accessApi.setUserRole(payload.userId, payload.roleId),
+    onSuccess: () => {
+      message.success('Role user diperbarui.');
+      qc.invalidateQueries({ queryKey: ['access-users'] });
+    },
+    onError: (e: Error) => message.error(e.message || 'Gagal menugaskan role.'),
+  });
+
   // ── Interaksi checklist ──
+  // Induk (section & sub-grup spt "Laporan Keuangan") berperilaku sama:
+  // dicentang penuh → semua anaknya tercentang; dicentang sebagian → indeterminate.
   const markDirty = () => setDirty(true);
 
-  /** Section dianggap tercentang bila di-grant langsung atau semua menunya dicentang. */
-  const isSectionChecked = (sec: AccessSection) => {
-    if (sectionKeys.has(sec.key)) return true;
-    const keys = sectionMenuKeys(sec);
-    return keys.length > 0 && keys.every((k) => menuKeys.has(k));
-  };
+  /** Menu daun di satu section + induk sub-grup-nya (untuk hitung centang section). */
+  const sectionLeafNodes = (sec: AccessSection) => [
+    ...sec.menus.map((m) => ({ key: m.key, parentKey: undefined as string | undefined })),
+    ...sec.subgroups.flatMap((g) => g.menus.map((m) => ({ key: m.key, parentKey: g.key as string | undefined }))),
+  ];
+
+  /** Key menu daun saja (induk sub-grup tidak ditulis kalau anaknya sudah eksplisit). */
+  const sectionLeafKeys = (sec: AccessSection) => sectionLeafNodes(sec).map((n) => n.key);
+
+  /** Node tercentang bila: section-nya digrant, dicentang sendiri, atau diwarisi sub-grup. */
+  const isNodeChecked = (key: string, secKey: string, parentKey?: string) =>
+    sectionKeys.has(secKey) || menuKeys.has(key) || (!!parentKey && menuKeys.has(parentKey));
+
+  const isSectionChecked = (sec: AccessSection) =>
+    sectionKeys.has(sec.key) || sectionLeafNodes(sec).every((n) => isNodeChecked(n.key, sec.key, n.parentKey));
 
   const isSectionIndeterminate = (sec: AccessSection) => {
-    if (sectionKeys.has(sec.key)) return false;
-    const keys = sectionMenuKeys(sec);
-    const some = keys.some((k) => menuKeys.has(k));
-    return some && !keys.every((k) => menuKeys.has(k));
+    if (isSectionChecked(sec)) return false;
+    return sectionLeafNodes(sec).some((n) => isNodeChecked(n.key, sec.key, n.parentKey));
   };
 
-  /** Menu tercentang bila dicentang sendiri atau diwarisi dari section-nya. */
-  const isMenuChecked = (key: string, secKey: string) => menuKeys.has(key) || sectionKeys.has(secKey);
+  const isSubgroupChecked = (sub: AccessSubgroup, secKey: string) =>
+    sectionKeys.has(secKey)
+    || menuKeys.has(sub.key)
+    || (sub.menus.length > 0 && sub.menus.every((m) => menuKeys.has(m.key)));
+
+  const isSubgroupIndeterminate = (sub: AccessSubgroup, secKey: string) =>
+    !isSubgroupChecked(sub, secKey) && sub.menus.some((m) => menuKeys.has(m.key));
+
+  /** Lepas grant section → pecah jadi menu daun eksplisit (kecuali `exceptKey`). */
+  const expandSection = (
+    sec: AccessSection, nextMenus: Set<string>, nextSections: Set<string>, exceptKey?: string,
+  ) => {
+    if (!nextSections.has(sec.key)) return;
+    nextSections.delete(sec.key);
+    sectionLeafKeys(sec).forEach((k) => { if (k !== exceptKey) nextMenus.add(k); });
+  };
 
   const toggleSection = (sec: AccessSection, checked: boolean) => {
     const nextSections = new Set(sectionKeys);
@@ -131,24 +168,43 @@ export default function HakAksesPage() {
     markDirty();
   };
 
-  const toggleMenu = (key: string, sec: AccessSection) => {
+  /** Centang sub-grup = centang/lepas seluruh menu anaknya (seperti section). */
+  const toggleSubgroup = (sub: AccessSubgroup, sec: AccessSection, checked: boolean) => {
+    const nextSections = new Set(sectionKeys);
+    const nextMenus = new Set(menuKeys);
+    // Kalau sebelumnya digrant lewat section, pecah dulu supaya sisanya tetap tercentang
+    expandSection(sec, nextMenus, nextSections, sub.key);
+    const keys = sub.menus.map((m) => m.key);
+    if (checked) {
+      nextMenus.add(sub.key);
+      keys.forEach((k) => nextMenus.delete(k)); // menu diwarisi dari sub-grup
+    } else {
+      nextMenus.delete(sub.key);
+      keys.forEach((k) => nextMenus.delete(k));
+    }
+    setMenuKeys(nextMenus);
+    setSectionKeys(nextSections);
+    markDirty();
+  };
+
+  const toggleMenu = (key: string, sec: AccessSection, parentKey?: string) => {
     const nextMenus = new Set(menuKeys);
     const nextSections = new Set(sectionKeys);
+    const sub = parentKey ? sec.subgroups.find((g) => g.key === parentKey) : undefined;
     if (nextMenus.has(key)) {
       nextMenus.delete(key);
+    } else if (sub && nextMenus.has(sub.key)) {
+      // Grant lewat sub-grup → pecah: menu lain di sub-grup tetap tercentang
+      nextMenus.delete(sub.key);
+      sub.menus.forEach((m) => { if (m.key !== key) nextMenus.add(m.key); });
     } else if (nextSections.has(sec.key)) {
-      // Grant lewat section → pecah jadi menu eksplisit saat satu menu dilepas
+      // Grant lewat section → pecah jadi menu eksplisit saat satu menu dilepas,
+      // supaya menu lain di section itu tetap tercentang.
       nextSections.delete(sec.key);
-      sectionMenuKeys(sec).forEach((k) => { if (k !== key) nextMenus.add(k); });
+      sectionLeafKeys(sec).forEach((k) => { if (k !== key) nextMenus.add(k); });
     } else {
       nextMenus.add(key);
     }
-    // Rapikan: buang section_key yang menunya sudah tidak lengkap
-    nextSections.forEach((sk) => {
-      const found = tree.flatMap((m) => m.sections).find((s) => s.key === sk);
-      if (!found) return;
-      if (!sectionMenuKeys(found).every((k) => nextMenus.has(k))) nextSections.delete(sk);
-    });
     setMenuKeys(nextMenus);
     setSectionKeys(nextSections);
     markDirty();
@@ -194,13 +250,14 @@ export default function HakAksesPage() {
       </div>
 
       <div style={{ flex: 1, display: 'flex', gap: 12, minHeight: 0 }}>
-        {/* ── Daftar role ── */}
+        {/* ── Kiri: daftar role + penugasan user ── */}
+        <div style={{ width: 280, flex: '0 0 280px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
         <Card
           size="small"
           title="Roles"
-          styles={{ body: { padding: 8, height: '100%', overflow: 'auto' } }}
+          styles={{ body: { padding: 8, overflow: 'auto' } }}
           extra={<Button type="link" size="small" style={{ padding: 0 }} onClick={openCreate}>+ Tambah</Button>}
-          style={{ width: 260, flex: '0 0 260px', display: 'flex', flexDirection: 'column' }}
+          style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}
         >
           {rolesQuery.isLoading ? (
             <div style={{ textAlign: 'center', padding: 24 }}><Spin size="small" /></div>
@@ -250,6 +307,36 @@ export default function HakAksesPage() {
           )}
         </Card>
 
+        {/* ── Penugasan role ke user ── */}
+        <Card
+          size="small"
+          title="Users"
+          styles={{ body: { padding: 8, overflow: 'auto' } }}
+          style={{ flex: '0 0 auto', maxHeight: '45%', display: 'flex', flexDirection: 'column' }}
+        >
+          {usersQuery.isLoading ? (
+            <div style={{ textAlign: 'center', padding: 16 }}><Spin size="small" /></div>
+          ) : users.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Belum ada user" />
+          ) : (
+            users.map((user) => (
+              <div key={user.id} style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: user.active ? undefined : '#8c8c8c' }}>{user.display_name}</div>
+                <Select
+                  size="small"
+                  allowClear
+                  placeholder="— tanpa role —"
+                  style={{ width: '100%' }}
+                  value={user.role_id ?? undefined}
+                  options={roles.map((r) => ({ value: r.id, label: r.name }))}
+                  onChange={(value) => setRoleMutation.mutate({ userId: user.id, roleId: value ?? null })}
+                />
+              </div>
+            ))
+          )}
+        </Card>
+        </div>
+
         {/* ── Checklist menu ── */}
         <Card
           size="small"
@@ -298,7 +385,7 @@ export default function HakAksesPage() {
                                 {sec.menus.map((m) => (
                                   <div key={m.key} style={{ lineHeight: '22px' }}>
                                     <Checkbox
-                                      checked={isMenuChecked(m.key, sec.key)}
+                                      checked={isNodeChecked(m.key, sec.key)}
                                       onChange={() => toggleMenu(m.key, sec)}
                                     >
                                       <span style={{ fontSize: 13 }}>{m.label}</span>
@@ -309,8 +396,9 @@ export default function HakAksesPage() {
                                   <div key={g.key} style={{ marginTop: 4 }}>
                                     <div style={{ lineHeight: '22px' }}>
                                       <Checkbox
-                                        checked={isMenuChecked(g.key, sec.key)}
-                                        onChange={() => toggleMenu(g.key, sec)}
+                                        checked={isSubgroupChecked(g, sec.key)}
+                                        indeterminate={isSubgroupIndeterminate(g, sec.key)}
+                                        onChange={(e) => toggleSubgroup(g, sec, e.target.checked)}
                                       >
                                         <span style={{ fontSize: 13, fontWeight: 500 }}>{g.label}</span>
                                       </Checkbox>
@@ -319,8 +407,8 @@ export default function HakAksesPage() {
                                       {g.menus.map((m) => (
                                         <div key={m.key} style={{ lineHeight: '22px' }}>
                                           <Checkbox
-                                            checked={isMenuChecked(m.key, sec.key)}
-                                            onChange={() => toggleMenu(m.key, sec)}
+                                            checked={isNodeChecked(m.key, sec.key, g.key)}
+                                            onChange={() => toggleMenu(m.key, sec, g.key)}
                                           >
                                             <span style={{ fontSize: 13 }}>{m.label}</span>
                                           </Checkbox>

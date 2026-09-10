@@ -191,8 +191,8 @@ export const menuItems: MenuNode[] = [
   },
 ];
 
-// Top-level items for sidebar 1 (icon-only when collapsed)
-export const topLevelItems = menuItems.map(({ key, icon, label }) => ({ key, icon, label }));
+// Top-level items sidebar 1 diturunkan dari menu yang sudah disaring hak akses
+// (lihat `visibleTopItems` di MainLayout), jadi tidak diekspor statis di sini.
 
 export function getModuleKey(pathname: string): string {
   if (pathname === '/') return '/';
@@ -331,4 +331,128 @@ export function buildAccessTree(): AccessModule[] {
 
     return { key: moduleKey, label: mod.label ?? moduleKey, sections };
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Penyaringan menu sesuai hak akses (RBAC) — dipakai MainLayout
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AccessGrant {
+  /** superuser/staff → tanpa pembatasan */
+  all: boolean;
+  menu_keys: string[];
+  section_keys: string[];
+}
+
+export interface MenuLeaf {
+  key: string;
+  moduleKey: string;
+  /** key section pemilik menu, format `${moduleKey}:${label}` */
+  sectionKey?: string;
+  /** key sub-grup induk (mis. `accounting.laporan_keuangan`) bila menu ada di dalamnya */
+  parentKey?: string;
+}
+
+/** Menu tanpa section (mis. Dashboard/Insight di atas grup) masuk section ini. */
+const UNGROUPED_SECTION = 'UMUM';
+
+/** Semua menu daun beserta modul & section pemiliknya. */
+export function collectMenuLeaves(): MenuLeaf[] {
+  const out: MenuLeaf[] = [];
+  for (const mod of menuItems) {
+    const moduleKey = mod.key ?? '/';
+    const children = mod.children ?? [];
+    if (!children.length) {
+      out.push({ key: moduleKey, moduleKey });
+      continue;
+    }
+    for (const child of children) {
+      if (child.type === 'group') {
+        const sectionKey = `${moduleKey}:${child.label ?? 'SECTION'}`;
+        for (const entry of child.children ?? []) {
+          if (entry.children?.length) {
+            if (entry.key) out.push({ key: entry.key, moduleKey, sectionKey });
+            for (const leaf of entry.children) {
+              if (leaf.key) out.push({ key: leaf.key, moduleKey, sectionKey, parentKey: entry.key });
+            }
+          } else if (entry.key) {
+            out.push({ key: entry.key, moduleKey, sectionKey });
+          }
+        }
+      } else if (child.key) {
+        out.push({ key: child.key, moduleKey, sectionKey: `${moduleKey}:${UNGROUPED_SECTION}` });
+      }
+    }
+  }
+  return out;
+}
+
+/** Dashboard selalu boleh diakses setiap user (halaman pendarat). */
+const BASELINE_KEYS = ['/'];
+
+const isLeafGranted = (leaf: MenuLeaf, grant: AccessGrant): boolean =>
+  BASELINE_KEYS.includes(leaf.key)
+  || grant.menu_keys.includes(leaf.key)
+  || (!!leaf.parentKey && grant.menu_keys.includes(leaf.parentKey))
+  || (!!leaf.sectionKey && grant.section_keys.includes(leaf.sectionKey));
+
+/** Set key menu yang boleh diakses user ini. */
+export function allowedMenuKeys(grant: AccessGrant): Set<string> {
+  const keys = new Set<string>(BASELINE_KEYS);
+  if (grant.all) {
+    for (const leaf of collectMenuLeaves()) keys.add(leaf.key);
+    return keys;
+  }
+  for (const leaf of collectMenuLeaves()) {
+    if (isLeafGranted(leaf, grant)) keys.add(leaf.key);
+  }
+  return keys;
+}
+
+/** Saring tree menu sesuai hak akses — modul/section yang kosong ikut dibuang. */
+export function filterMenuByAccess(items: MenuNode[], grant: AccessGrant): MenuNode[] {
+  if (grant.all) return items;
+  const granted = new Set<string>();
+  for (const leaf of collectMenuLeaves()) {
+    if (isLeafGranted(leaf, grant)) granted.add(leaf.key);
+  }
+  const keep = (node: MenuNode): MenuNode | null => {
+    if (node.children?.length) {
+      const kids = node.children.map(keep).filter(Boolean) as MenuNode[];
+      if (!kids.length) return null;
+      return { ...node, children: kids };
+    }
+    if (!node.key) return null;
+    return granted.has(node.key) ? node : null;
+  };
+  return items.map(keep).filter(Boolean) as MenuNode[];
+}
+
+/** Cek pathname boleh diakses — prefix agar halaman /new & /:id ikut lolos. */
+export function isPathAllowed(pathname: string, grant: AccessGrant): boolean {
+  if (grant.all) return true;
+  const keys = allowedMenuKeys(grant);
+  if (pathname === '/') return keys.has('/');
+  for (const key of keys) {
+    if (key === '/') continue;
+    if (pathname === key || pathname.startsWith(key + '/')) return true;
+  }
+  return false;
+}
+
+/**
+ * Key menu pertama yang layak dibuka dari sebuah modul — rekursif menembus
+ * header grup (OPERATION/MASTER DATA/…), karena grup tidak punya route.
+ * Dipakai saat user mengklik modul di sidebar 1.
+ */
+export function firstMenuKey(items: MenuNode[] | undefined): string | undefined {
+  for (const item of items ?? []) {
+    if (item?.children?.length) {
+      const nested = firstMenuKey(item.children);
+      if (nested) return nested;
+      continue;
+    }
+    if (item?.key) return item.key;
+  }
+  return undefined;
 }

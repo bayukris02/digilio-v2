@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.models.settings.role import Role, RoleMenuAccess
+from core.models.settings.user_role import UserRole
 
 
 _EDITABLE = ('name', 'code', 'description', 'active')
@@ -115,3 +116,86 @@ def access_role_permissions(request, role_id):
         RoleMenuAccess.objects.bulk_create(rows)
 
     return Response(_role_payload(role))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def access_me(request):
+    """Hak akses user yang sedang login (dipakai frontend untuk menyaring menu).
+
+    `all_access=True` untuk superuser/staff (tanpa pembatasan role).
+    """
+    user = request.user
+    all_access = bool(getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False))
+
+    role = None
+    for link in UserRole.objects.filter(user_id=user.pk, is_deleted=False):
+        if link.role_id and link.role_id.active:
+            role = link.role_id
+            break
+
+    payload = {
+        'id': user.pk,
+        'username': user.username,
+        'display_name': user.get_full_name() or user.username,
+        'all_access': all_access,
+        'role_id': role.pk if role else None,
+        'role_name': role.name if role else None,
+        'menu_keys': [],
+        'section_keys': [],
+    }
+    if role:
+        rows = RoleMenuAccess.objects.filter(role_id=role.pk, is_deleted=False, allow=True)
+        payload['menu_keys'] = sorted(r.menu_key for r in rows if r.menu_type != 'section')
+        payload['section_keys'] = sorted(r.menu_key for r in rows if r.menu_type == 'section')
+    return Response(payload)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def access_users(request):
+    """Daftar user + role yang ditugaskan (satu role per user)."""
+    from core.models.settings.user import User
+
+    assigned = {}
+    for link in UserRole.objects.filter(is_deleted=False):
+        if link.user_id and link.role_id:
+            assigned[link.user_id.pk] = link.role_id
+
+    out = []
+    for user in User.objects.all().order_by('username'):
+        role = assigned.get(user.pk)
+        out.append({
+            'id': user.pk,
+            'username': user.username,
+            'display_name': user.get_display_name(),
+            'active': user.is_active,
+            'role_id': role.pk if role else None,
+            'role_name': role.name if role else None,
+        })
+    return Response(out)
+
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def access_user_role(request, user_id):
+    """Tugaskan / lepas role untuk satu user (`role_id: null` = lepas)."""
+    from core.models.settings.user import User
+
+    user = User.objects.filter(pk=user_id).first()
+    if not user:
+        return Response({'error': 'User tidak ditemukan.'}, status=404)
+
+    role_id = (request.data or {}).get('role_id')
+    UserRole.objects.filter(user_id=user.pk).delete()
+    if role_id in (None, '', 0, '0'):
+        return Response({'user_id': user.pk, 'role_id': None})
+
+    try:
+        role = _get_role(int(role_id))
+    except (TypeError, ValueError):
+        return Response({'error': 'Role tidak valid.'}, status=400)
+    if not role:
+        return Response({'error': 'Role tidak ditemukan.'}, status=404)
+    UserRole.objects.create(user_id=user, role_id=role)
+    return Response({'user_id': user.pk, 'role_id': role.pk, 'role_name': role.name})

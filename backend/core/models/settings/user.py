@@ -86,6 +86,19 @@ class User(models.Model, metaclass=ErpModelBase):
         # Borrow the implementation from BaseModel's get_model_config
         return BaseModel.get_model_config.__func__(cls)
 
+    # ── Drawer preview (dipakai list view) — delegasi ke BaseModel ──
+    # User tidak mewarisi BaseModel (tabel auth_user, managed=False), jadi
+    # dua helper meta-driven di bawah diteruskan manual ke BaseModel.
+    @classmethod
+    def _preview_fallback_fields(cls):
+        from core.model_meta import BaseModel
+        return BaseModel._preview_fallback_fields.__func__(cls)
+
+    @classmethod
+    def _build_preview_view(cls):
+        from core.model_meta import BaseModel
+        return BaseModel._build_preview_view.__func__(cls)
+
     @classmethod
     def _get_state_config(cls, status):
         """No state machine for users."""

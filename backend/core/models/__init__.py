@@ -29,6 +29,7 @@ from core.models.settings.sequence import Sequence, SequenceDateRange
 from core.models.settings.company import Company
 from core.models.settings.branch import Branch
 from core.models.settings.role import Role, RoleMenuAccess
+from core.models.settings.user_role import UserRole
 from core.models.inventory.product import Product
 from core.models.inventory.product_category import ProductCategory
 from core.models.inventory.warehouse import Warehouse
@@ -89,6 +90,7 @@ __all__ = [
     'Uom',
     'Company', 'Branch',
     'Role', 'RoleMenuAccess',
+    'UserRole',
     'User',
     'Sequence', 'SequenceDateRange',
     'ChartOfAccount', 'Jurnal', 'JurnalLine',
