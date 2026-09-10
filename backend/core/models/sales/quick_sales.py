@@ -341,6 +341,7 @@ class QuickSales(BaseModel):
           tax         = sum(tax_amount per line)
           grand_total = subtotal - discount + tax
         """
+        from core.models.accounting.tax import _norm_tax_ids
         lines_data = getattr(self, '_tmp_one2many', {}).get('quick_sales_lines', [])
 
         if not lines_data and self.pk:
@@ -358,7 +359,7 @@ class QuickSales(BaseModel):
                             'product': line.product,
                             'discount_percentage': float(getattr(line, 'discount_percentage', 0) or 0),
                             'discount_amount': float(getattr(line, 'discount_amount', 0) or 0),
-                            'tax_pct': taxes_total_rate(getattr(line, 'taxes_id', None)),
+                            'taxes': [getattr(line, 'taxes_id', None)] if getattr(line, 'taxes_id', None) else [],
                         })
 
         # ── Recompute per-line values dari raw data ──
@@ -392,6 +393,7 @@ class QuickSales(BaseModel):
                 'discount_amount': round(disc_amt, 2),
                 'discount_percentage': disc_pct,
                 'tax_pct': float(line.get('tax_pct', 0) or 0) or taxes_total_rate(line.get('taxes')),
+                'tax_ids': _norm_tax_ids(line.get('taxes') or line.get('tax_ids')),
                 'tax_amount': 0,
                 'total': 0,
             })
@@ -475,15 +477,18 @@ class QuickSales(BaseModel):
                     cl['subtotal_raw'] = round(qty * pl_price, 2)
 
         # ── Recompute tax & total (1 formula) ──
+        from core.models.accounting.tax import line_tax_parts
         for cl in computed_lines:
             taxable = cl['subtotal_raw'] - cl['discount_amount']
-            tax_pct = cl['tax_pct']
-            tax_amt = round(taxable * (tax_pct / 100), 2)
-            cl['tax_amount'] = tax_amt
-            cl['total'] = round(cl['subtotal_raw'] - cl['discount_amount'] + tax_amt, 2)
+            inc_t, exc_t, _net = line_tax_parts(taxable, cl.get('tax_ids') or cl.get('taxes'))
+            cl['inc_tax'] = round(inc_t, 2)
+            cl['tax_amount'] = round(inc_t + exc_t, 2)
+            # include tax tidak menambah total (harga sudah termasuk pajak)
+            cl['total'] = round(cl['subtotal_raw'] - cl['discount_amount'] + exc_t, 2)
 
         # ── Summary ──
-        subtotal = sum(cl['subtotal_raw'] for cl in computed_lines)
+        # Subtotal tampil = harga − porsi include tax (DPP).
+        subtotal = sum(cl['subtotal_raw'] - (cl.get('inc_tax') or 0) for cl in computed_lines)
         discount_total = sum(cl['discount_amount'] for cl in computed_lines)
         tax_total = sum(cl['tax_amount'] for cl in computed_lines)
         grand_total = sum(cl['total'] for cl in computed_lines)

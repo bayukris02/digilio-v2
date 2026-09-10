@@ -252,43 +252,63 @@ class VendorBill(BaseModel):
 
     # ── Computed Fields ──
 
-    def _compute_summary(self):
+    def _bill_line_components(self):
+        """Iterator (gross, disc_amount, tax_ids) per baris tagihan.
+
+        Sumber: payload _tmp_one2many (belum disimpan) atau DB. Dipakai compute
+        summary agar porsi include tax bisa dikeluarkan dari subtotal (include
+        tidak menambah total tagihan).
+        """
+        from core.models.accounting.tax import _norm_tax_ids
         lines_data = getattr(self, '_tmp_one2many', {}).get('bill_lines', [])
+        if lines_data:
+            for l in lines_data:
+                qty = float(l.get('qty', 0) or 0)
+                price = float(l.get('price', 0) or 0)
+                disc = float(l.get('discount_amount', 0) or 0)
+                if not disc:
+                    pct = float(l.get('discount_percentage', 0) or 0)
+                    disc = qty * price * (pct / 100)
+                yield (qty * price, disc, _norm_tax_ids(l.get('taxes')))
+            return
+        fd = self._field_descriptors.get('bill_lines')
+        if self.pk and fd:
+            child_model = ErpModelBase._model_registry.get(fd.relation)
+            if child_model:
+                for line in child_model.objects.filter(
+                    **{fd.inverse_field: self.pk, 'is_deleted': False}
+                ):
+                    gross = float(line.qty or 0) * float(line.price or 0)
+                    tid = getattr(line, 'taxes_id', None)
+                    yield (gross, float(line.discount_amount or 0), [tid] if tid else [])
 
-        def sum_lines(field):
-            if lines_data:
-                return sum(float(line.get(field, 0) or 0) for line in lines_data)
-            fd = self._field_descriptors.get('bill_lines')
-            if self.pk and fd:
-                child_model = ErpModelBase._model_registry.get(fd.relation)
-                if child_model:
-                    return sum(
-                        float(getattr(line, field, 0) or 0)
-                        for line in child_model.objects.filter(
-                            **{fd.inverse_field: self.pk, 'is_deleted': False}
-                        )
-                    )
-            return 0
+    def _compute_summary(self):
+        from core.models.accounting.tax import line_tax_parts
 
-        line_total = sum_lines('total')
-        line_discount = sum_lines('discount_amount')
-        line_tax = sum_lines('tax_amount')
+        gross_sum = disc_sum = inc_sum = exc_sum = 0.0
+        for gross, disc_amt, tax_ids in self._bill_line_components():
+            inc_t, exc_t, _net = line_tax_parts(gross - disc_amt, tax_ids)
+            gross_sum += gross
+            disc_sum += disc_amt
+            inc_sum += inc_t
+            exc_sum += exc_t
 
-        # Raw subtotal = sum(qty*price)
-        raw_subtotal = line_total
-
-        # Pre-tax base setelah line discounts
-        after_line_disc = raw_subtotal - line_discount
+        # Subtotal tampil = harga dikurangi porsi include tax (DPP); untuk baris
+        # tanpa include nilainya tetap Σ qty×price seperti sebelumnya.
+        raw_subtotal = gross_sum - inc_sum
 
         # Manual discount applied to pre-tax base
         manual_disc_pct = float(getattr(self, 'manual_discount', 0) or 0)
+        after_line_disc = raw_subtotal - disc_sum
         manual_disc_amt = after_line_disc * (manual_disc_pct / 100)
 
         self.subtotal = raw_subtotal
-        self.discount = line_discount
-        self.tax = line_tax
+        self.discount = disc_sum
+        self.tax = inc_sum + exc_sum
         dp_amount = float(getattr(self, 'down_payment_amount', 0) or 0)
-        self.grand_total = after_line_disc - manual_disc_amt + line_tax - dp_amount
+        # grand = subtotal − diskon − diskon manual + pajak − DP; karena subtotal
+        # sudah bebas include tax, porsi include tidak menambah total tagihan.
+        self.grand_total = after_line_disc - manual_disc_amt + (inc_sum + exc_sum) - dp_amount
 
     def _compute_down_payment(self):
         """Hitung jumlah DP PO yang dipotong dari tagihan ini.
@@ -540,18 +560,32 @@ class VendorBill(BaseModel):
 
     def _print_context(self):
         data = super()._print_context()
+        from core.models.accounting.tax import _norm_tax_ids, line_tax_parts
         lines = data.get('bill_lines', [])
-        lines_total = sum(float(line.get('total', 0) or 0) for line in lines)
-        lines_discount = sum(float(line.get('discount_amount', 0) or 0) for line in lines)
-        lines_tax = sum(float(line.get('tax_amount', 0) or 0) for line in lines)
+        gross_sum = disc_sum = inc_sum = exc_sum = 0.0
+        for line in lines:
+            qty = float(line.get('qty', 0) or 0)
+            price = float(line.get('price', 0) or 0)
+            gross = qty * price
+            disc = float(line.get('discount_amount', 0) or 0)
+            if not disc:
+                pct = float(line.get('discount_percentage', 0) or 0)
+                disc = gross * (pct / 100)
+            inc_t, exc_t, _n = line_tax_parts(gross - disc, _norm_tax_ids(line.get('taxes')))
+            gross_sum += gross
+            disc_sum += disc
+            inc_sum += inc_t
+            exc_sum += exc_t
         manual_disc_pct = float(data.get('manual_discount', 0) or 0)
         dp_amount = float(data.get('down_payment_amount', 0) or 0)
 
-        data['subtotal'] = lines_total
-        data['discount'] = lines_discount
-        data['tax'] = lines_tax
-        data['manual_discount'] = lines_total * (manual_disc_pct / 100)
-        data['grand_total'] = lines_total - lines_discount + lines_tax - data['manual_discount'] - dp_amount
+        # Subtotal = harga − porsi include tax (DPP); include tidak menambah total.
+        data['subtotal'] = gross_sum - inc_sum
+        data['discount'] = disc_sum
+        data['tax'] = inc_sum + exc_sum
+        data['manual_discount'] = (gross_sum - inc_sum - disc_sum) * (manual_disc_pct / 100)
+        data['grand_total'] = (gross_sum - inc_sum - disc_sum - data['manual_discount']
+                               + inc_sum + exc_sum - dp_amount)
         return data
 
     def to_record(self):

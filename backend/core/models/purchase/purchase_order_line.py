@@ -85,19 +85,14 @@ class PurchaseOrderLine(BaseModel):
 
         taxable = subtotal - disc_amt
 
-        # Pajak: tarif pajak terpilih (many2one) × dasar pengenaan pajak
-        from core.models.accounting.tax import Tax
-        tax_id = getattr(self, 'taxes_id', None)
-        tax_pct = 0.0
-        if tax_id:
-            tax = Tax.objects.filter(pk=tax_id, is_active=True).first()
-            if tax:
-                tax_pct = float(tax.rate or 0)
-        tax_amt = taxable * (tax_pct / 100)
+        # Pajak: include TIDAK menambah total (harga sudah termasuk pajak),
+        # exclude ditambahkan di atas harga.
+        from core.models.accounting.tax import line_tax_parts
+        inc_tax, exc_tax, _net = line_tax_parts(taxable, getattr(self, 'taxes_id', None))
 
         self.discount_amount = round(disc_amt, 2)
-        self.tax_amount = round(tax_amt, 2)
-        self.total = round(subtotal - disc_amt + tax_amt, 2)
+        self.tax_amount = round(inc_tax + exc_tax, 2)
+        self.total = round(subtotal - disc_amt + exc_tax, 2)
 
     def to_record(self):
         """Override: tambah computed done_qty, in_receipt_qty & remaining_qty dari GR."""
@@ -224,9 +219,10 @@ class PurchaseOrderLine(BaseModel):
                                 # Recompute discount_amount, tax_amount, total dgn prorata
                                 orig_disc = data.get('discount_amount', 0) or 0
                                 data['discount_amount'] = prorated
-                                from core.models.accounting.tax import taxes_total_rate
-                                tax_pct = taxes_total_rate(getattr(self, 'taxes_id', None))
-                                data['tax_amount'] = round((line_total_raw - prorated) * (tax_pct / 100), 2)
-                                data['total'] = round(line_total_raw - prorated + (data['tax_amount'] or 0), 2)
+                                from core.models.accounting.tax import line_tax_parts
+                                inc_p, exc_p, _nb = line_tax_parts(
+                                    line_total_raw - prorated, getattr(self, 'taxes_id', None))
+                                data['tax_amount'] = round(inc_p + exc_p, 2)
+                                data['total'] = round(line_total_raw - prorated + exc_p, 2)
 
         return data

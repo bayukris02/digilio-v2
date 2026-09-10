@@ -71,16 +71,11 @@ class QuickPurchaseLine(BaseModel):
 
         taxable = subtotal - disc_amt
 
-        # Pajak: tarif pajak terpilih (many2one) × dasar pengenaan pajak
-        from core.models.accounting.tax import Tax
-        tax_id = getattr(self, 'taxes_id', None)
-        tax_pct = 0.0
-        if tax_id:
-            tax = Tax.objects.filter(pk=tax_id, is_active=True).first()
-            if tax:
-                tax_pct = float(tax.rate or 0)
-        tax_amt = taxable * (tax_pct / 100)
+        # Pajak: include TIDAK menambah total (harga sudah termasuk pajak),
+        # exclude ditambahkan di atas harga.
+        from core.models.accounting.tax import line_tax_parts
+        inc_tax, exc_tax, _net = line_tax_parts(taxable, getattr(self, 'taxes_id', None))
 
         self.discount_amount = round(disc_amt, 2)
-        self.tax_amount = round(tax_amt, 2)
-        self.total = round(subtotal - disc_amt + tax_amt, 2)
+        self.tax_amount = round(inc_tax + exc_tax, 2)
+        self.total = round(subtotal - disc_amt + exc_tax, 2)
