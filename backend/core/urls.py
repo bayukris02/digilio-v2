@@ -5,6 +5,7 @@ from core.report_api import report_data
 from core.pivot_api import pivot_data
 from core.stock_report_api import stock_balance, stock_card
 from core.tax_report_api import tax_report
+from core.access_api import access_roles, access_role_detail, access_role_permissions
 
 urlpatterns = [
     # Dashboard (meta-driven, generic)
@@ -18,6 +19,10 @@ urlpatterns = [
     path('stock/card/', stock_card, name='stock-card'),
     # Tax report (rekap pajak per tag dari baris dokumen lintas modul)
     path('tax/report/', tax_report, name='tax-report'),
+    # RBAC — role & checklist akses menu
+    path('access/roles/', access_roles, name='access-roles'),
+    path('access/roles/<int:role_id>/', access_role_detail, name='access-role-detail'),
+    path('access/roles/<int:role_id>/permissions/', access_role_permissions, name='access-role-permissions'),
     # Model registry
     path('models/', model_list, name='model-list'),
     path('models/<str:model_name>/config/', model_config, name='model-config'),
