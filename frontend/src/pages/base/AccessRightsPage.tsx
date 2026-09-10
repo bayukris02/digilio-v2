@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Typography, Button, Card, Input, Modal, Form, Checkbox, Tabs, Empty, Popconfirm,
-  Tag, message, Spin, Select,
+  Tag, message, Spin, Space,
 } from 'antd';
+import { DeleteOutlined } from '@ant-design/icons';
 import { accessApi, type AccessRole, type RoleInput } from '../../api/access';
 import { buildAccessTree, type AccessModule, type AccessSection, type AccessSubgroup } from '../../config/menu';
 
@@ -23,9 +24,9 @@ const sectionMenuKeys = (sec: AccessSection): string[] => [
  *
  * Checklist disimpan per role: `menu_keys` (menu individual) dan `section_keys`
  * (section yang digrant sekaligus — menu di dalamnya otomatis tercentang).
- * Route: /settings/hak_akses
+ * Route: /settings/access_rights
  */
-export default function HakAksesPage() {
+export default function AccessRightsPage() {
   const qc = useQueryClient();
   const tree = useMemo<AccessModule[]>(() => buildAccessTree(), []);
 
@@ -93,20 +94,6 @@ export default function HakAksesPage() {
       qc.invalidateQueries({ queryKey: ['access-roles'] });
     },
     onError: (e: Error) => message.error(e.message || 'Gagal menghapus role.'),
-  });
-
-  // ── Penugasan role ke user ──
-  const usersQuery = useQuery({ queryKey: ['access-users'], queryFn: accessApi.listUsers });
-  const users = usersQuery.data ?? [];
-
-  const setRoleMutation = useMutation({
-    mutationFn: (payload: { userId: number; roleId: number | null }) =>
-      accessApi.setUserRole(payload.userId, payload.roleId),
-    onSuccess: () => {
-      message.success('Role user diperbarui.');
-      qc.invalidateQueries({ queryKey: ['access-users'] });
-    },
-    onError: (e: Error) => message.error(e.message || 'Gagal menugaskan role.'),
   });
 
   // ── Interaksi checklist ──
@@ -238,8 +225,6 @@ export default function HakAksesPage() {
     else createMutation.mutate(values);
   };
 
-  const grantedCount = menuKeys.size + sectionKeys.size;
-
   return (
     <div style={{ padding: 16, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 12 }}>
@@ -250,7 +235,7 @@ export default function HakAksesPage() {
       </div>
 
       <div style={{ flex: 1, display: 'flex', gap: 12, minHeight: 0 }}>
-        {/* ── Kiri: daftar role + penugasan user ── */}
+        {/* ── Kiri: daftar role ── */}
         <div style={{ width: 280, flex: '0 0 280px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
         <Card
           size="small"
@@ -270,6 +255,8 @@ export default function HakAksesPage() {
                 <div
                   key={role.id}
                   onClick={() => setSelectedId(role.id)}
+                  onDoubleClick={() => openEdit(role)}
+                  title="Klik 2x untuk ubah role"
                   style={{
                     padding: '6px 8px',
                     borderRadius: 6,
@@ -277,62 +264,35 @@ export default function HakAksesPage() {
                     background: isActive ? 'rgba(24,144,255,0.10)' : 'transparent',
                     borderLeft: isActive ? '3px solid #1677ff' : '3px solid transparent',
                     marginBottom: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 13, color: isActive ? '#1677ff' : undefined, fontWeight: isActive ? 600 : 400 }}>
-                      {role.name}
-                    </span>
-                    {!role.active && <Tag color="default" style={{ marginInlineEnd: 0, fontSize: 10 }}>nonaktif</Tag>}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#8c8c8c' }}>
-                    {role.code || '—'} · {role.menu_keys.length + role.section_keys.length} akses
-                  </div>
-                  <div style={{ marginTop: 2 }}>
-                    <Button type="link" size="small" style={{ padding: 0, fontSize: 11, height: 18 }}
-                      onClick={(e) => { e.stopPropagation(); openEdit(role); }}>Ubah</Button>
+                  <span
+                    style={{
+                      flex: 1, minWidth: 0, fontSize: 13,
+                      color: isActive ? '#1677ff' : undefined,
+                      fontWeight: isActive ? 600 : 400,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {role.name}
+                  </span>
+                  {!role.active && <Tag color="default" style={{ marginInlineEnd: 0, fontSize: 10 }}>nonaktif</Tag>}
+                  <span onClick={(e) => e.stopPropagation()}>
                     <Popconfirm
                       title="Hapus role ini?"
                       description="Checklist hak aksesnya ikut terhapus."
                       okText="Hapus" cancelText="Batal"
                       onConfirm={() => deleteMutation.mutate(role.id)}
                     >
-                      <Button danger type="link" size="small" style={{ padding: 0, fontSize: 11, height: 18, marginLeft: 10 }}
-                        onClick={(e) => e.stopPropagation()}>Hapus</Button>
+                      <DeleteOutlined style={{ fontSize: 14, color: '#ff4d4f', cursor: 'pointer' }} />
                     </Popconfirm>
-                  </div>
+                  </span>
                 </div>
               );
             })
-          )}
-        </Card>
-
-        {/* ── Penugasan role ke user ── */}
-        <Card
-          size="small"
-          title="Users"
-          styles={{ body: { padding: 8, overflow: 'auto' } }}
-          style={{ flex: '0 0 auto', maxHeight: '45%', display: 'flex', flexDirection: 'column' }}
-        >
-          {usersQuery.isLoading ? (
-            <div style={{ textAlign: 'center', padding: 16 }}><Spin size="small" /></div>
-          ) : users.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Belum ada user" />
-          ) : (
-            users.map((user) => (
-              <div key={user.id} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 12, color: user.active ? undefined : '#8c8c8c' }}>{user.display_name}</div>
-                <Select
-                  size="small"
-                  allowClear
-                  placeholder="— tanpa role —"
-                  style={{ width: '100%' }}
-                  value={user.role_id ?? undefined}
-                  options={roles.map((r) => ({ value: r.id, label: r.name }))}
-                  onChange={(value) => setRoleMutation.mutate({ userId: user.id, roleId: value ?? null })}
-                />
-              </div>
-            ))
           )}
         </Card>
         </div>
@@ -343,11 +303,18 @@ export default function HakAksesPage() {
           title={selected ? (
             <span>
               Akses menu — <b>{selected.name}</b>
-              {selected.code ? <Text type="secondary" style={{ fontSize: 12 }}> ({selected.code})</Text> : null}
             </span>
           ) : 'Akses menu'}
           styles={{ body: { padding: 0, height: '100%', display: 'flex', flexDirection: 'column' } }}
           style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}
+          extra={selected ? (
+            <Space size={8}>
+              <Button size="small" onClick={handleReset} disabled={!dirty}>Reset</Button>
+              <Button type="primary" size="small" loading={saveMutation.isPending} disabled={!dirty} onClick={handleSave}>
+                Simpan
+              </Button>
+            </Space>
+          ) : null}
         >
           {!selected ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -425,23 +392,6 @@ export default function HakAksesPage() {
                     ),
                   }))}
                 />
-              </div>
-              <div style={{
-                borderTop: '1px solid #f0f0f0', padding: '10px 16px',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: '#fafafa',
-              }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {grantedCount} akses dipilih{dirty ? ' · belum disimpan' : ''}
-                </Text>
-                <div>
-                  <Button size="small" onClick={handleReset} disabled={!dirty} style={{ marginRight: 8 }}>
-                    Reset
-                  </Button>
-                  <Button type="primary" size="small" loading={saveMutation.isPending} disabled={!dirty} onClick={handleSave}>
-                    Simpan
-                  </Button>
-                </div>
               </div>
             </>
           )}

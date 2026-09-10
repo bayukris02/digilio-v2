@@ -3,7 +3,7 @@
  *
  * Dipakai oleh:
  *   - `components/MainLayout.tsx`  → render sidebar
- *   - `pages/base/HakAksesPage.tsx` → daftar menu yang bisa dichecklist per role
+ *   - `pages/base/AccessRightsPage.tsx` → daftar menu yang bisa dichecklist per role
  *
  * Jangan duplikasi daftar menu di tempat lain — tambah menu di sini.
  */
@@ -186,7 +186,7 @@ export const menuItems: MenuNode[] = [
       { key: '/settings.company', label: 'Companies' },
       { key: '/settings.branch', label: 'Branches' },
       { key: '/settings.user', label: 'Users' },
-      { key: '/settings/hak_akses', label: 'Hak Akses' },
+      { key: '/settings/access_rights', label: 'Hak Akses' },
     ],
   },
 ];
