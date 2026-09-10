@@ -65,19 +65,25 @@ class CustomerInvoiceLine(BaseModel):
 
         disc_pct = float(getattr(self, 'discount_percentage', 0) or 0)
         disc_amt = subtotal * (disc_pct / 100)
-        taxable = subtotal - disc_amt
+        base = subtotal - disc_amt
 
-        # Pajak: tarif pajak terpilih (many2one) × dasar pengenaan pajak
-        from core.models.accounting.tax import Tax
+        # Pajak: tarif pajak terpilih (many2one), dipisah include vs exclude.
+        # Include → harga di baris SUDAH termasuk pajak: dasar = base/(1+rate),
+        #           porsi pajak TIDAK menambah total tagihan.
+        # Exclude → pajak biasa: net_base × rate, ditambahkan ke total.
+        from core.models.accounting.tax import taxes_include_exclude
         tax_id = getattr(self, 'taxes_id', None)
-        tax_pct = 0.0
-        if tax_id:
-            tax = Tax.objects.filter(pk=tax_id, is_active=True).first()
-            if tax:
-                tax_pct = float(tax.rate or 0)
-        tax_amt = taxable * (tax_pct / 100)
+        inc_rate, exc_rate = taxes_include_exclude(tax_id)
+
+        if inc_rate > 0:
+            net_base = base / (1 + inc_rate / 100.0)
+            inc_tax = base - net_base
+        else:
+            net_base = base
+            inc_tax = 0.0
+        exc_tax = net_base * (exc_rate / 100.0)
 
         self.discount_amount = round(disc_amt, 2)
-        self.tax_amount = round(tax_amt, 2)
-        # total = subtotal - diskon + pajak (konsisten dgn PO / QuickSalesLine)
-        self.total = round(subtotal - disc_amt + tax_amt, 2)
+        self.tax_amount = round(inc_tax + exc_tax, 2)
+        # total = harga (sudah termasuk include tax) + exclude tax
+        self.total = round(base + exc_tax, 2)
