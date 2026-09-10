@@ -43,6 +43,19 @@ export default function ModelListPage({
   const [filterValues, setFilterValues] = useState<Record<string, string | null>>({});
   const [groupByField, setGroupByField] = useState<string | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  // Petunjuk "klik 2x" — muncul saat baris diklik 1x, posisinya mengikuti kursor.
+  const [openHint, setOpenHint] = useState<{ x: number; y: number } | null>(null);
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hintHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Bersihkan timer petunjuk saat komponen dilepas (pindah halaman/menu).
+  useEffect(
+    () => () => {
+      if (hintTimer.current) clearTimeout(hintTimer.current);
+      if (hintHideTimer.current) clearTimeout(hintHideTimer.current);
+    },
+    [],
+  );
 
   // ── AG Grid handles pagination & search client-side (all records loaded) ──
 
@@ -488,7 +501,26 @@ export default function ModelListPage({
             paginationPageSizeSelector={[10, 20, 50, 100]}
             animateRows
             theme={themeBalham}
+            onCellClicked={(e) => {
+              // Klik 1x pada baris data → petunjuk buka detail (mengikuti kursor).
+              // Diberi jeda singkat agar tidak berkedip saat user sebenarnya klik 2x.
+              const native = e.event as MouseEvent | undefined;
+              if (!e.data || !native) return;
+              // Lewati kolom internal grid (mis. kolom centang seleksi).
+              const colId = e.column?.getColId?.() ?? '';
+              if (colId.startsWith('ag-Grid-')) return;
+              const pos = { x: native.clientX, y: native.clientY };
+              if (hintTimer.current) clearTimeout(hintTimer.current);
+              if (hintHideTimer.current) clearTimeout(hintHideTimer.current);
+              hintTimer.current = setTimeout(() => {
+                setOpenHint(pos);
+                hintHideTimer.current = setTimeout(() => setOpenHint(null), 1000);
+              }, 200);
+            }}
             onRowDoubleClicked={(e) => {
+              if (hintTimer.current) clearTimeout(hintTimer.current);
+              if (hintHideTimer.current) clearTimeout(hintHideTimer.current);
+              setOpenHint(null);
               if (e.data?.id) {
                 navigate(`${basePath}/${e.data.id}`);
               }
@@ -496,6 +528,28 @@ export default function ModelListPage({
           />
         </div>
       </Card>
+      {/* Petunjuk klik-2x (muncul setelah baris diklik 1x) */}
+      {openHint && (
+        <div
+          style={{
+            position: 'fixed',
+            left: Math.min(openHint.x + 14, window.innerWidth - 190),
+            top: openHint.y + 18,
+            zIndex: 1200,
+            background: 'rgba(0,0,0,0.82)',
+            color: '#fff',
+            padding: '4px 8px',
+            borderRadius: 4,
+            fontSize: 11,
+            lineHeight: 1.5,
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+          }}
+        >
+          Klik 2x untuk membuka data
+        </div>
+      )}
       <ImportModal
         open={importModalOpen}
         modelName={modelName!}
