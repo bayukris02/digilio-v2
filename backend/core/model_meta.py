@@ -256,6 +256,17 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
     #   }
     _list_view = None  # Optional: dict config for list view
 
+    _preview_view = None  # Optional: dict config untuk drawer preview (klik 1x baris list)
+    #   {
+    #     'title': 'reference',      # field judul drawer (default: display_field)
+    #     'subtitle': 'vendor',      # opsional
+    #     'status': 'status',        # opsional (default: 'status' bila ada)
+    #     'fields': ['vendor', ...], # daftar field penting (flat)
+    #     # atau 'sections': [{'title': 'Nilai', 'fields': ['grand_total']}]
+    #     'lines': 'order_lines',    # opsional: field one2many → tabel ringkas
+    #   }
+    # Bila kosong, config diisi otomatis (fallback) dari _form_view/_list_view.
+
     # Audit fields — added here but are part of _fields for API
     created_at = dj_models.DateTimeField(auto_now_add=True, verbose_name='Created At')
     updated_at = dj_models.DateTimeField(auto_now=True, verbose_name='Updated At')
@@ -321,7 +332,101 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
         if cls._document_flow:
             result['document_flow'] = cls._document_flow
 
+        result['preview_view'] = cls._build_preview_view()
+
         return result
+
+    # ── Meta-driven preview (drawer klik 1x pada baris list) ──
+    @classmethod
+    def _preview_fallback_fields(cls):
+        """Field penting otomatis bila `_preview_view` tidak didefinisikan.
+
+        Urutan sumber: `_form_view.header.fields` → seluruh `header.tabs[].fields`
+        → `_list_view.columns`. Field relasi (one2many/many2many) & teks panjang
+        dibuang; maksimal 10 field.
+        """
+        header = (cls._form_view or {}).get('header', {}) or {}
+        raw = list(header.get('fields') or [])
+        if not raw:
+            for tab in header.get('tabs') or []:
+                raw.extend(tab.get('fields') or [])
+        if not raw:
+            raw = list((cls._list_view or {}).get('columns') or [])
+
+        out = []
+        for item in raw:
+            fname = item.get('key') or item.get('field') if isinstance(item, dict) else item
+            if not fname or fname in out:
+                continue
+            fd = cls._field_descriptors.get(fname)
+            if not fd:
+                continue
+            if getattr(fd, 'field_type', None) in ('one2many', 'many2many'):
+                continue
+            out.append(fname)
+        return out[:10]
+
+    @classmethod
+    def _build_preview_view(cls):
+        """Bangun config drawer preview — generik, semua spesifik ada di model.
+
+        Mengembalikan dict: {title, subtitle, status, fields|sections, lines}.
+        `lines` di-resolve ke model anak (kolom + label) supaya frontend bisa
+        merender tabel ringkas tanpa hardcode per model.
+        """
+        cfg = dict(getattr(cls, '_preview_view', None) or {})
+        # Judul: config → display_field → 'reference' → 'name' → 'code' (yang ada saja)
+        title = cfg.get('title') or cls._display_name
+        if not title or title not in cls._field_descriptors:
+            title = next((f for f in ('reference', 'name', 'code') if f in cls._field_descriptors), None)
+        status = cfg.get('status') or ('status' if 'status' in cls._field_descriptors else None)
+
+        sections = []
+        for sec in cfg.get('sections') or []:
+            sec_fields = [f for f in (sec.get('fields') or []) if f in cls._field_descriptors]
+            if sec_fields:
+                sections.append({'title': sec.get('title') or '', 'fields': sec_fields})
+
+        fields = [f for f in (cfg.get('fields') or []) if f in cls._field_descriptors]
+        if not fields and not sections:
+            fields = cls._preview_fallback_fields()
+        if not fields and not sections:
+            return {}
+
+        # ── Baris anak (tabel ringkas) — opsional ──
+        lines = cfg.get('lines')
+        if isinstance(lines, str):
+            lines = {'field': lines}
+        if isinstance(lines, dict) and lines.get('field'):
+            fd = cls._field_descriptors.get(lines['field'])
+            child_name = getattr(fd, 'relation', None) if fd else None
+            child = ErpModelBase._model_registry.get(child_name) if child_name else None
+            if child:
+                cols = lines.get('columns') or list((getattr(child, '_list_view', {}) or {}).get('columns') or [])
+                cols = [c for c in cols if c in child._field_descriptors][:6]
+                lines = {
+                    'field': lines['field'],
+                    'model': child_name,
+                    'title': lines.get('title') or (getattr(fd, 'label', '') or 'Baris'),
+                    'columns': cols,
+                    'labels': {c: getattr(child._field_descriptors[c], 'label', c) for c in cols},
+                    # Config field anak (type/options/colors) → frontend render generik
+                    'fields': {c: child._field_descriptors[c].to_config() for c in cols},
+                }
+            else:
+                lines = None
+        else:
+            lines = None
+
+        preview = {
+            'title': title,
+            'subtitle': cfg.get('subtitle') or None,
+            'status': status,
+            'fields': fields,
+            'sections': sections,
+            'lines': lines,
+        }
+        return preview
 
     # ── State Machine Helpers ──
 

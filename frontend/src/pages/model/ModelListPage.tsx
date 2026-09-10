@@ -16,6 +16,7 @@ import { formatDate, parseDate } from '../../utils/format';
 import { modelNameToApi } from '../../config/urlModelMap';
 import ImportModal from '../../components/ImportModal';
 import ProgressBar from '../../components/ProgressBar';
+import RecordPreviewDrawer from '../../components/RecordPreviewDrawer';
 
 ModuleRegistry.registerModules([AllCommunityModule, RowGroupingModule]);
 
@@ -47,6 +48,10 @@ export default function ModelListPage({
   const [openHint, setOpenHint] = useState<{ x: number; y: number } | null>(null);
   const hintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Drawer preview (meta-driven dari config.preview_view) — dibuka saat klik 1x baris.
+  const [previewId, setPreviewId] = useState<number | null>(null);
+  // Area list table: klik di dalamnya tidak menutup drawer (bisa pindah baris).
+  const gridWrapRef = useRef<HTMLDivElement | null>(null);
 
   // Bersihkan timer petunjuk saat komponen dilepas (pindah halaman/menu).
   useEffect(
@@ -486,7 +491,7 @@ export default function ModelListPage({
 
       {/* ═══ AG GRID ═══ */}
       <Card styles={{ body: { padding: 0 } }}>
-        <div style={{ height: 520, width: '100%' }}>
+        <div ref={gridWrapRef} style={{ height: 520, width: '100%' }}>
           <AgGridReact
             ref={gridRef}
             rowData={records}
@@ -510,17 +515,23 @@ export default function ModelListPage({
               const colId = e.column?.getColId?.() ?? '';
               if (colId.startsWith('ag-Grid-')) return;
               const pos = { x: native.clientX, y: native.clientY };
+              const rowId = Number(e.data?.id);
               if (hintTimer.current) clearTimeout(hintTimer.current);
               if (hintHideTimer.current) clearTimeout(hintHideTimer.current);
               hintTimer.current = setTimeout(() => {
                 setOpenHint(pos);
                 hintHideTimer.current = setTimeout(() => setOpenHint(null), 1000);
+                // Buka drawer preview (meta-driven) untuk baris yang diklik.
+                if (config?.preview_view && !Number.isNaN(rowId)) {
+                  setPreviewId(rowId);
+                }
               }, 200);
             }}
             onRowDoubleClicked={(e) => {
               if (hintTimer.current) clearTimeout(hintTimer.current);
               if (hintHideTimer.current) clearTimeout(hintHideTimer.current);
               setOpenHint(null);
+              setPreviewId(null);
               if (e.data?.id) {
                 navigate(`${basePath}/${e.data.id}`);
               }
@@ -528,6 +539,19 @@ export default function ModelListPage({
           />
         </div>
       </Card>
+      {/* Drawer preview meta-driven (klik 1x baris) */}
+      <RecordPreviewDrawer
+        open={previewId != null}
+        modelName={apiModelName}
+        recordId={previewId}
+        config={config}
+        onClose={() => setPreviewId(null)}
+        ignoreOutsideRef={gridWrapRef}
+        onOpenRecord={(id) => {
+          setPreviewId(null);
+          navigate(`${basePath}/${id}`);
+        }}
+      />
       {/* Petunjuk klik-2x (muncul setelah baris diklik 1x) */}
       {openHint && (
         <div

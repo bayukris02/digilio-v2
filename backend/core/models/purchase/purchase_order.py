@@ -195,6 +195,30 @@ class PurchaseOrder(BaseModel):
         'default_sort': ['-updated_at'],
     }
 
+    # Drawer preview (klik 1x baris di list) — contoh konfigurasi meta-driven.
+    _preview_view = {
+        'title': 'reference',
+        'subtitle': 'vendor',
+        'status': 'status',
+        'sections': [
+            {
+                'title': 'Informasi',
+                'fields': ['vendor', 'order_date', 'expected_date', 'category',
+                           'priority', 'source_document'],
+            },
+            {
+                'title': 'Nilai',
+                'fields': ['subtotal', 'discount', 'tax', 'grand_total',
+                           'dp_amount', 'due_amount'],
+            },
+        ],
+        'lines': {
+            'field': 'order_lines',
+            'title': 'Baris Pesanan',
+            'columns': ['product', 'name', 'qty', 'uom', 'price', 'total'],
+        },
+    }
+
     _form_view = {
         'header': {
             'tabs': [

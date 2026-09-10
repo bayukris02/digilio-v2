@@ -25,6 +25,30 @@ export interface ListViewConfig {
   default_sort?: string[];
 }
 
+/** Config drawer preview (klik 1x baris list) — dibangun backend dari meta model. */
+export interface PreviewLinesConfig {
+  field: string;
+  model?: string;
+  title?: string;
+  columns: string[];
+  labels: Record<string, string>;
+  fields?: Record<string, FieldConfig>;
+}
+
+export interface PreviewSectionConfig {
+  title: string;
+  fields: string[];
+}
+
+export interface PreviewViewConfig {
+  title?: string | null;
+  subtitle?: string | null;
+  status?: string | null;
+  fields?: string[];
+  sections?: PreviewSectionConfig[];
+  lines?: PreviewLinesConfig | null;
+}
+
 export interface ModelConfig {
   model_name: string;
   verbose_name: string;
@@ -45,6 +69,7 @@ export interface ModelConfig {
     }[];
   } | null;
   list_view: ListViewConfig | null;
+  preview_view?: PreviewViewConfig | null;
   /** false = model menolak create (data dibuat otomatis dari proses lain) */
   allow_create?: boolean;
 }
