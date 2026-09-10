@@ -89,3 +89,46 @@ export const stockCardApi = {
   get: (params?: { product?: number; warehouses?: string; date_from?: string; date_to?: string }) =>
     api.get<StockCardData>('/stock/card/', { params }).then((r) => r.data),
 };
+
+// ── Tax report (rekap pajak per tag dari baris dokumen lintas modul) ──
+
+export interface TaxReportModule {
+  key: string;
+  label: string;
+  short: string;
+}
+
+export interface TaxReportBucket {
+  dpp: number;
+  tax_amount: number;
+  count: number;
+}
+
+export interface TaxReportRow extends TaxReportBucket {
+  tax_id: number;
+  name: string;
+  rate: number;
+  is_include: boolean;
+  by_module: Record<string, TaxReportBucket>;
+}
+
+export interface TaxReportData {
+  key: string;
+  title: string;
+  period: { date_from: string; date_to: string };
+  include_draft: boolean;
+  undated_count: number;
+  modules: TaxReportModule[];
+  rows: TaxReportRow[];
+  totals: TaxReportBucket & { by_module: Record<string, TaxReportBucket> };
+}
+
+export const taxReportApi = {
+  get: (params?: {
+    date_from?: string;
+    date_to?: string;
+    modules?: string;
+    taxes?: string;
+    include_draft?: string;
+  }) => api.get<TaxReportData>('/tax/report/', { params }).then((r) => r.data),
+};

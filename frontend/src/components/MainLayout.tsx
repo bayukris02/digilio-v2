@@ -174,6 +174,7 @@ const menuItems = [
             { key: '/accounting/perubahan_modal', label: 'Perubahan Modal' },
           ],
         },
+        { key: '/accounting/pajak', label: 'Report Pajak' },
       ]},
     ],
   },

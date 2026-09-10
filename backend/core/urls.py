@@ -4,6 +4,7 @@ from core.dashboard_api import dashboard_data
 from core.report_api import report_data
 from core.pivot_api import pivot_data
 from core.stock_report_api import stock_balance, stock_card
+from core.tax_report_api import tax_report
 
 urlpatterns = [
     # Dashboard (meta-driven, generic)
@@ -15,6 +16,8 @@ urlpatterns = [
     # Stock reports (agregasi via StockEngine dari row stock ledger)
     path('stock/balance/', stock_balance, name='stock-balance'),
     path('stock/card/', stock_card, name='stock-card'),
+    # Tax report (rekap pajak per tag dari baris dokumen lintas modul)
+    path('tax/report/', tax_report, name='tax-report'),
     # Model registry
     path('models/', model_list, name='model-list'),
     path('models/<str:model_name>/config/', model_config, name='model-config'),

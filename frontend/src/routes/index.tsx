@@ -13,6 +13,7 @@ import GenericDashboardPage from '../pages/dashboard/DashboardPage';
 import FinancialReportPage from '../pages/base/FinancialReportPage';
 import StockBalancePage from '../pages/base/StockBalancePage';
 import StockCardPage from '../pages/base/StockCardPage';
+import TaxReportPage from '../pages/base/TaxReportPage';
 import ComingSoon from '../pages/ComingSoon';
 
 export const router = createBrowserRouter([
@@ -116,6 +117,7 @@ export const router = createBrowserRouter([
       { path: 'accounting/buku_besar', element: <FinancialReportPage reportKey="general_ledger" /> },
       { path: 'accounting/cashflow', element: <FinancialReportPage reportKey="cash_flow" /> },
       { path: 'accounting/perubahan_modal', element: <FinancialReportPage reportKey="equity_changes" /> },
+      { path: 'accounting/pajak', element: <TaxReportPage /> },
       // Accounting coming-soon routes
       { path: 'accounting/asset', element: <ModelListPage modelName="accounting.asset" basePath="/accounting/asset" /> },
       { path: 'accounting/asset/new', element: <ModelFormPage modelName="accounting.asset" basePath="/accounting/asset" /> },
