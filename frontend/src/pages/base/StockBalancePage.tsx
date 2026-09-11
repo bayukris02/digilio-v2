@@ -4,7 +4,7 @@ import { Typography, message } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { stockBalanceApi } from '../../api/report';
 import { modelApi } from '../../api/models';
-import { fmtQty, fmtReportDate } from '../../utils/reportFormat';
+import { fmtQty, fmtIDR, fmtReportDate } from '../../utils/reportFormat';
 import ReportPage from '../../components/report/ReportPage';
 import type { ReportColumn, ReportFilter, ReportSummaryCell } from '../../components/report/types';
 
@@ -44,6 +44,8 @@ interface MergedRow {
   uom: string;
   qtyA: number;
   qtyB: number;
+  /** HPP rata-rata (AVCO) — nilai terkini dari server. */
+  avg: number;
 }
 
 /**
@@ -185,6 +187,14 @@ export default function StockBalancePage() {
     { key: 'code', title: 'Kode', dataIndex: 'code', width: 120 },
     { key: 'name', title: 'Produk', dataIndex: 'name' },
     { key: 'uom', title: 'Satuan', dataIndex: 'uom', width: 90 },
+    {
+      key: 'avg',
+      title: 'HPP (Avg)',
+      dataIndex: 'avg',
+      align: 'right',
+      width: 140,
+      render: (r) => (r.avg ? fmtIDR(r.avg) : '—'),
+    },
   ];
   const qtyCols: ReportColumn<MergedRow>[] = compare
     ? [
@@ -235,7 +245,7 @@ export default function StockBalancePage() {
 
   /** Baris Total — selnya mengikuti jumlah kolom yang sedang tampil. */
   const summaryCells: ReportSummaryCell[] = [
-    { colSpan: 3, value: <Text strong>Total</Text> },
+    { colSpan: 4, value: <Text strong>Total</Text> },
     { align: 'right', value: <Text strong>{fmtQty(totals.qtyA)}</Text> },
     ...(compare
       ? [

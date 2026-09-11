@@ -5,7 +5,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { stockCardApi } from '../../api/report';
 import type { StockCardRow } from '../../api/report';
 import { modelApi } from '../../api/models';
-import { fmtQty, fmtReportDate } from '../../utils/reportFormat';
+import { fmtQty, fmtIDR, fmtReportDate } from '../../utils/reportFormat';
 import ReportPage from '../../components/report/ReportPage';
 import type { ReportColumn, ReportFilter } from '../../components/report/types';
 
@@ -243,6 +243,18 @@ export default function StockCardPage() {
       render: (row: StockCardRow) => (
         <Text strong={isSumRow(row)} italic={isSumRow(row)}>
           {row.balance != null ? fmtQty(row.balance) : ''}
+        </Text>
+      ),
+    },
+    {
+      key: 'avg_cost',
+      title: 'HPP (Avg)',
+      dataIndex: 'avg_cost',
+      align: 'right',
+      width: 140,
+      render: (row: StockCardRow) => (
+        <Text strong={isSumRow(row)} italic={isSumRow(row)} type={row.avg_cost ? undefined : 'secondary'}>
+          {row.avg_cost ? fmtIDR(row.avg_cost) : '—'}
         </Text>
       ),
     },

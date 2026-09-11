@@ -35,11 +35,14 @@ class StockLedger(BaseModel):
         'source_id': IntegerField(label='ID Sumber'),
         'source_line_id': IntegerField(label='ID Baris Sumber', default=0),
         'unit_cost': MonetaryField(label='Harga Satuan', currency='IDR'),
+        # HPP (average cost) setelah pergerakan ini — diisi StockEngine (AVCO).
+        'avg_cost': MonetaryField(label='HPP (Avg)', currency='IDR'),
         'description': TextField(label='Deskripsi'),
     }
 
     _list_view = {
-        'columns': ['date', 'product', 'location', 'quantity', 'source_reference', 'source_model'],
+        'columns': ['date', 'product', 'location', 'quantity', 'unit_cost', 'avg_cost',
+                    'source_reference', 'source_model'],
         'filters': ['product', 'location', 'source_model'],
         'default_sort': ['-date'],
     }
@@ -48,7 +51,7 @@ class StockLedger(BaseModel):
         'header': {
             'fields': ['date', 'product', 'location', 'quantity',
                        'source_reference', 'source_model', 'source_id', 'source_line_id',
-                       'unit_cost', 'description'],
+                       'unit_cost', 'avg_cost', 'description'],
             'actions': [],
             'smart_buttons': [],
         },

@@ -46,6 +46,8 @@ export interface StockBalanceRow {
   name: string;
   uom: string;
   qty: number;
+  /** HPP rata-rata (AVCO) dari pergerakan terakhir. */
+  avg: number;
 }
 
 export interface StockBalanceData {
@@ -76,6 +78,8 @@ export interface StockCardRow {
   qty_in: number | null;
   qty_out: number | null;
   balance: number | null;
+  /** HPP rata-rata (AVCO) setelah pergerakan ini. */
+  avg_cost: number | null;
 }
 
 export interface StockCardData {

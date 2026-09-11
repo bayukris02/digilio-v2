@@ -67,6 +67,7 @@ class StockEngine:
         date = document.get('date')
 
         created = 0
+        product_ids = set()
         for line in lines:
             if not line.get('product_id') or not line.get('location_id'):
                 continue
@@ -97,7 +98,99 @@ class StockEngine:
                 description=line.get('description', ''),
             )
             created += 1
+            product_ids.add(line['product_id'])
+        if created:
+            # AVCO: hitung ulang HPP rata-rata (avg_cost per row + HPP master produk)
+            cls.recompute_avg_cost(product_ids)
         return created
+
+    # ── Average costing (AVCO) ──
+
+    @classmethod
+    def _ledger_rows(cls, product_ids):
+        """Row ledger aktif produk terpilih, urut waktu (date, id)."""
+        ledger_cls = cls._ledger_cls()
+        if ledger_cls is None or not product_ids:
+            return []
+        qs = ledger_cls.objects.filter(
+            product_id__in=set(product_ids), is_deleted=False,
+        ).order_by('date', 'id')
+        return list(qs.values('id', 'product_id', 'quantity', 'unit_cost', 'avg_cost'))
+
+    @classmethod
+    def _avg_product_ids(cls, product_ids):
+        """Produk (dari daftar) yang kategorinya pakai Perhitungan HPP = AVCO."""
+        product_cls = ErpModelBase._model_registry.get('inventory.product')
+        if product_cls is None or not product_ids:
+            return set()
+        result = set()
+        for p in product_cls.objects.filter(pk__in=set(product_ids), is_deleted=False):
+            try:
+                cat = p.category
+            except Exception:
+                cat = None
+            if (getattr(cat, 'cost_method', 'manual') or 'manual') == 'avco':
+                result.add(p.pk)
+        return result
+
+    @classmethod
+    def recompute_avg_cost(cls, product_ids):
+        """Hitung ulang HPP rata-rata (moving average) untuk produk terpilih.
+
+        Replay row ledger aktif urut waktu — benar walau dokumen diposting
+        belakangan dengan tanggal lebih awal:
+          - qty masuk  : avg = (saldo_awal*nilai_lama + qty*harga) / (saldo_awal+qty)
+          - qty keluar : avg tidak berubah
+        Ditulis ke: kolom `avg_cost` tiap row (nilai setelah pergerakan tsb) dan
+        kolom HPP master produk — HANYA produk dengan Perhitungan HPP = AVCO
+        (produk Manual tidak pernah ditimpa mesin).
+        Return: {product_id: avg_akhir}.
+        """
+        ledger_cls = cls._ledger_cls()
+        if ledger_cls is None or not product_ids:
+            return {}
+
+        rows = cls._ledger_rows(product_ids)
+        running_qty = {}
+        running_value = {}
+        running_avg = {}
+        avg_map = {}
+        for row in rows:
+            pid = row['product_id']
+            qty = float(row['quantity'] or 0)
+            unit_cost = float(row['unit_cost'] or 0)
+            on_hand = running_qty.get(pid, 0.0)
+            avg = running_avg.get(pid, 0.0)
+            value = on_hand * avg
+            if qty > 0:
+                # Harga masuk kosong (mis. penyesuaian tanpa harga) → pakai avg berjalan
+                incoming = unit_cost if unit_cost else avg
+                on_hand += qty
+                value += qty * incoming
+                avg = (value / on_hand) if on_hand else 0.0
+            else:
+                # Nilai persediaan ikut keluar sebesar avg → avg tidak berubah
+                on_hand += qty
+                value = on_hand * avg if on_hand > 0 else 0.0
+            running_qty[pid] = on_hand
+            running_value[pid] = value
+            running_avg[pid] = avg
+            avg_map[pid] = round(avg, 2)
+            if round(float(row['avg_cost'] or 0), 2) != avg_map[pid]:
+                ledger_cls.objects.filter(pk=row['id']).update(avg_cost=avg_map[pid])
+
+        # Update HPP master produk — hanya produk AVCO
+        avco_ids = cls._avg_product_ids(product_ids)
+        product_cls = ErpModelBase._model_registry.get('inventory.product')
+        for pid in avco_ids:
+            avg = avg_map.get(pid)
+            if avg is None or product_cls is None:
+                continue
+            current = product_cls.objects.filter(pk=pid).values_list('cost', flat=True).first()
+            if round(float(current or 0), 2) != round(float(avg), 2):
+                # queryset.update → tidak memicu Product.save() (guard/compute)
+                product_cls.objects.filter(pk=pid).update(cost=avg)
+        return avg_map
 
     @classmethod
     def delete(cls, document):
@@ -110,11 +203,17 @@ class StockEngine:
         ledger_cls = cls._ledger_cls()
         if ledger_cls is None:
             return 0
-        return ledger_cls.objects.filter(
+        qs = ledger_cls.objects.filter(
             source_model=document['model'],
             source_id=document['id'],
             is_deleted=False,
-        ).update(is_deleted=True)
+        )
+        product_ids = set(qs.values_list('product_id', flat=True))
+        affected = qs.update(is_deleted=True)
+        if affected and product_ids:
+            # AVCO: row hilang → HPP rata-rata & avg_cost dihitung ulang
+            cls.recompute_avg_cost(product_ids)
+        return affected
 
     @classmethod
     def on_hand(cls, product_id, location_id=None):
@@ -234,6 +333,11 @@ class StockEngine:
         if not qty_map:
             return empty
 
+        # HPP rata-rata per produk = avg_cost row pergerakan TERAKHIR (<= tanggal)
+        avg_map = {}
+        for r in base.order_by('date', 'id').values('product_id', 'avg_cost'):
+            avg_map[r['product_id']] = float(r['avg_cost'] or 0)
+
         product_cls = ErpModelBase._model_registry.get('inventory.product')
         meta = {}
         if product_cls is not None:
@@ -254,6 +358,7 @@ class StockEngine:
                 'name': m['name'],
                 'uom': m['uom'],
                 'qty': round(qty, 3),
+                'avg': round(avg_map.get(pid, 0.0), 2),
             })
         rows.sort(key=lambda r: (r['code'] or r['name']).lower())
 
@@ -333,7 +438,7 @@ class StockEngine:
 
         events = list(qs.values(
             'id', 'product_id', 'location_id', 'date', 'quantity',
-            'source_model', 'source_reference', 'description'))
+            'source_model', 'source_reference', 'description', 'avg_cost'))
         if not events:
             return empty
 
@@ -383,6 +488,8 @@ class StockEngine:
                     shown.append(e)
 
             opening = sum(float(e['quantity'] or 0) for e in prefix)
+            # HPP (avg) sebelum periode = avg_cost pergerakan terakhir sebelum tanggal
+            opening_avg = round(float(prefix[-1]['avg_cost'] or 0), 2) if prefix else 0.0
 
             if not shown:
                 # Tidak ada pergerakan dalam periode — tampilkan baris saldo
@@ -393,23 +500,25 @@ class StockEngine:
                 rows.append({**base, 'kind': 'opening', 'date': str(d_from) if d_from else '',
                              'source_label': '', 'reference': 'Saldo Awal',
                              'description': '', 'qty_in': None, 'qty_out': None,
-                             'balance': round(opening, 3)})
+                             'balance': round(opening, 3), 'avg_cost': opening_avg})
                 rows.append({**base, 'kind': 'closing', 'date': str(d_to) if d_to else '',
                              'source_label': '', 'reference': 'Saldo Akhir',
                              'description': '', 'qty_in': None, 'qty_out': None,
-                             'balance': round(opening, 3)})
+                             'balance': round(opening, 3), 'avg_cost': opening_avg})
                 continue
 
             base = _row_base(pid, lid, pm, loc_name)
             rows.append({**base, 'kind': 'opening', 'date': str(d_from) if d_from else '',
                          'source_label': '', 'reference': 'Saldo Awal',
                          'description': '', 'qty_in': None, 'qty_out': None,
-                         'balance': round(opening, 3)})
+                         'balance': round(opening, 3), 'avg_cost': opening_avg})
 
             running = opening
+            running_avg = opening_avg
             for e in shown:
                 qty = float(e['quantity'] or 0)
                 running += qty
+                running_avg = round(float(e['avg_cost'] or 0), 2)
                 model = e['source_model'] or ''
                 rows.append({
                     **base, 'kind': 'movement',
@@ -420,12 +529,13 @@ class StockEngine:
                     'qty_in': round(qty, 3) if qty > 0 else None,
                     'qty_out': round(-qty, 3) if qty < 0 else None,
                     'balance': round(running, 3),
+                    'avg_cost': running_avg,
                 })
 
             rows.append({**base, 'kind': 'closing', 'date': str(d_to) if d_to else '',
                          'source_label': '', 'reference': 'Saldo Akhir',
                          'description': '', 'qty_in': None, 'qty_out': None,
-                         'balance': round(running, 3)})
+                         'balance': round(running, 3), 'avg_cost': running_avg})
 
         return {'key': 'stock_card', 'title': 'Stock Card',
                 'filters': filters, 'rows': rows}
