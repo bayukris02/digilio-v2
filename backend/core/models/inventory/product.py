@@ -1,4 +1,4 @@
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from core.fields import (
     CharField, TextField, BooleanField, MonetaryField,
@@ -39,7 +39,25 @@ class Product(BaseModel):
             default='Stock',
         ),
         'price': MonetaryField(label='Harga Jual', currency='IDR'),
-        'cost': MonetaryField(label='Harga Beli', currency='IDR'),
+        # HPP (Harga Pokok): Manual → diisi user; kategori dengan Perhitungan
+        # HPP = Otomatis (AVCO) → milik mesin (0 saat baru pindah ke AVCO,
+        # berikutnya diisi Proses Pembelian/Stock Adjustment).
+        'cost': MonetaryField(
+            label='HPP (Harga Pokok)', currency='IDR',
+            compute='_compute_cost', depends=['category'],
+        ),
+        # Frontend-only: true bila kategori terpilih pakai Perhitungan HPP
+        # Otomatis (AVCO) → field HPP jadi readonly.
+        'category_cost_method': CharField(
+            label='Perhitungan HPP Kategori', virtual=True, chatter_show=False,
+            compute='_compute_category_cost_method',
+        ),
+        # Frontend-only: true bila produk sudah punya mutasi stok (row ledger
+        # aktif). Dipakai rule generik: Kategori/Satuan/Tipe Produk terkunci.
+        'has_stock_movement': BooleanField(
+            label='Ada Mutasi Stok', virtual=True, chatter_show=False,
+            compute='_compute_has_stock_movement',
+        ),
         'uom': Many2OneField(
             label='Satuan',
             relation='inventory.uom',
@@ -58,7 +76,8 @@ class Product(BaseModel):
 
     _form_view = {
         'header': {
-            'fields': ['name', 'code', 'category', 'tipe_product', 'price', 'cost', 'uom', 'weight', 'is_active'],
+            'fields': ['name', 'code', 'category', 'tipe_product', 'price',
+                       'cost', 'uom', 'weight', 'is_active'],
             'smart_buttons': [],
         },
         'notebook': [
@@ -83,14 +102,96 @@ class Product(BaseModel):
             # Ganti Kategori → minta SKU + flag auto generate ke compute API.
             # with_record: sertakan id record → backend membaca kode TERSIMPAN,
             # jadi pindah kategori lalu balik lagi TIDAK mengubah SKU.
+            # readonly_when: sudah ada mutasi stok → Kategori terkunci.
             'category': {
-                'compute_fields': ['code', 'category_auto_generate'],
+                'compute_fields': ['code', 'category_auto_generate', 'category_cost_method'],
                 'with_record': True,
+                'readonly_when': {'has_stock_movement': True},
             },
             # Kategori auto generate → SKU readonly (terisi <prefix>-001)
             'code': {'readonly_when': {'category_auto_generate': True}},
+            # Sudah ada mutasi stok → Satuan & Tipe Produk terkunci.
+            'uom': {'readonly_when': {'has_stock_movement': True}},
+            'tipe_product': {'readonly_when': {'has_stock_movement': True}},
+            # HPP readonly bila kategori pakai AVCO (milik mesin) atau Non-Stock.
+            'cost': {'readonly_when': {'category_cost_method': 'avco', 'tipe_product': 'Non Stock'}},
         }
         return config
+
+    # ── Guard: field yang terkunci setelah ada mutasi stok ──
+    _LOCKED_AFTER_MOVEMENT = (
+        ('category_id', 'Kategori'),
+        ('uom_id', 'Satuan'),
+        ('tipe_product', 'Tipe Produk'),
+    )
+
+    def _stored_values(self):
+        """Snapshot nilai tersimpan di DB (None untuk record baru).
+
+        `category_cost_method` = Perhitungan HPP kategori TERSIMPAN — dipakai
+        mendeteksi perpindahan kategori ke/dari AVCO.
+        """
+        if not self.pk:
+            return None
+        row = type(self).objects.filter(pk=self.pk).values(
+            'code', 'cost', 'category_id', 'uom_id', 'tipe_product',
+        ).first()
+        if row:
+            cat_cls = type(self)._meta.get_field('category').related_model
+            prev = cat_cls.objects.filter(pk=row['category_id']).values('cost_method').first()
+            row['category_cost_method'] = (prev or {}).get('cost_method')
+        return row
+
+    def _has_stock_movement(self):
+        """True bila produk sudah punya row ledger stok aktif (mutasi apa pun)."""
+        if not self.pk:
+            return False
+        try:
+            from core.stock_engine import StockEngine
+            ledger_cls = StockEngine._ledger_cls()
+        except Exception:
+            ledger_cls = None
+        if ledger_cls is None:
+            return False
+        return ledger_cls.objects.filter(product_id=self.pk, is_deleted=False).exists()
+
+    def _compute_has_stock_movement(self):
+        self.has_stock_movement = self._has_stock_movement()
+
+    def _check_locked_after_movement(self, stored):
+        """Tolak perubahan Kategori/Satuan/Tipe Produk bila sudah ada mutasi stok."""
+        if not stored or not self._has_stock_movement():
+            return
+        for key, label in self._LOCKED_AFTER_MOVEMENT:
+            old = stored.get(key)
+            new = getattr(self, key, None)
+            if hasattr(new, 'pk'):
+                new = new.pk
+            if old != new:
+                raise ValidationError(
+                    f'{label} tidak dapat diubah karena produk sudah memiliki mutasi stok.'
+                )
+
+    def _apply_cost_method(self, stored):
+        """HPP otomatis (AVCO) = milik mesin: reset ke 0 saat produk baru
+        masuk kategori AVCO, setelah itu nilainya diisi oleh proses
+        pembelian/penyesuaian stok (average cost)."""
+        if self._category_cost_method() != 'avco':
+            return
+        if stored is None or stored.get('category_cost_method') != 'avco':
+            self.cost = 0
+
+    def _compute_cost(self):
+        """HPP: Manual → nilai dari user dibiarkan apa adanya; AVCO → milik
+        mesin (0 saat baru berpindah ke kategori AVCO, selain itu dipertahankan
+        supaya nilai hasil Proses Pembelian/Stock Adjustment tidak hilang)."""
+        if self._category_cost_method() != 'avco':
+            return
+        self._apply_cost_method(self._stored_values())
+
+    def _compute_category_cost_method(self):
+        """Flag form: Perhitungan HPP kategori terpilih (manual/avco)."""
+        self.category_cost_method = self._category_cost_method()
 
     def _next_auto_code(self, prefix):
         """Nomor SKU berikutnya untuk prefix ini — GLOBAL lintas kategori
@@ -114,6 +215,11 @@ class Product(BaseModel):
             return self.category
         except ObjectDoesNotExist:
             return None
+
+    def _category_cost_method(self):
+        """Perhitungan HPP kategori terpilih: 'manual' / 'avco'."""
+        category = self._resolve_category()
+        return (getattr(category, 'cost_method', None) or 'manual')
 
     def _stored_code(self):
         """Kode tersimpan di DB untuk produk ini ('' bila belum ada)."""
@@ -152,7 +258,11 @@ class Product(BaseModel):
         )
 
     def save(self, *args, **kwargs):
-        self._run_compute()  # hitung SKU lebih dulu (bila kategori auto generate)
+        # Snapshot nilai DB sebelum ditimpa payload (record baru → None)
+        stored = self._stored_values()
+        # Guard: Kategori/Satuan/Tipe Produk terkunci setelah ada mutasi stok
+        self._check_locked_after_movement(stored)
+        self._run_compute()  # SKU (kategori auto generate) + HPP (kategori AVCO)
         # SKU kosong disimpan sebagai NULL agar constraint unik hanya berlaku
         # untuk kode yang benar-benar terisi ('' tidak boleh dobel).
         if self.code is not None and not str(self.code).strip():

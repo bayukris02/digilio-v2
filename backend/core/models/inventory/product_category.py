@@ -1,6 +1,6 @@
 import re
 
-from core.fields import BooleanField, CharField
+from core.fields import BooleanField, CharField, SelectionField
 from core.model_meta import BaseModel
 
 
@@ -21,10 +21,21 @@ class ProductCategory(BaseModel):
             label='Prefix Kode', max_length=7,
             help_text='Maksimal 7 karakter, contoh: ATK',
         ),
+        # Perhitungan HPP produk di kategori ini: Manual (diisi user) atau
+        # Otomatis AVCO (diisi mesin dari Proses Pembelian/Stock Adjustment).
+        'cost_method': SelectionField(
+            label='Perhitungan HPP',
+            options=[('manual', 'Manual'), ('avco', 'Otomatis (AVCO)')],
+            default='manual',
+            required=True,
+            help_text='Manual: HPP produk diisi sendiri. Otomatis (AVCO): HPP '
+                      'dihitung dari pembelian/penyesuaian stok (average cost) '
+                      'dan tidak bisa diisi manual.',
+        ),
     }
 
     _list_view = {
-        'columns': ['code', 'name', 'auto_generate'],
+        'columns': ['code', 'name', 'auto_generate', 'cost_method'],
         'default_sort': ['name'],
     }
 
@@ -34,7 +45,7 @@ class ProductCategory(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['name', 'code', 'auto_generate', 'code_prefix'],
+                    'fields': ['name', 'code', 'auto_generate', 'code_prefix', 'cost_method'],
                 },
             ],
         },
