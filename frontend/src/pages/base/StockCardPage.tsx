@@ -305,7 +305,7 @@ export default function StockCardPage() {
     () => ({
       filename: () =>
         `Stock_Card_${range?.[0]?.format('YYYY-MM-DD') ?? 'all'}${range?.[1] ? `_${range[1].format('YYYY-MM-DD')}` : ''}.xlsx`,
-      sheetName: 'Stock Card',
+      sheetName: 'Kartu Stock',
       meta: [
         ['Produk', productLabel ?? 'Semua Produk'],
         ['Gudang', warehouseLabel],
@@ -317,7 +317,7 @@ export default function StockCardPage() {
 
   return (
     <ReportPage<StockCardRow>
-      title="Stock Card"
+      title="Kartu Stock"
       filters={filters}
       fetchedAt={query.dataUpdatedAt || null}
       loading={loading}

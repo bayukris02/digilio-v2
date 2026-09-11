@@ -41,7 +41,7 @@ Saat `loading`: Card 2 diganti `div textAlign:center padding:48 color:#8c8c8c` �
 
 ```tsx
 <ReportPage<RowType>
-  title="Stock Card"
+  title="Kartu Stock"
   fetchedAt={query.dataUpdatedAt}          // WAJIB: waktu data diambil (epoch ms)
   filters={filters}                        // metadata filter, §3
   loading={loading}
@@ -101,7 +101,7 @@ Grid selalu **4 kolom**; `cols` = lebar item (`1` = 1 kolom → span 6, `2` = 2 
 | type        | kontrol        | catatan |
 |-------------|----------------|---------|
 | `select`    | Select         | `multiple`, `showSearch` (client) atau `serverSearch`+`onSearch` (cari ke server) |
-| `period`    | Select periode | **standar filter tanggal**: opsi periode dari `options` + opsi "Kustom…". `mode:'range'` (default) = rentang; `mode:'date'` = satu tanggal snapshot (custom pakai DatePicker, info teks `Per 11-Sep-2026`) — dipakai Stock Balance. Lihat detail di bawah |
+| `period`    | Select periode | **standar filter tanggal**: opsi periode dari `options` + opsi "Kustom…". `mode:'range'` (default) = rentang; `mode:'date'` = satu tanggal snapshot (custom pakai DatePicker, info teks `Per 11-Sep-2026`) — dipakai Sisa Stock. Lihat detail di bawah |
 | `date`      | DatePicker     | `presets` chip opsional, `disabled`, `disabledDate` |
 | `daterange` | RangePicker    | `presets` chip opsional, **wajib `cols: 2`** |
 | `boolean`   | Switch         | `value` boolean |
@@ -109,7 +109,7 @@ Grid selalu **4 kolom**; `cols` = lebar item (`1` = 1 kolom → span 6, `2` = 2 
 
 Label filter selalu **bold** (`Text strong`) — jangan pakai `type="secondary"`.
 
-Contoh (Stock Card: dropdown + dropdown + dropdown periode = 1+1+2 kolom):
+Contoh (Kartu Stock: dropdown + dropdown + dropdown periode = 1+1+2 kolom):
 
 ```tsx
 const filters: ReportFilter[] = [
@@ -131,8 +131,9 @@ Semua DatePicker/RangePicker di shell memakai `format={DATE_FORMAT}` (dd-mmm-yyy
 
 ## 3a. Report yang sudah memakai standar
 
-Stock Card (`pages/base/StockCardPage.tsx`) · Stock Balance (`pages/base/StockBalancePage.tsx`) ·
-Stock Ledger (`pages/base/StockLedgerPage.tsx`, data dari `GET /api/stock/ledger/`).
+Kartu Stock (`pages/base/StockCardPage.tsx`, menu Stock → REPORT → Laporan Stock) ·
+Sisa Stock (`pages/base/StockBalancePage.tsx`) ·
+Mutasi Stock (`pages/base/StockLedgerPage.tsx`, data dari `GET /api/stock/ledger/`).
 Sisa: seluruh Laporan Keuangan (`FinancialReportPage`), Report Pajak, dan report lain di menu REPORT.
 
 ## 4. Helper format — `src/utils/reportFormat.ts`
@@ -141,7 +142,7 @@ Sisa: seluruh Laporan Keuangan (`FinancialReportPage`), Report Pajak, dan report
 Jangan bikin `fmt…` baru di halaman report. File Excel sepenuhnya disusun shell (`exportXlsx` internal):
 judul report → `exportConfig.meta` → baris kosong → header kolom → data.
 
-## 5. Cara migrasi report lain (mis. Stock Balance, Laba Rugi, Neraca, Report Pajak)
+## 5. Cara migrasi report lain (mis. Sisa Stock, Laba Rugi, Neraca, Report Pajak)
 
 1. Hapus blok header + Card filter + Card tabel di halaman (termasuk `padding`/`maxWidth` lokal).
 2. Petakan filter lama → metadata `filters[]` (date range → `cols: 2`; preset chips → `presets`).

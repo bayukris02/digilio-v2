@@ -329,7 +329,7 @@ export default function StockBalancePage() {
             ? `${date?.format('YYYY-MM-DD') ?? 'all'}_vs_${date2.format('YYYY-MM-DD')}`
             : date?.format('YYYY-MM-DD') ?? 'all'
         }.xlsx`,
-      sheetName: 'Stock Balance',
+      sheetName: 'Sisa Stock',
       meta: [
         ['Tanggal', compare ? `${dateLabel} vs ${date2Label}` : dateLabel],
         ['Gudang', warehouseLabel],
@@ -341,7 +341,7 @@ export default function StockBalancePage() {
 
   return (
     <ReportPage<MergedRow>
-      title="Stock Balance"
+      title="Sisa Stock"
       filters={filters}
       fetchedAt={q1.dataUpdatedAt || null}
       loading={loading}

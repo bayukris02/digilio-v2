@@ -90,11 +90,16 @@ export const menuItems: MenuNode[] = [
         { key: '/inventory.stock_delivery', label: 'Pengiriman Barang' },
         { key: '/inventory.stock_adjustment', label: 'Stock Adjustment' },
       ]},
-      { type: 'group', label: 'TRANSFER STOCK', children: [
-        { key: '/inventory.stock_request', label: 'Request Stock' },
-        { key: '/inventory.stock_out', label: 'Stock Keluar' },
-        { key: '/inventory.stock_in', label: 'Terima Stock' },
-      ]},
+      {
+        key: 'inventory.transfer_stock',
+        label: 'Transfer Stock',
+        popupClassName: 'sidebar2-menu',
+        children: [
+          { key: '/inventory.stock_request', label: 'Request Stock' },
+          { key: '/inventory.stock_out', label: 'Stock Keluar' },
+          { key: '/inventory.stock_in', label: 'Terima Stock' },
+        ],
+      },
       { type: 'group', label: 'MASTER DATA', children: [
         { key: '/inventory.product', label: 'Produk' },
         { key: '/inventory.product_category', label: 'Kategori Produk' },
@@ -102,9 +107,16 @@ export const menuItems: MenuNode[] = [
         { key: '/inventory.warehouse', label: 'Warehouse' },
       ]},
       { type: 'group', label: 'REPORT', children: [
-        { key: '/inventory.stock_ledger', label: 'Stock Ledger' },
-        { key: '/inventory/stock_balance', label: 'Stock Balance' },
-        { key: '/inventory/stock_card', label: 'Stock Card' },
+        {
+          key: 'inventory.laporan_stock',
+          label: 'Laporan Stock',
+          popupClassName: 'sidebar2-menu',
+          children: [
+            { key: '/inventory/stock_card', label: 'Kartu Stock' },
+            { key: '/inventory.stock_ledger', label: 'Mutasi Stock' },
+            { key: '/inventory/stock_balance', label: 'Sisa Stock' },
+          ],
+        },
         { key: '/inventory/pivot', label: 'Inventory Pivot' },
         { key: '/inventory/detail', label: 'Inventory Detail' },
       ]},
@@ -315,6 +327,28 @@ export function buildAccessTree(): AccessModule[] {
           menus,
           subgroups,
         });
+      } else if (child.children?.length) {
+        // Menu bersarang di luar section (mis. "Transfer Stock") → section tersendiri,
+        // supaya anak-anaknya tetap bisa dichecklist di halaman Hak Akses.
+        const menus: AccessMenuEntry[] = [];
+        const subgroups: AccessSubgroup[] = [];
+        for (const entry of child.children) {
+          if (entry.children?.length) {
+            subgroups.push({
+              key: entry.key ?? entry.label ?? '',
+              label: entry.label ?? entry.key ?? '',
+              menus: toEntries(entry.children),
+            });
+          } else if (entry.key) {
+            menus.push({ key: entry.key, label: entry.label ?? entry.key });
+          }
+        }
+        sections.push({
+          key: `${moduleKey}:${child.label ?? 'SECTION'}`,
+          label: child.label ?? child.key ?? 'SECTION',
+          menus,
+          subgroups,
+        });
       } else if (child.key) {
         plainMenus.push({ key: child.key, label: child.label ?? child.key });
       }
@@ -377,6 +411,21 @@ export function collectMenuLeaves(): MenuLeaf[] {
             }
           } else if (entry.key) {
             out.push({ key: entry.key, moduleKey, sectionKey });
+          }
+        }
+      } else if (child.children?.length) {
+        // Menu bersarang di luar section (mis. "Transfer Stock" / "Laporan Stock")
+        // → jadi section sendiri; anak-anaknya tetap terdaftar sebagai menu checklist.
+        const sectionKey = `${moduleKey}:${child.label ?? 'SECTION'}`;
+        if (child.key) out.push({ key: child.key, moduleKey, sectionKey });
+        for (const entry of child.children) {
+          if (entry.children?.length) {
+            if (entry.key) out.push({ key: entry.key, moduleKey, sectionKey });
+            for (const leaf of entry.children) {
+              if (leaf.key) out.push({ key: leaf.key, moduleKey, sectionKey, parentKey: entry.key });
+            }
+          } else if (entry.key) {
+            out.push({ key: entry.key, moduleKey, sectionKey, parentKey: child.key });
           }
         }
       } else if (child.key) {

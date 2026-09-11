@@ -295,7 +295,7 @@ export default function StockLedgerPage() {
     () => ({
       filename: () =>
         `Stock_Ledger_${range?.[0]?.format('YYYY-MM-DD') ?? 'all'}${range?.[1] ? `_${range[1].format('YYYY-MM-DD')}` : ''}.xlsx`,
-      sheetName: 'Stock Ledger',
+      sheetName: 'Mutasi Stock',
       meta: [
         ['Produk', productLabel ?? 'Semua Produk'],
         ['Gudang', warehouseLabel],
@@ -308,7 +308,7 @@ export default function StockLedgerPage() {
 
   return (
     <ReportPage<StockLedgerRow>
-      title="Stock Ledger"
+      title="Mutasi Stock"
       filters={filters}
       fetchedAt={query.dataUpdatedAt || null}
       loading={loading}
