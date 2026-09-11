@@ -172,14 +172,14 @@ function PurgeCard({
                 <Table.Summary.Row>
                   <Table.Summary.Cell index={0}>
                     <Text strong>Total {data?.models ?? 0} model</Text>
-                    {scope === 'transactions' && data?.chatter ? (
+                    {data?.chatter ? (
                       <Text type="secondary" style={{ marginLeft: 8, ...labelStyle }}>
                         + {data.chatter.toLocaleString('id-ID')} log chatter
                       </Text>
                     ) : null}
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={1} align="right">
-                    <Text strong>{((data?.total ?? 0) + (scope === 'transactions' ? data?.chatter ?? 0 : 0)).toLocaleString('id-ID')}</Text>
+                    <Text strong>{((data?.total ?? 0) + (data?.chatter ?? 0)).toLocaleString('id-ID')}</Text>
                   </Table.Summary.Cell>
                 </Table.Summary.Row>
               ) : null

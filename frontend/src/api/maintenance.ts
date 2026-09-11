@@ -27,6 +27,8 @@ export interface PurgeScope {
   total: number;
   /** counter nomor dokumen yang direset (bukan dihapus sebagai data) */
   resets: PurgeRow[];
+  /** jumlah tabel yang nomor ID otomatisnya (PK) direset ke 1 */
+  identity_reset: number;
   chatter: number;
 }
 
@@ -46,6 +48,8 @@ export interface PurgeResult {
   title: string;
   deleted: PurgeRow[];
   resets: PurgeRow[];
+  /** tabel yang nomor ID otomatisnya (PK) di-RESTART ke 1 */
+  identity_resets: { table: string; sequence: string }[];
   total: number;
   backup: { ok: boolean; path: string; size?: number; error?: string };
   kept: PurgeKept;

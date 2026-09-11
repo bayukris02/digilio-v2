@@ -5,7 +5,8 @@ Endpoint:
     POST /api/maintenance/purge/           → jalankan penghapusan {scope, confirm}
 
 Konsep (opsi A — clear in-app):
-  * scope 'transactions' : SEMUA dokumen + baris dokumen + pergerakan stok + log chatter.
+  * scope 'transactions' : SEMUA dokumen + baris dokumen + pergerakan stok + log chatter
+                           (hanya log milik model transaksi — log master data tetap).
   * scope 'master'       : SEMUA master data, menyisakan 1 Company, 1 Branch, dan user
                            (tabel auth tidak pernah disentuh).
 
@@ -15,6 +16,9 @@ Aturan teknis:
   * Semua penghapusan dijalankan dalam SATU transaksi database (atomic).
   * Counter nomor dokumen (`settings.sequence_date_range`) dihapus agar penomoran mulai dari 1,
     sedangkan definisi `settings.sequence` DIPERTAHANKAN (konfigurasi penomoran).
+  * Nomor ID otomatis (PK `<tabel>_id_seq`) tabel yang dikosongkan ikut di-RESTART ke 1 — sebab
+    `DELETE` di PostgreSQL tidak memundurkan sequence (dulu menyebabkan record baru mulai dari
+    `Draft#19`). Tabel yang masih berisi baris (mis. Company/Branch yang disisakan) dilewati.
   * Daftar model diambil dari registry `ErpModelBase._model_registry` — model baru otomatis
     masuk kategori bila ditambahkan ke salah satu daftar di bawah.
 """
@@ -74,8 +78,8 @@ KEEP_MASTER_MODELS = {
 
 MASTER_SCOPE_DESC = (
     'Hapus SEMUA master data (customer, vendor, produk, gudang, COA, pajak, UOM, '
-    'pricelist, project, role/RBAC, dll). Disisakan: 1 Company, 1 Branch, dan seluruh user '
-    '(tabel auth tidak disentuh). Counter nomor dokumen direset.'
+    'pricelist, project, role/RBAC, dll) beserta log chatter-nya. Disisakan: 1 Company, 1 Branch, '
+    'dan seluruh user (tabel auth tidak disentuh). Counter nomor dokumen direset.'
 )
 
 
@@ -134,6 +138,73 @@ def _reset_counts() -> list:
         count = cls.objects.count()
         if count:
             out.append({'model': name, 'label': 'Counter nomor dokumen (reset ke 1)', 'count': count})
+    return out
+
+
+def _chatter_models_for(scope: str) -> list:
+    """Model yang log chatter-nya ikut dibersihkan = model yang datanya dikosongkan scope tsb.
+
+    Chatter TIDAK digabung: clear transaksi hanya menghapus log model transaksi, clear master
+    hanya menghapus log model master (log model yang datanya masih ada tetap dipertahankan).
+    """
+    names = list(_model_names_for(scope))
+    if scope == 'transactions':
+        names += RESET_COUNTER_MODELS   # counter nomor dokumen ikut dikosongkan
+    return sorted(dict.fromkeys(names))
+
+
+def _chatter_queryset(scope: str):
+    return ChatterLog.objects.filter(model_name__in=_chatter_models_for(scope))
+
+
+def _scope_tables(scope: str) -> list:
+    """Daftar tabel DB yang barisnya dikosongkan pada scope tsb (dasar reset nomor ID/PK)."""
+    registry = _registry()
+    tables = []
+    for name in _model_names_for(scope):
+        cls = registry.get(name)
+        if cls is not None:
+            tables.append(cls._meta.db_table)
+    if scope == 'transactions':
+        tables.append(ChatterLog._meta.db_table)          # log chatter selalu ikut dibersihkan
+        for name in RESET_COUNTER_MODELS:                  # counter nomor dokumen (dikosongkan)
+            cls = registry.get(name)
+            if cls is not None:
+                tables.append(cls._meta.db_table)
+    return sorted(dict.fromkeys(tables))
+
+
+def _pk_sequences(tables: list) -> dict:
+    """Petakan tabel → nama sequence nomor ID (PK) milik kolom `id`-nya (serial/identity)."""
+    from django.db import connection
+
+    found = {}
+    with connection.cursor() as cur:
+        for table in tables:
+            cur.execute('SELECT pg_get_serial_sequence(%s, %s)', [table, 'id'])
+            row = cur.fetchone()
+            if row and row[0]:
+                found[table] = row[0]
+    return found
+
+
+def _reset_pk_sequences(tables: list) -> list:
+    """RESTART nomor ID (PK) tabel yang sudah benar-benar kosong → record baru mulai dari 1.
+
+    PostgreSQL: `DELETE` tidak memundurkan sequence, jadi harus di-RESTART eksplisit.
+    Tabel yang masih berisi baris dilewati (mis. Company/Branch yang disisakan saat clear master).
+    """
+    from django.db import connection
+
+    out = []
+    with connection.cursor() as cur:
+        for table, seq in sorted(_pk_sequences(tables).items()):
+            cur.execute(f'SELECT COUNT(*) FROM "{table}"')
+            if cur.fetchone()[0]:
+                continue  # masih ada baris → jangan reset
+            quoted = '.'.join(f'"{part}"' for part in seq.split('.'))
+            cur.execute(f'ALTER SEQUENCE {quoted} RESTART WITH 1')
+            out.append({'table': table, 'sequence': seq})
     return out
 
 
@@ -221,7 +292,8 @@ SCOPES = {
         'phrase': 'HAPUS TRANSAKSI',
         'title': 'Hapus Transaksi',
         'desc': 'Hapus SEMUA data transaksi: dokumen (PO, SO, faktur, tagihan, jurnal, dll) '
-                'beserta barisnya, pergerakan stok, dan log chatter.',
+                'beserta barisnya, pergerakan stok, dan log chatter model transaksi '
+                '(log master data tidak ikut terhapus).',
     },
     'master': {
         'phrase': 'HAPUS MASTER DATA',
@@ -248,7 +320,10 @@ def purge_preview(request):
             'total': sum(r['count'] for r in rows),
             # counter nomor dokumen: direset (bukan dihapus sebagai master data)
             'resets': resets,
-            'chatter': ChatterLog.objects.count() if scope == 'transactions' else 0,
+            # nomor ID otomatis (PK) tabel yang dikosongkan juga ikut di-RESTART ke 1
+            'identity_reset': len(_pk_sequences(_scope_tables(scope))),
+            # log chatter hanya untuk model pada scope ini (tidak digabung antar scope)
+            'chatter': _chatter_queryset(scope).count(),
         }
     out['kept'] = _kept_info()
     out['options'] = _options()
@@ -288,8 +363,11 @@ def purge_run(request):
             rows = cls.objects.all().delete()[0]
             deleted[name] = rows
 
-        # Log chatter selalu dibersihkan (log lama menunjuk record yang sudah tidak ada).
-        deleted['chatter_log'] = ChatterLog.objects.all().delete()[0]
+        # Log chatter dibersihkan HANYA untuk model pada scope ini — log model lain
+        # (mis. master data saat clear transaksi) tetap dipertahankan.
+        chatter_removed = _chatter_queryset(scope).delete()[0]
+        if chatter_removed:
+            deleted['chatter_log'] = chatter_removed
 
         # Counter nomor dokumen direset (baris counter dihapus → nomor mulai dari 1 lagi).
         resets = []
@@ -321,6 +399,11 @@ def purge_run(request):
                     extra_companies.delete()
                     deleted['settings.company (sisa)'] = removed
 
+        # Nomor ID otomatis (PK) tabel yang sudah kosong di-RESTART ke 1. `DELETE` di PostgreSQL
+        # tidak memundurkan sequence, jadi harus eksplisit — kalau tidak, record baru mulai dari
+        # angka terakhir (mis. dokumen baru langsung "Draft#19" di daftar).
+        identity_resets = _reset_pk_sequences(_scope_tables(scope))
+
     return Response({
         'scope': scope,
         'title': cfg['title'],
@@ -329,6 +412,8 @@ def purge_run(request):
             key=lambda r: (-r['count'], r['label']),
         ),
         'resets': resets,
+        # nomor ID otomatis (PK) yang di-RESTART ke 1 → record baru mulai dari 1
+        'identity_resets': identity_resets,
         'total': sum(deleted.values()),
         'backup': backup,
         'kept': _kept_info(keep_company_id, keep_branch_id),
