@@ -21,7 +21,8 @@
  * ----------------------------------------------------------------------------
  * YANG HARUS DI-TEST:
  * 1. Header tabs: semua field tampil 3 kolom; hidden_statuses & hide_when
- *    (field_config_rules) menyembunyikan field; field_props override properti.
+ *    (field_config_rules) menyembunyikan field; readonly_when membuat field
+ *    readonly saat kondisi terpenuhi; field_props override properti.
  * 2. Notebook grid: +Add baris (add_line_guard & validasi baris sebelumnya),
  *    drag reorder → urutan lineItems ikut, pinned bottom row sum/avg benar.
  * 3. onCellValueChanged: edit nilai → state & summary refresh; many2one autofill
@@ -117,6 +118,15 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
               );
               if (shouldHide) return null;
             }
+            // ── field_config_rules: readonly_when (generic dari backend) ──
+            // Contoh: field SKU readonly saat kategori auto generate
+            //   config.field_config_rules['code'].readonly_when = {'category_auto_generate': True}
+            let fieldDisabled = isFieldDisabled(fieldName);
+            if (!fieldDisabled && fieldRules?.readonly_when) {
+              fieldDisabled = Object.entries(fieldRules.readonly_when).some(
+                ([wf, val]) => form.getFieldValue(wf) === val,
+              );
+            }
             // ── field_config_rules: field_props (override properti dinamis) ──
             let effectiveField = field as Record<string, unknown>;
             if (fieldRules?.field_props) {
@@ -132,7 +142,7 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
             }
             return (
               <Col span={8} key={fieldName}>
-                {renderField(fieldName, effectiveField as any, {}, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(fieldName), form)}
+                {renderField(fieldName, effectiveField as any, {}, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), fieldDisabled, form)}
               </Col>
             );
           }) : (

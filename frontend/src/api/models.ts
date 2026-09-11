@@ -16,6 +16,26 @@ export interface FieldConfig {
   autofill?: Record<string, string>;
   allow_duplicate?: boolean;
   onchange?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/**
+ * Rule generik per field (field_config_rules) & per kolom notebook
+ * (column_config_rules) — dikirim backend dari get_model_config() model.
+ *  - hide_when      : {field: value}  → sembunyikan field saat kondisi cocok
+ *  - readonly_when  : {field: value}  → jadikan field readonly saat kondisi cocok
+ *  - field_props    : {prop: {depends_on, <nilai>: <prop value>}}
+ *  - compute_fields : ['code'] → saat field berubah, minta nilai dari compute API
+ *  - populate_lines : {target, source, mapping} → isi line items dari relasi
+ */
+export interface FieldConfigRule {
+  hide_when?: Record<string, unknown>;
+  readonly_when?: Record<string, unknown>;
+  editable_when?: Record<string, unknown>;
+  field_props?: Record<string, Record<string, unknown>>;
+  compute_fields?: string[];
+  populate_lines?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface ListViewConfig {
@@ -69,6 +89,10 @@ export interface ModelConfig {
     }[];
   } | null;
   list_view: ListViewConfig | null;
+  /** Rule generik per field form (lihat FieldConfigRule) */
+  field_config_rules?: Record<string, FieldConfigRule>;
+  /** Rule generik per kolom notebook (lihat FieldConfigRule) */
+  column_config_rules?: Record<string, Record<string, FieldConfigRule>>;
   preview_view?: PreviewViewConfig | null;
   /** false = model menolak create (data dibuat otomatis dari proses lain) */
   allow_create?: boolean;

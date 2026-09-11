@@ -12,7 +12,7 @@ import {
   DownloadOutlined, SendOutlined, EditOutlined, CopyOutlined,
   StopOutlined, UndoOutlined, HolderOutlined, DownOutlined,
 } from '@ant-design/icons';
-import { modelApi, type ModelConfig } from '../../api/models';
+import { modelApi, type ModelConfig, type FieldConfig } from '../../api/models';
 import { parseDate, formatDate, formatLastUpdate } from '../../utils/format';
 import { modelNameToApi, apiToUrlName } from '../../config/urlModelMap';
 import Chatter from '../../components/Chatter';
@@ -1611,6 +1611,52 @@ export default function ModelFormPage({
   const col2 = mainFields.filter((_, i) => i % 3 === 1);
   const col3 = mainFields.filter((_, i) => i % 3 === 2);
 
+  // ── Generic: resolve tampilan field dari field_config_rules (backend) ──
+  //  hide_when     : {field: nilai}  → field disembunyikan
+  //  readonly_when : {field: nilai}  → field jadi readonly (disabled)
+  //  field_props   : {prop: {depends_on, <nilai>: <nilai prop>}}
+  const resolveFieldDisplay = (key: string, field: FieldConfig) => {
+    const fieldRules = config?.field_config_rules?.[key];
+    let hidden = false;
+    if (fieldRules?.hide_when) {
+      hidden = Object.entries(fieldRules.hide_when).some(
+        ([wf, val]) => form.getFieldValue(wf) === val,
+      );
+    }
+    let disabled = isFieldDisabled(key);
+    if (!disabled && fieldRules?.readonly_when) {
+      disabled = Object.entries(fieldRules.readonly_when).some(
+        ([wf, val]) => form.getFieldValue(wf) === val,
+      );
+    }
+    let effectiveField = field as unknown as Record<string, unknown>;
+    if (fieldRules?.field_props) {
+      effectiveField = { ...effectiveField };
+      for (const [prop, cfg] of Object.entries(fieldRules.field_props)) {
+        if ((cfg as Record<string, unknown>).depends_on) {
+          const depVal = form.getFieldValue((cfg as Record<string, unknown>).depends_on as string);
+          if ((cfg as Record<string, unknown>)[depVal] !== undefined) {
+            (effectiveField as Record<string, unknown>)[prop] = (cfg as Record<string, unknown>)[depVal];
+          }
+        }
+      }
+    }
+    return { hidden, disabled, effectiveField };
+  };
+
+  // Render satu kolom field header (3 kolom: col1/col2/col3)
+  const renderHeaderColumn = (column: [string, FieldConfig][]) => column.map(([key, field]) => {
+    if (currentStatus && Array.isArray((field as Record<string, unknown>)?.hidden_statuses)
+        && ((field as Record<string, unknown>).hidden_statuses as string[]).includes(currentStatus)) return null;
+    const { hidden, disabled, effectiveField } = resolveFieldDisplay(key, field);
+    if (hidden) return null;
+    return (
+      <div key={key}>
+        {renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), disabled, form)}
+      </div>
+    );
+  });
+
   return (
     <div
       style={
@@ -1930,82 +1976,13 @@ export default function ModelFormPage({
         <Form form={form} layout="vertical" initialValues={initialValues} onValuesChange={handleFormChange} key={`${apiModelName}-${recordId || 'new'}-${loadKey}`}>
           <Row gutter={16}>
             <Col span={8}>
-              {col1.map(([key, field]) => {
-                if (currentStatus && Array.isArray((field as any)?.hidden_statuses)
-                    && (field as any).hidden_statuses.includes(currentStatus)) return null;
-                const fieldRules = config?.field_config_rules?.[key];
-                if (fieldRules?.hide_when) {
-                  const shouldHide = Object.entries(fieldRules.hide_when).some(
-                    ([wf, val]) => form.getFieldValue(wf) === val,
-                  );
-                  if (shouldHide) return null;
-                }
-                let effectiveField = field as Record<string, unknown>;
-                if (fieldRules?.field_props) {
-                  effectiveField = { ...effectiveField };
-                  for (const [prop, cfg] of Object.entries(fieldRules.field_props)) {
-                    if ((cfg as Record<string, unknown>).depends_on) {
-                      const depVal = form.getFieldValue((cfg as Record<string, unknown>).depends_on as string);
-                      if ((cfg as Record<string, unknown>)[depVal] !== undefined) {
-                        (effectiveField as Record<string, unknown>)[prop] = (cfg as Record<string, unknown>)[depVal];
-                      }
-                    }
-                  }
-                }
-                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key), form)}</div>;
-              })}
+              {renderHeaderColumn(col1)}
             </Col>
             <Col span={8}>
-              {col2.map(([key, field]) => {
-                if (currentStatus && Array.isArray((field as any)?.hidden_statuses)
-                    && (field as any).hidden_statuses.includes(currentStatus)) return null;
-                const fieldRules = config?.field_config_rules?.[key];
-                if (fieldRules?.hide_when) {
-                  const shouldHide = Object.entries(fieldRules.hide_when).some(
-                    ([wf, val]) => form.getFieldValue(wf) === val,
-                  );
-                  if (shouldHide) return null;
-                }
-                let effectiveField = field as Record<string, unknown>;
-                if (fieldRules?.field_props) {
-                  effectiveField = { ...effectiveField };
-                  for (const [prop, cfg] of Object.entries(fieldRules.field_props)) {
-                    if ((cfg as Record<string, unknown>).depends_on) {
-                      const depVal = form.getFieldValue((cfg as Record<string, unknown>).depends_on as string);
-                      if ((cfg as Record<string, unknown>)[depVal] !== undefined) {
-                        (effectiveField as Record<string, unknown>)[prop] = (cfg as Record<string, unknown>)[depVal];
-                      }
-                    }
-                  }
-                }
-                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key), form)}</div>;
-              })}
+              {renderHeaderColumn(col2)}
             </Col>
             <Col span={8}>
-              {col3.map(([key, field]) => {
-                if (currentStatus && Array.isArray((field as any)?.hidden_statuses)
-                    && (field as any).hidden_statuses.includes(currentStatus)) return null;
-                const fieldRules = config?.field_config_rules?.[key];
-                if (fieldRules?.hide_when) {
-                  const shouldHide = Object.entries(fieldRules.hide_when).some(
-                    ([wf, val]) => form.getFieldValue(wf) === val,
-                  );
-                  if (shouldHide) return null;
-                }
-                let effectiveField = field as Record<string, unknown>;
-                if (fieldRules?.field_props) {
-                  effectiveField = { ...effectiveField };
-                  for (const [prop, cfg] of Object.entries(fieldRules.field_props)) {
-                    if ((cfg as Record<string, unknown>).depends_on) {
-                      const depVal = form.getFieldValue((cfg as Record<string, unknown>).depends_on as string);
-                      if ((cfg as Record<string, unknown>)[depVal] !== undefined) {
-                        (effectiveField as Record<string, unknown>)[prop] = (cfg as Record<string, unknown>)[depVal];
-                      }
-                    }
-                  }
-                }
-                return <div key={key}>{renderField(key, effectiveField as any, initialValues, apiModelName, (mn, rid) => setQuickView({ modelName: mn, recordId: rid }), isFieldDisabled(key), form)}</div>;
-              })}
+              {renderHeaderColumn(col3)}
             </Col>
           </Row>
         </Form>

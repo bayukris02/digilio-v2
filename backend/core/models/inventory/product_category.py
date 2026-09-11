@@ -1,4 +1,6 @@
-from core.fields import CharField
+import re
+
+from core.fields import BooleanField, CharField
 from core.model_meta import BaseModel
 
 
@@ -8,11 +10,21 @@ class ProductCategory(BaseModel):
 
     _fields = {
         'name': CharField(label='Nama Kategori', required=True),
-        'code': CharField(label='Kode Kategori'),
+        # Kode kategori 3 karakter — terisi otomatis dari nama, tetap bisa diubah user
+        'code': CharField(
+            label='Kode Kategori', required=True, max_length=3,
+            compute='_compute_code', depends=['name'],
+        ),
+        # Auto generate kode produk: prefix jadi awalan SKU produk (mis. ELEK-001)
+        'auto_generate': BooleanField(label='Auto Generate Kode'),
+        'code_prefix': CharField(
+            label='Prefix Kode', max_length=7,
+            help_text='Maksimal 7 karakter, contoh: ATK',
+        ),
     }
 
     _list_view = {
-        'columns': ['code', 'name'],
+        'columns': ['code', 'name', 'auto_generate'],
         'default_sort': ['name'],
     }
 
@@ -22,7 +34,7 @@ class ProductCategory(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['name', 'code'],
+                    'fields': ['name', 'code', 'auto_generate', 'code_prefix'],
                 },
             ],
         },
@@ -35,3 +47,62 @@ class ProductCategory(BaseModel):
 
     def __str__(self):
         return self.name or ''
+
+    @staticmethod
+    def _code_from_name(name):
+        """Kode 3 karakter dari nama: ambil 3 huruf/angka pertama (uppercase).
+
+        Contoh: 'Oli Mesin' → 'OLI', 'Alat Tulis Kantor' → 'ALA'.
+        Nama pendek diulang huruf terakhirnya agar tetap 3 karakter ('AC' → 'ACC').
+        """
+        alnum = re.sub(r'[^0-9A-Za-z]', '', name or '').upper()
+        if not alnum:
+            return ''
+        code = alnum[:3]
+        while len(code) < 3:
+            code += code[-1]
+        return code
+
+    def _compute_code(self):
+        """Isi kode dari nama bila masih kosong (nilai yang sudah ada tidak ditimpa)."""
+        if (self.code or '').strip():
+            return
+        self.code = self._code_from_name(self.name)
+
+    def save(self, *args, **kwargs):
+        self._run_compute()  # kode dari nama (bila belum ada)
+        code = (self.code or '').strip()
+        if not code:
+            raise ValueError('Kode Kategori wajib diisi.')
+        if len(code) != 3:
+            raise ValueError('Kode Kategori harus 3 karakter.')
+        if self.auto_generate and not (self.code_prefix or '').strip():
+            raise ValueError('Prefix Kode wajib diisi bila Auto Generate aktif.')
+        # Guard: kode kategori tidak boleh sama (case-insensitive, antar kategori aktif)
+        dup = ProductCategory.objects.filter(code__iexact=code, is_deleted=False)
+        if self.pk:
+            dup = dup.exclude(pk=self.pk)
+        if dup.exists():
+            raise ValueError(f'Kode Kategori "{code}" sudah dipakai kategori lain.')
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_model_config(cls):
+        config = super().get_model_config()
+        # -- Field config rules (generik, dibaca frontend) --
+        config['field_config_rules'] = {
+            # Ketik Nama Kategori → Kode terisi otomatis (masih bisa diubah user)
+            'name': {'compute_fields': ['code']},
+            # Prefix hanya relevan saat auto generate aktif → tampil & wajib
+            'code_prefix': {
+                'hide_when': {'auto_generate': False},
+                'field_props': {
+                    'required': {
+                        'depends_on': 'auto_generate',
+                        'true': True,
+                        'false': False,
+                    },
+                },
+            },
+        }
+        return config

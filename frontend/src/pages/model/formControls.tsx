@@ -442,14 +442,18 @@ export function renderField(
     );
   }
 
-  // Char (default)
+  // Char (default) — maxLength mengikuti max_length field (mis. Prefix Kode 7 char)
   const charRules: Record<string, unknown>[] = required ? [{ required: true }] : [];
   if (field.min_length) {
     charRules.push({ min: field.min_length, message: `Min ${field.min_length} characters` });
   }
   return (
-    <Form.Item label={label} name={key} rules={charRules}>
-      <Input placeholder={field.placeholder || `Enter ${label}`} disabled={disabled} />
+    <Form.Item label={label} name={key} rules={charRules} extra={field.help_text ? <span style={{ fontSize: 12, fontStyle: 'italic', color: '#888' }}>{field.help_text}</span> : undefined}>
+      <Input
+        placeholder={field.placeholder || `Enter ${label}`}
+        disabled={disabled}
+        {...(field.max_length ? { maxLength: field.max_length } : {})}
+      />
     </Form.Item>
   );
 }

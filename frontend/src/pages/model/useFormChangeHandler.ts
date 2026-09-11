@@ -7,6 +7,7 @@
  *  - onchange           : reset target field saat source berubah (model config)
  *  - line_onchange      : reset field di SEMUA baris notebook
  *  - confirm_onchange   : konfirmasi modal sebelum mereset line items
+ *  - compute_fields     : nilai field diambil dari compute API backend
  *  - populate_lines     : isi line items dari one2many record terkait (template)
  *
  * Parameter hook adalah dependency yang dipakai callback — semua disuntik
@@ -120,6 +121,27 @@ export function useFormChangeHandler(params: {
           },
         });
       });
+      // compute_fields: saat field berubah → minta nilai field terhitung dari
+      // backend (compute API) lalu isi ke form. Definisi di model:
+      //   config.field_config_rules[field].compute_fields = ['code']
+      // Contoh: pilih Kategori auto generate → SKU terisi <prefix>-001.
+      Object.entries(changedValues).forEach(([fieldName]) => {
+        const targets = (config?.field_config_rules?.[fieldName]?.compute_fields as string[] | undefined) || [];
+        if (!targets.length || isRevertingRef.current) return;
+        const payload = { ...form.getFieldsValue(), ...changedValues };
+        modelApi.compute(config.model_name, payload).then((computed) => {
+          const updates: Record<string, unknown> = {};
+          targets.forEach((target) => {
+            const val = computed[target];
+            // Biarkan kosong bila backend tidak menghitung nilai (mis. kategori manual)
+            if (val !== undefined && val !== null && val !== '') updates[target] = val;
+          });
+          if (Object.keys(updates).length > 0) form.setFieldsValue(updates);
+        }).catch(() => {
+          // best-effort — nilai tetap dihitung backend saat simpan
+        });
+      });
+
       // populate_lines: saat many2one berubah → isi line items dari one2many
       // record terkait (template & sejenisnya). Konfigurasi generic dari backend:
       // config.field_config_rules[field].populate_lines = {target, source, mapping}

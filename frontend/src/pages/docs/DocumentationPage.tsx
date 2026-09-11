@@ -178,6 +178,17 @@ def get_model_config(cls):
                 },
             },
         },
+        # Pilih Kategori → field SKU diminta ke compute API backend
+        'category': {'compute_fields': ['code']},
+        # Kategori auto generate → field SKU jadi readonly
+        'code': {'readonly_when': {'category_auto_generate': True}},
+        # Prefix hanya tampil & wajib saat auto generate aktif
+        'code_prefix': {
+            'hide_when': {'auto_generate': False},
+            'field_props': {
+                'required': {'depends_on': 'auto_generate', 'true': True, 'false': False},
+            },
+        },
     }
 
     return config`} />
