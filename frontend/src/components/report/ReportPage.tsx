@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Typography, Space, Button, Card, Row, Col, Table, Input, Select, DatePicker, Switch, ConfigProvider } from 'antd';
-import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DownloadOutlined, FilterOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import type { Dayjs } from 'dayjs';
 import { DATE_FORMAT } from '../../utils/format';
@@ -19,6 +19,27 @@ import type {
   ReportSummaryCell,
   ReportTextFilter,
 } from './types';
+
+/**
+ * Tampilan tabel bergaya lembar kerja (mirip Excel).
+ * Aturan wajib: SATU baris data = SATU baris tabel. Teks TIDAK boleh membungkus
+ * (`white-space: nowrap`) — kalau kolom lebih lebar dari layar, shell memunculkan
+ * scrollbar horizontal (lihat `scroll={{ x: 'max-content' }}` di Table).
+ * Semua aturan memakai prefix `.rpt-sheet` — tidak ada style per-halaman.
+ */
+const sheetCss = `
+.rpt-sheet .ant-table-cell {
+  white-space: nowrap !important;
+  vertical-align: middle;
+}
+.rpt-sheet .ant-table-summary > tr > th,
+.rpt-sheet .ant-table-summary > tr > td {
+  background: #fafafa;
+}
+`;
+
+/** Tombol Filter (oranye) — gaya seragam di semua report. */
+const filterBtnStyle = { background: '#fa8c16', borderColor: '#fa8c16', color: '#fff' } as const;
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -62,7 +83,7 @@ export type ReportPageProps<T extends object> = {
   exportConfig?: ReportExportConfig;
   expandable?: TableProps<T>['expandable'];
   emptyText?: ReactNode;
-  /** Lebar konten — standar 1100 untuk semua report. */
+  /** Lebar konten — default 90% dari area kerja (responsif); isi `maxWidth` hanya bila perlu batas atas. */
   maxWidth?: number;
 };
 
@@ -328,12 +349,14 @@ export default function ReportPage<T extends object>({
   exportConfig,
   expandable,
   emptyText,
-  maxWidth = 1100,
+  maxWidth,
 }: ReportPageProps<T>) {
   const headerFilters = (filters ?? []).filter((f) => f.place === 'header');
   const cardFilters = (filters ?? []).filter((f) => f.place !== 'header');
   /** Key filter periode yang sedang dalam mode pilih tanggal (dropdown = 'custom'). */
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  /** Show/hide card filter — card tabel ikut naik saat disembunyikan. */
+  const [showFilters, setShowFilters] = useState(true);
 
   /** Export Excel: header + isi diturunkan dari metadata kolom. */
   const onExport = () => {
@@ -367,7 +390,8 @@ export default function ReportPage<T extends object>({
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ maxWidth, margin: '0 auto', width: '100%' }}>
+      {/* Lebar 90% dari area kerja (responsif terhadap zoom/ukuran layar). */}
+      <div style={{ width: '90%', margin: '0 auto', ...(maxWidth ? { maxWidth } : null) }}>
         {/* Header — judul sejajar dengan filter header + tombol aksi.
             marginBottom dilebihkan kalau ada filter header (info tanggal italic di bawahnya). */}
         <div
@@ -414,6 +438,17 @@ export default function ReportPage<T extends object>({
               <Button size="small" icon={<ReloadOutlined spin={refreshing} />} onClick={onRefresh} loading={refreshing}>
                 Refresh
               </Button>
+              {/* Toggle card filter: sembunyikan → card tabel otomatis naik. */}
+              {cardFilters.length ? (
+                <Button
+                  size="small"
+                  icon={<FilterOutlined />}
+                  onClick={() => setShowFilters((v) => !v)}
+                  style={filterBtnStyle}
+                >
+                  Filter
+                </Button>
+              ) : null}
             </Space>
             {/* Info waktu data diambil (db) — di bawah tombol Refresh, tidak menggeser posisi tombol */}
             {fetchedAt ? (
@@ -426,8 +461,8 @@ export default function ReportPage<T extends object>({
           </div>
         </div>
 
-        {/* Card 1 — Filter: grid 4 kolom (date range = 2 kolom) */}
-        {cardFilters.length ? (
+        {/* Card 1 — Filter: grid 4 kolom (date range = 2 kolom). Bisa disembunyikan via tombol Filter. */}
+        {cardFilters.length && showFilters ? (
           <Card size="small" style={{ marginBottom: 12 }}>
             <Row gutter={[12, 10]}>
               {cardFilters.map((f) => (
@@ -447,35 +482,42 @@ export default function ReportPage<T extends object>({
           </Card>
         ) : null}
 
-        {/* Card 2 — Tabel (rapat: padding sel dikurangi, header diberi background jelas) */}
+        {/* Card 2 — Tabel gaya lembar kerja (mirip Excel): garis kisi penuh + teks membungkus.
+            Semua gaya dari shell ini (token + .rpt-sheet), bukan per-halaman. */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: 48, color: '#8c8c8c' }}>Loading report…</div>
         ) : (
           <Card size="small" styles={{ body: { padding: 8 } }}>
+            <style>{sheetCss}</style>
             <ConfigProvider
               theme={{
                 components: {
                   Table: {
                     cellPaddingBlockSM: 4,
                     cellPaddingInlineSM: 8,
-                    headerBg: '#e8eef6',
+                    headerBg: '#f2f2f2',
                     headerColor: '#1f1f1f',
-                    headerSplitColor: '#cfd8e3',
-                    borderColor: '#e3e8ee',
+                    headerSplitColor: 'transparent',
+                    headerBorderRadius: 0,
+                    borderColor: '#d9d9d9',
                   },
                 },
               }}
             >
-              <Table<T>
-                size="small"
-                rowKey={rowKey as TableProps<T>['rowKey']}
-                columns={toAntdColumns(columns)}
-                dataSource={dataSource}
-                pagination={false}
-                summary={summary}
-                expandable={expandable}
-                locale={emptyText ? { emptyText } : undefined}
-              />
+              <div className="rpt-sheet">
+                <Table<T>
+                  size="small"
+                  bordered
+                  rowKey={rowKey as TableProps<T>['rowKey']}
+                  columns={toAntdColumns(columns)}
+                  dataSource={dataSource}
+                  pagination={false}
+                  scroll={{ x: 'max-content' }}
+                  summary={summary}
+                  expandable={expandable}
+                  locale={emptyText ? { emptyText } : undefined}
+                />
+              </div>
             </ConfigProvider>
           </Card>
         )}

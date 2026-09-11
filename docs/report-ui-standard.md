@@ -68,6 +68,29 @@ Saat `loading`: Card 2 diganti `div textAlign:center padding:48 color:#8c8c8c` �
 **diturunkan otomatis** dari `columns` (kolom `export: false` dilewati; `export.value(row)` untuk nilai
 khusus); lebar kolom dihitung dari `width` kolom. Halaman tidak lagi menyusun baris Excel manual.
 
+### 2d. Tampilan tabel — gaya lembar kerja (mirip Excel), 1 baris per data
+Diatur **hanya di shell** (prop `bordered` + `scroll={{ x: 'max-content' }}` + token Table + blok CSS
+`.rpt-sheet`), berlaku otomatis ke semua report. Jangan menambah style tabel di halaman report.
+
+- **1 baris data = 1 baris tabel (WAJIB)**: sel `white-space: nowrap` (teks **tidak** boleh wrap/enter).
+  Teks panjang tidak dipotong, tapi **tidak membungkus** — shell menyediakan **scrollbar horizontal**
+  lewat `scroll={{ x: 'max-content' }}`. Karena itu di dalam `render` kolom **jangan** memakai elemen
+  block (`<div>`, `<br/>`) yang bisa memecah sel jadi 2 baris; pakai `<span>`/`<Text>` inline saja.
+  Jangan set `ellipsis` pada kolom (teks harus tetap utuh, bukan dipotong).
+- **Garis kisi (mirip Excel)**: `bordered` pada Table → border vertikal + horizontal di semua sel,
+  border luar container, dan garis pemisah header antd dimatikan (`headerSplitColor: 'transparent'`).
+- **Header**: `headerBg #f2f2f2` (abu netral gaya Excel), teks `#1f1f1f`, `headerBorderRadius 0`,
+  rata mengikuti `align` kolom.
+- **Garis**: `borderColor #d9d9d9`; **rapat**: `cellPaddingBlockSM 4`, `cellPaddingInlineSM 8`.
+- **Baris Total** (`summaryCells`): background `#fafafa` (via `.rpt-sheet .ant-table-summary`).
+- Angka tetap rata kanan lewat `align: 'right'` di metadata kolom (standar Excel).
+- **Lebar halaman**: konten report **90%** dari area kerja (prop `maxWidth` opsional bila perlu batas atas),
+  sehingga responsif saat window di-zoom / ukuran layar berubah.
+- **Tombol `Filter` (oranye, di kanan tombol Refresh)**: show/hide card filter. Saat card filter
+  disembunyikan, card tabel otomatis naik. Tampil hanya jika report punya filter di card.
+
+
+
 **Dilarang** menulis ulang `padding`/`maxWidth`/header/Card/penanda loading di halaman report.
 
 ## 3. Metadata filter — `src/components/report/types.ts`
