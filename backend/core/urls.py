@@ -9,6 +9,7 @@ from core.access_api import (
     access_roles, access_role_detail, access_role_permissions,
     access_me, access_users, access_user_role,
 )
+from core.purge_api import purge_preview, purge_run
 
 urlpatterns = [
     # Dashboard (meta-driven, generic)
@@ -30,6 +31,9 @@ urlpatterns = [
     path('access/roles/<int:role_id>/permissions/', access_role_permissions, name='access-role-permissions'),
     path('access/users/', access_users, name='access-users'),
     path('access/users/<int:user_id>/role/', access_user_role, name='access-user-role'),
+    # Pemeliharaan data — clear database (khusus admin/staff)
+    path('maintenance/purge/preview/', purge_preview, name='purge-preview'),
+    path('maintenance/purge/', purge_run, name='purge-run'),
     # Model registry
     path('models/', model_list, name='model-list'),
     path('models/<str:model_name>/config/', model_config, name='model-config'),

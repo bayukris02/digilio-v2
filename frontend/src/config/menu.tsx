@@ -199,6 +199,7 @@ export const menuItems: MenuNode[] = [
       { key: '/settings.branch', label: 'Branches' },
       { key: '/settings.user', label: 'Users' },
       { key: '/settings/access_rights', label: 'Hak Akses' },
+      { key: '/settings/data_maintenance', label: 'Pemeliharaan Data' },
     ],
   },
 ];

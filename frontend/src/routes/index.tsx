@@ -16,6 +16,7 @@ import StockCardPage from '../pages/base/StockCardPage';
 import StockLedgerPage from '../pages/base/StockLedgerPage';
 import TaxReportPage from '../pages/base/TaxReportPage';
 import AccessRightsPage from '../pages/base/AccessRightsPage';
+import DataMaintenancePage from '../pages/base/DataMaintenancePage';
 import ComingSoon from '../pages/ComingSoon';
 
 export const router = createBrowserRouter([
@@ -121,6 +122,7 @@ export const router = createBrowserRouter([
       { path: 'accounting/perubahan_modal', element: <FinancialReportPage reportKey="equity_changes" /> },
       { path: 'accounting/pajak', element: <TaxReportPage /> },
       { path: 'settings/access_rights', element: <AccessRightsPage /> },
+      { path: 'settings/data_maintenance', element: <DataMaintenancePage /> },
       // Accounting coming-soon routes
       { path: 'accounting/asset', element: <ModelListPage modelName="accounting.asset" basePath="/accounting/asset" /> },
       { path: 'accounting/asset/new', element: <ModelFormPage modelName="accounting.asset" basePath="/accounting/asset" /> },
