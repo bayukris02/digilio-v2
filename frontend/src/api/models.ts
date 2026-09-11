@@ -29,6 +29,8 @@ export interface FieldConfig {
  *                     Bentuk objek {field, refresh?, keep_manual?}:
  *                     refresh     = buang nilai lama dari payload (backend hitung ulang)
  *                     keep_manual = jangan timpa bila user sudah mengubah nilainya manual
+ *  - with_record    : true → sertakan id record pada payload compute (backend
+ *                     membaca nilai tersimpan, mis. SKU lama dipertahankan)
  *  - populate_lines : {target, source, mapping} → isi line items dari relasi
  */
 export type ComputeFieldEntry = string | { field: string; refresh?: boolean; keep_manual?: boolean };

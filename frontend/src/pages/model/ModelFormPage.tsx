@@ -133,6 +133,8 @@ export default function ModelFormPage({
   const handleFormChange = useFormChangeHandler({
     form, config, setLineItems, lineItems, setSummaryRevision, childConfigs,
     computeDirty, setDirtyFlag, lastSnapshotRef, prevFieldValuesRef, isRevertingRef,
+    // id record dari URL (null untuk 'new') — dipakai rule compute_fields `with_record`
+    recordId: recordId && recordId !== 'new' && !Number.isNaN(Number(recordId)) ? Number(recordId) : null,
   });
 
   // ── Fetch model config (once per model) ──

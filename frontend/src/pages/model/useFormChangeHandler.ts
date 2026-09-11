@@ -45,8 +45,10 @@ export function useFormChangeHandler(params: {
   lastSnapshotRef: React.MutableRefObject<string>;
   prevFieldValuesRef: React.MutableRefObject<Record<string, unknown>>;
   isRevertingRef: React.MutableRefObject<boolean>;
+  /** id record yang sedang dibuka (null untuk record baru) — dipakai rule with_record */
+  recordId?: number | null;
 }) {
-  const { form, config, setLineItems, lineItems, setSummaryRevision, childConfigs, computeDirty, setDirtyFlag, lastSnapshotRef, prevFieldValuesRef, isRevertingRef } = params;
+  const { form, config, setLineItems, lineItems, setSummaryRevision, childConfigs, computeDirty, setDirtyFlag, lastSnapshotRef, prevFieldValuesRef, isRevertingRef, recordId } = params;
 
   // Nilai terakhir yang DIISI OTOMATIS oleh compute_fields — dipakai mendeteksi
   // apakah field sudah diubah manual user (antd `isFieldTouched` tidak bisa
@@ -134,12 +136,16 @@ export function useFormChangeHandler(params: {
       //      keep_manual : jangan timpa bila user sudah mengetik sendiri
       // Contoh: pilih Kategori auto generate → SKU terisi <prefix>-001.
       Object.entries(changedValues).forEach(([fieldName]) => {
-        const rawEntries = (config?.field_config_rules?.[fieldName]?.compute_fields as
+        const rule = config?.field_config_rules?.[fieldName];
+        const rawEntries = (rule?.compute_fields as
           (string | { field: string; refresh?: boolean; keep_manual?: boolean })[] | undefined) || [];
         const entries = rawEntries.map((e) => (typeof e === 'string' ? { field: e } : e));
         if (!entries.length || isRevertingRef.current) return;
         const payload = { ...form.getFieldsValue(), ...changedValues };
         entries.forEach((e) => { if (e.refresh) delete payload[e.field]; });
+        // with_record: sertakan id → backend bisa membaca nilai tersimpan
+        // (mis. SKU lama tetap dipakai walau kategori sempat diganti).
+        if (rule?.with_record && recordId) payload.id = recordId;
         modelApi.compute(config.model_name, payload).then((computed) => {
           const updates: Record<string, unknown> = {};
           entries.forEach(({ field, keep_manual }) => {
@@ -232,5 +238,5 @@ export function useFormChangeHandler(params: {
         }
       });
     }
-  }, [form, config, setLineItems, lineItems, setSummaryRevision, computeDirty, childConfigs]);
+  }, [form, config, setLineItems, lineItems, setSummaryRevision, computeDirty, childConfigs, recordId]);
 }

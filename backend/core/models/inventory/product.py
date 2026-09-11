@@ -81,9 +81,12 @@ class Product(BaseModel):
         # -- Field config rules (generik, dibaca frontend) --
         config['field_config_rules'] = {
             # Ganti Kategori → minta SKU + flag auto generate ke compute API.
-            # Kedua nilai SELALU ditimpa dari hasil backend (termasuk false),
-            # supaya readonly SKU selalu akurat (auto generate aktif/tidak).
-            'category': {'compute_fields': ['code', 'category_auto_generate']},
+            # with_record: sertakan id record → backend membaca kode TERSIMPAN,
+            # jadi pindah kategori lalu balik lagi TIDAK mengubah SKU.
+            'category': {
+                'compute_fields': ['code', 'category_auto_generate'],
+                'with_record': True,
+            },
             # Kategori auto generate → SKU readonly (terisi <prefix>-001)
             'code': {'readonly_when': {'category_auto_generate': True}},
         }
@@ -112,11 +115,19 @@ class Product(BaseModel):
         except ObjectDoesNotExist:
             return None
 
+    def _stored_code(self):
+        """Kode tersimpan di DB untuk produk ini ('' bila belum ada)."""
+        if not self.pk:
+            return ''
+        return type(self).objects.filter(pk=self.pk).values_list('code', flat=True).first() or ''
+
     def _compute_code(self):
         """SKU otomatis <prefix kategori>-<nomor urut> bila kategori auto generate.
 
-        Kode yang sudah ber-prefix sama dibiarkan (tidak di-generate ulang),
-        sehingga edit produk tidak mengubah SKU yang sudah terbit.
+        Aturan "tidak berubah": kode yang sudah ada untuk prefix kategori ini
+        dipertahankan — kode tersimpan di DB lebih dulu (kategori awal produk),
+        baru kode dari form (mis. produk baru). Hanya di-generate ulang bila
+        kode lama tidak ber-prefix kategori yang dipilih.
         """
         category = self._resolve_category()
         if category is None or not getattr(category, 'auto_generate', False):
@@ -124,7 +135,12 @@ class Product(BaseModel):
         prefix = (getattr(category, 'code_prefix', '') or '').strip()
         if not prefix:
             return
-        if (self.code or '').startswith(f'{prefix}-'):
+        marker = f'{prefix}-'
+        stored = self._stored_code()
+        if stored.startswith(marker):
+            self.code = stored
+            return
+        if (self.code or '').startswith(marker):
             return
         self.code = self._next_auto_code(prefix)
 
