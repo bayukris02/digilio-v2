@@ -3,7 +3,7 @@ User model — wraps django.contrib.auth.models.User (auth_user table).
 Read-only: list, detail. No CRUD from ERP UI.
 """
 from django.db import models
-from core.fields import CharField, BooleanField, DateTimeField
+from core.fields import CharField, BooleanField, DateTimeField, One2ManyField
 from core.model_meta import ErpModelBase
 
 
@@ -46,6 +46,13 @@ class User(models.Model, metaclass=ErpModelBase):
         'is_superuser': BooleanField(label='Superuser', default=False),
         'date_joined': DateTimeField(label='Date Joined'),
         'last_login': DateTimeField(label='Last Login'),
+        # Relasi role (RBAC) — disimpan di tabel settings.user_role karena
+        # auth_user (managed=False) tak bisa ditambah kolom. Satu baris per user.
+        'role_lines': One2ManyField(
+            label='Role',
+            relation='settings.user_role',
+            inverse_field='user_id',
+        ),
     }
 
     _list_view = {
@@ -58,6 +65,16 @@ class User(models.Model, metaclass=ErpModelBase):
         'header': {
             'fields': ['username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'is_superuser', 'date_joined', 'last_login'],
         },
+        # Tabel Role (RBAC) — pilih role dari settings.role; tersimpan ke
+        # settings.user_role lewat engine child-line generik.
+        'notebook': [
+            {
+                'key': 'role',
+                'label': 'Role',
+                'relation': 'role_lines',
+                'columns': ['role_id'],
+            },
+        ],
     }
 
     _states = None
@@ -86,9 +103,10 @@ class User(models.Model, metaclass=ErpModelBase):
         # Borrow the implementation from BaseModel's get_model_config
         return BaseModel.get_model_config.__func__(cls)
 
-    # ── Drawer preview (dipakai list view) — delegasi ke BaseModel ──
+    # ── Kontrak BaseModel (dipakai core API generik) ──
     # User tidak mewarisi BaseModel (tabel auth_user, managed=False), jadi
-    # dua helper meta-driven di bawah diteruskan manual ke BaseModel.
+    # method yang dipanggil core/model_api.py & core/model_meta.py diteruskan
+    # manual ke BaseModel — sekali di sini, bukan patch di dalam core.
     @classmethod
     def _preview_fallback_fields(cls):
         from core.model_meta import BaseModel
@@ -98,6 +116,24 @@ class User(models.Model, metaclass=ErpModelBase):
     def _build_preview_view(cls):
         from core.model_meta import BaseModel
         return BaseModel._build_preview_view.__func__(cls)
+
+    def _run_compute(self):
+        """Detail/create/update: isi virtual computed field (User tidak punya)."""
+        from core.model_meta import BaseModel
+        return BaseModel._run_compute(self)
+
+    def _m2m_ids(self, field_name):
+        from core.model_meta import BaseModel
+        return BaseModel._m2m_ids(self, field_name)
+
+    def _can_delete(self):
+        """User tanpa _document_flow → selalu boleh dihapus."""
+        from core.model_meta import BaseModel
+        return BaseModel._can_delete(self)
+
+    def _run_child_mapping(self, child_cfg):
+        from core.model_meta import BaseModel
+        return BaseModel._run_child_mapping(self, child_cfg)
 
     @classmethod
     def _get_state_config(cls, status):
@@ -112,6 +148,20 @@ class User(models.Model, metaclass=ErpModelBase):
             if hasattr(fd, 'to_representation'):
                 val = fd.to_representation(val)
             data[fname] = val
+        # Sertakan child one2many (role_lines) — pola sama dengan BaseModel.to_record.
+        for fname, fd in self._field_descriptors.items():
+            if getattr(fd, 'field_type', None) == 'one2many':
+                child_model = ErpModelBase._model_registry.get(fd.relation)
+                data[fname] = (
+                    [
+                        child.to_record()
+                        for child in child_model.objects.filter(
+                            **{fd.inverse_field: self.pk, 'is_deleted': False}
+                        )
+                    ]
+                    if child_model
+                    else []
+                )
         data['display_name'] = self.get_display_name()
         return data
 
