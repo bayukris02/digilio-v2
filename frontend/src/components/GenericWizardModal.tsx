@@ -627,7 +627,9 @@ export default function GenericWizardModal({
   const allModesShowTable = config.line_selection?.show_for_modes?.length === config.modes.length;
   const showLines = config.line_selection?.show_for_modes?.includes(selectedMode) ?? false;
   const columns = config.line_selection?.columns || [];
-  const qtyLabel = config.line_selection?.qty_label || 'Receive Qty';
+  // Label kolom input qty — WAJIB dari config model (`qty_label`); fallback generik 'Qty'
+  // supaya komponen core ini tidak mengasumsikan model tertentu (mis. penerimaan barang).
+  const qtyLabel = config.line_selection?.qty_label || 'Qty';
   const editableColumns = config.line_selection?.editable_columns || [];
   const progressColumns = config.line_selection?.progress_columns || [];
   const currentMode = config.modes.find((m) => m.value === selectedMode);
@@ -771,7 +773,7 @@ export default function GenericWizardModal({
       const resp = await fetch(`/api/models/${relation}/records/?limit=200${query}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!resp.ok) throw new Error('Fetch failed');
+      if (!resp.ok) throw new Error('Gagal memuat data');
       const data = await resp.json();
       const opts = (data.results || []).map((r: Record<string, unknown>) => {
         // value: field tertentu (default id) — support {id} / {value} object
@@ -907,11 +909,11 @@ export default function GenericWizardModal({
   // Footer buttons
   const renderFooter = () => {
     if (currentMode?.table) {
-      // Mode tampilan tabel — hanya Refresh + Cancel
+      // Mode tampilan tabel — hanya Muat Ulang + Batal
       return (
         <Space>
-          <Button onClick={() => loadTable(selectedMode)} loading={tableData.loading} disabled={tableData.loading}>Refresh</Button>
-          <Button onClick={onCancel}>Cancel</Button>
+          <Button onClick={() => loadTable(selectedMode)} loading={tableData.loading} disabled={tableData.loading}>Muat Ulang</Button>
+          <Button onClick={onCancel}>Batal</Button>
         </Space>
       );
     }
@@ -923,7 +925,7 @@ export default function GenericWizardModal({
               {mode.label}
             </Button>
           ))}
-          <Button onClick={onCancel} disabled={confirming}>Cancel</Button>
+          <Button onClick={onCancel} disabled={confirming}>Batal</Button>
         </Space>
       );
     }
@@ -937,8 +939,8 @@ export default function GenericWizardModal({
       open={visible}
       onOk={() => handleConfirm()}
       onCancel={onCancel}
-      okText={allModesShowTable ? undefined : (currentMode?.split || currentMode?.editable_rows ? "Konfirmasi" : "Confirm")}
-      cancelText="Cancel"
+      okText={allModesShowTable ? undefined : (currentMode?.split || currentMode?.editable_rows ? "Konfirmasi" : "Konfirmasi")}
+      cancelText="Batal"
       width={currentMode?.split || currentMode?.editable_rows ? 760 : 640}
       destroyOnClose
       confirmLoading={confirming}
@@ -955,7 +957,6 @@ export default function GenericWizardModal({
 
         {visibleExtraInputs.length > 0 && (
           <div>
-            <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>Input</Text>
             <Row gutter={16}>
               {visibleExtraInputs.map((inp) => (
                 <Col span={12} key={inp.key}>
@@ -1081,7 +1082,7 @@ export default function GenericWizardModal({
         {dpChecklistCfg && dpItems.length > 0 && (
           <div>
             <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
-              {dpChecklistCfg.title || 'Potong DP'}
+              {dpChecklistCfg.title || 'Checklist'}
             </Text>
             <div style={{ background: '#f6f8fa', border: '1px solid #e8e8e8', borderRadius: 6, padding: '8px 12px' }}>
               {dpItems.map((it) => {
@@ -1169,7 +1170,7 @@ export default function GenericWizardModal({
                           colSpan={tableColumns.length}
                           style={{ padding: 16, textAlign: 'center', color: '#999' }}
                         >
-                          {tableData.error || 'Tidak ada dokumen untuk milestone ini'}
+                          {tableData.error || 'Tidak ada data'}
                         </td>
                       </tr>
                     ) : (
@@ -1202,6 +1203,9 @@ export default function GenericWizardModal({
               const total = splitRows.reduce((s, r) => s + r.amount, 0);
               const sisa = sourceVal - total;
               const prefix = splitCfg.note_prefix || 'Term ke-';
+              // Label nilai sumber WAJIB dari config model; fallback generik (bukan istilah
+              // model tertentu seperti "Sisa Tagihan").
+              const sourceLabel = splitCfg.source_label || 'Nilai Sumber';
               const rows = splitRows.map((r) => ({
                 term_no: r.term_no,
                 due_date: r.due_date.format('YYYY-MM-DD'),
@@ -1211,7 +1215,7 @@ export default function GenericWizardModal({
               return (
                 <Space direction="vertical" size={10} style={{ width: '100%' }}>
                   <div>
-                    <Text strong>{splitCfg.source_label || 'Nilai Sumber'}: </Text>
+                    <Text strong>{sourceLabel}: </Text>
                     <Text strong style={{ color: '#1677ff' }}>{fmt(sourceVal)}</Text>
                   </div>
                   {sourceVal <= 0 && (
@@ -1244,7 +1248,7 @@ export default function GenericWizardModal({
                   )}
                   {splitRows.length > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Text strong>Sisa Tagihan setelah cicilan</Text>
+                      <Text strong>{sourceLabel} setelah cicilan</Text>
                       <Text strong style={{ color: sisa <= 0 ? '#52c41a' : '#ff4d4f' }}>
                         {fmt(sisa)}
                       </Text>
@@ -1268,10 +1272,11 @@ export default function GenericWizardModal({
               const total = manualRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
               const sisa = sourceVal - total;
               const prefix = manualCfg.note_prefix || 'Term ke-';
+              const sourceLabel = manualCfg.source_label || 'Nilai Sumber';
               return (
                 <Space direction="vertical" size={10} style={{ width: '100%' }}>
                   <div>
-                    <Text strong>{manualCfg.source_label || 'Sisa Tagihan'}: </Text>
+                    <Text strong>{sourceLabel}: </Text>
                     <Text strong style={{ color: '#1677ff' }}>{fmt(sourceVal)}</Text>
                   </div>
                   {sourceVal <= 0 && (
@@ -1292,7 +1297,7 @@ export default function GenericWizardModal({
                     <Text strong>{fmt(total)}</Text>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Text strong>Sisa Tagihan setelah cicilan</Text>
+                    <Text strong>{sourceLabel} setelah cicilan</Text>
                     <Text strong style={{ color: sisa <= 0 ? '#52c41a' : '#ff4d4f' }}>{fmt(sisa)}</Text>
                   </div>
                 </Space>
