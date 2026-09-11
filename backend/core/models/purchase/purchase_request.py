@@ -199,9 +199,16 @@ class PurchaseRequest(BaseModel):
             self.reference = SequenceEngine.next_by_id(self.sequence_id.pk)
 
     def _guard_cancel(self):
-        """PR tidak boleh dicancel selama masih ada PO (draft/confirmed) yang belum dicancel."""
+        """PR tidak bisa dibatalkan selama masih ada PO aktif yang berasal dari PR ini.
+
+        Dua jalur relasi dipakai sekaligus supaya tidak ada PO yang lolos:
+          1. FK langsung `purchase_order.purchase_request`
+          2. baris PO yang menunjuk baris PR (`purchase_order_line.purchase_request_line`)
+        PO yang sudah dibatalkan (status 'cancelled') tidak menghalangi.
+        """
         if not self.pk:
             return
+        from django.db.models import Q
         from core.models.purchase.purchase_order import PurchaseOrder
         from core.models.purchase.purchase_order_line import PurchaseOrderLine
         from core.models.purchase.purchase_request_line import PurchaseRequestLine
@@ -210,24 +217,22 @@ class PurchaseRequest(BaseModel):
             request_id=self, is_deleted=False
         ).values_list('pk', flat=True))
 
-        active_po_ids = PurchaseOrderLine.objects.filter(
+        line_po_ids = list(PurchaseOrderLine.objects.filter(
             purchase_request_line_id__in=pr_line_ids,
             is_deleted=False,
             order_id__is_deleted=False,
-        ).exclude(
-            order_id__status='cancelled',
-        ).values_list('order_id', flat=True).distinct()
+        ).values_list('order_id', flat=True))
 
         active_pos = PurchaseOrder.objects.filter(
-            pk__in=active_po_ids,
+            Q(purchase_request=self) | Q(pk__in=line_po_ids),
             is_deleted=False,
-        ).exclude(status='cancelled')
+        ).exclude(status='cancelled').distinct()
 
         if active_pos.exists():
-            refs = ', '.join(active_pos.values_list('reference', flat=True))
+            refs = ', '.join(sorted(active_pos.values_list('reference', flat=True)))
             raise ValueError(
-                f'PR tidak bisa dibatalkan: masih ada PO yang belum dicancel ({refs}). '
-                'Cancel PO tersebut terlebih dahulu.'
+                f'PR tidak bisa dibatalkan: masih ada PO yang belum dibatalkan ({refs}). '
+                'Batalkan PO tersebut terlebih dahulu.'
             )
 
     @classmethod
@@ -260,7 +265,6 @@ class PurchaseRequest(BaseModel):
         from core.models.purchase.purchase_order import PurchaseOrder
         from core.models.purchase.purchase_order_line import PurchaseOrderLine
         from core.models.settings.sequence import Sequence
-        from core.sequence_engine import SequenceEngine
 
         mode = (data or {}).get('mode', 'save_draft')
         vendor_id = (data or {}).get('vendor_id')
@@ -328,17 +332,17 @@ class PurchaseRequest(BaseModel):
         created_po = None
 
         with transaction.atomic():
-            # Buat 1 PO untuk vendor terpilih
+            # Buat 1 PO untuk vendor terpilih.
+            # Nomor dokumen (sequence) TIDAK diisi di sini — PO lahir sebagai draft
+            # (`Draft#<id>` dari BaseModel) dan nomor sequence baru dibuat saat PO
+            # dikonfirmasi (PurchaseOrder._effect_confirm), sama seperti dokumen lain.
             po = PurchaseOrder.objects.create(
                 vendor_id=int(vendor_id),
                 sequence_id=po_seq,
-                reference=f'Draft#PR#{self.pk}',
                 status='draft',
                 purchase_request=self,
                 source_document=self.reference or '',
             )
-            po.reference = SequenceEngine.next_by_id(po_seq.pk)
-            po.save(update_fields=['reference'])
 
             # Copy lines
             line_count = 0
