@@ -1444,7 +1444,47 @@ export default function ModelFormPage({
   }, [childConfigs, config, deleteLine, many2oneOptions, many2oneMeta, loadMoreMany2one, isReadOnly, columnFieldValues, lineItems]);
 
   // ── Save handler ──
-  const onSave = async () => {
+  // ── Simpan & Buat lagi: kosongkan form → kembali ke kondisi "Buat <model>"
+  // tanpa reload halaman. Bump reloadKey → efek default (isNew) mengisi ulang
+  // field default + menaikkan loadKey (Form remount dengan initialValues baru).
+  // Generik untuk SEMUA model (tidak ada logika per model).
+  const resetToNewRecord = () => {
+    // Bersihkan nilai form: instance Form.useForm() TIDAK ikut ter-reset saat
+    // Form di-remount (state store-nya persist) — jadi reset eksplisit ke
+    // nilai default dari config, semua field lain dikosongkan.
+    const defaults: Record<string, unknown> = {};
+    Object.entries(config?.fields || {}).forEach(([key, field]) => {
+      if (field.default !== undefined && field.default !== null) {
+        defaults[key] = field.default;
+      }
+      if (field.type === 'many2one' && field.relation === 'settings.user'
+          && defaults[key] === undefined) {
+        const uid = (config as unknown as Record<string, unknown>)?._current_user_id;
+        if (uid) defaults[key] = uid;
+      }
+    });
+    form.resetFields();
+    form.setFieldsValue(defaults);
+    setLineItems({});
+    setChildConfigs({});
+    setMany2oneOptions({});
+    setMany2oneMeta({});
+    setRecordDataRaw(null);
+    setChatterKey((prev) => prev + 1);
+    setCurrentStep(0);
+    prevFieldValuesRef.current = {};
+    lastSnapshotRef.current = '';
+    setDirtyFlag(false);
+    setReloadKey((prev) => prev + 1);
+  };
+
+  /**
+   * Simpan record. `after` menentukan tujuan setelah sukses (split button):
+   *   undefined → perilaku lama (baru: buka record hasil; edit: tetap di form)
+   *   'new'     → Simpan & Buat lagi (form baru siap input berikutnya)
+   *   'back'    → Simpan & Kembali (tutup form → daftar record)
+   */
+  const onSave = async (after: 'new' | 'back' | undefined = undefined) => {
     try {
       const values = await form.validateFields();
       // Convert dayjs objects to YYYY-MM-DD strings before sending
@@ -1529,7 +1569,13 @@ export default function ModelFormPage({
         syncSaveSnapshot();
         skipBlockerRef.current = true;
         message.success(`Berhasil menambah data ${entityLabel}`);
-        navigate(`${basePath}/${result?.id || recordId}`);
+        if (after === 'new') {
+          resetToNewRecord();  // tetap di form "Buat <model>" — siap input berikutnya
+        } else if (after === 'back') {
+          navigate(`${basePath}`);
+        } else {
+          navigate(`${basePath}/${result?.id || recordId}`);
+        }
       } else {
         const result = await modelApi.updateRecord(apiModelName, Number(recordId), prepared);
         // Normalize response dates & many2one
@@ -1548,6 +1594,13 @@ export default function ModelFormPage({
         setRecordData(result);
         syncSaveSnapshot();
         message.success(`Berhasil menyimpan data ${entityLabel}`);
+        if (after === 'new') {
+          skipBlockerRef.current = true;
+          navigate(`${basePath}/new`);
+        } else if (after === 'back') {
+          skipBlockerRef.current = true;
+          navigate(`${basePath}`);
+        }
       }
       queryClient.invalidateQueries({ queryKey: ['model-records'] });
       setChatterKey((prev) => prev + 1); // refresh chatter logs
@@ -1854,9 +1907,46 @@ export default function ModelFormPage({
           </Title>
           {!isReadOnly && (
           <Space size={6} style={{ marginLeft: 'auto' }}>
-            <Button icon={<SaveOutlined />} type="primary" onClick={onSave} loading={saving}>
-              Simpan
-            </Button>
+            {/* Split button (hanya saat buat baru): tombol utama SIMPAN seperti
+                biasa + dropdown Simpan & Buat lagi / Simpan & Kembali.
+                Pola sama dengan split button action (Space.Compact + Dropdown). */}
+            {isNew ? (
+              <Space.Compact>
+                <Button
+                  icon={<SaveOutlined />}
+                  type="primary"
+                  onClick={() => onSave()}
+                  loading={saving}
+                >
+                  Simpan
+                </Button>
+                <Dropdown
+                  trigger={['click']}
+                  menu={{
+                    items: [
+                      {
+                        key: 'save-new',
+                        icon: <PlusOutlined />,
+                        label: 'Simpan & Buat lagi',
+                        onClick: () => onSave('new'),
+                      },
+                      {
+                        key: 'save-back',
+                        icon: <ArrowLeftOutlined />,
+                        label: 'Simpan & Kembali',
+                        onClick: () => onSave('back'),
+                      },
+                    ],
+                  }}
+                >
+                  <Button type="primary" icon={<DownOutlined />} loading={saving} />
+                </Dropdown>
+              </Space.Compact>
+            ) : (
+              <Button icon={<SaveOutlined />} type="primary" onClick={() => onSave()} loading={saving}>
+                Simpan
+              </Button>
+            )}
             <Button
               variant="solid"
               color="danger"
