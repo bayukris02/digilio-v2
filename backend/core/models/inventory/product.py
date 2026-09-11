@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from core.fields import (
     CharField, TextField, BooleanField, MonetaryField,
@@ -14,18 +15,23 @@ class Product(BaseModel):
         'name': CharField(label='Nama Produk', required=True),
         # SKU: dihitung backend (compute) — otomatis <prefix kategori>-<nomor urut>
         # bila kategori auto generate, selain itu kode manual apa adanya.
-        'code': CharField(label='SKU / Kode', compute='_compute_code', depends=['category']),
+        # unik=True → satu kode hanya boleh dipakai 1 produk (kosong = NULL).
+        'code': CharField(
+            label='SKU / Kode', unique=True,
+            compute='_compute_code', depends=['category'],
+        ),
         'description': TextField(label='Deskripsi'),
         'category': Many2OneField(
             label='Kategori',
             relation='inventory.product_category',
             required=True,
-            # Virtual flag di form: dipakai field_config_rules (readonly SKU)
-            autofill={'category_auto_generate': 'auto_generate'},
         ),
         # Frontend-only: true bila kategori terpilih auto generate kode.
+        # Computed → ikut pada GET (form edit langsung readonly tanpa race)
+        # dan pada compute API (saat user ganti kategori).
         'category_auto_generate': BooleanField(
             label='Auto Generate', virtual=True, chatter_show=False,
+            compute='_compute_category_auto_generate',
         ),
         'tipe_product': SelectionField(
             label='Tipe Produk',
@@ -74,24 +80,37 @@ class Product(BaseModel):
         config = super().get_model_config()
         # -- Field config rules (generik, dibaca frontend) --
         config['field_config_rules'] = {
-            # Pilih Kategori → minta SKU terhitung dari backend (compute API)
-            'category': {'compute_fields': ['code']},
+            # Ganti Kategori → minta SKU + flag auto generate ke compute API.
+            # Kedua nilai SELALU ditimpa dari hasil backend (termasuk false),
+            # supaya readonly SKU selalu akurat (auto generate aktif/tidak).
+            'category': {'compute_fields': ['code', 'category_auto_generate']},
             # Kategori auto generate → SKU readonly (terisi <prefix>-001)
             'code': {'readonly_when': {'category_auto_generate': True}},
         }
         return config
 
-    def _next_auto_code(self, category, prefix):
-        """Nomor urut berikutnya untuk kategori (min 3 digit → 001; >999 → 1000)."""
+    def _next_auto_code(self, prefix):
+        """Nomor SKU berikutnya untuk prefix ini — GLOBAL lintas kategori
+        (min 3 digit → 001; >999 → 1000), selalu memilih nomor yang belum dipakai."""
         codes = self.__class__.objects.filter(
-            category=category, code__startswith=f'{prefix}-',
+            code__startswith=f'{prefix}-',
         ).values_list('code', flat=True)
         last = 0
         for c in codes:
             suffix = (c or '')[len(prefix) + 1:]
             if suffix.isdigit():
                 last = max(last, int(suffix))
-        return f'{prefix}-{last + 1:03d}'
+        n = last + 1
+        while self.__class__.objects.filter(code=f'{prefix}-{n:03d}').exists():
+            n += 1
+        return f'{prefix}-{n:03d}'
+
+    def _resolve_category(self):
+        """Kategori terkait (None bila kosong/tidak valid)."""
+        try:
+            return self.category
+        except ObjectDoesNotExist:
+            return None
 
     def _compute_code(self):
         """SKU otomatis <prefix kategori>-<nomor urut> bila kategori auto generate.
@@ -99,11 +118,7 @@ class Product(BaseModel):
         Kode yang sudah ber-prefix sama dibiarkan (tidak di-generate ulang),
         sehingga edit produk tidak mengubah SKU yang sudah terbit.
         """
-        from django.core.exceptions import ObjectDoesNotExist
-        try:
-            category = self.category
-        except ObjectDoesNotExist:
-            return
+        category = self._resolve_category()
         if category is None or not getattr(category, 'auto_generate', False):
             return
         prefix = (getattr(category, 'code_prefix', '') or '').strip()
@@ -111,7 +126,29 @@ class Product(BaseModel):
             return
         if (self.code or '').startswith(f'{prefix}-'):
             return
-        self.code = self._next_auto_code(category, prefix)
+        self.code = self._next_auto_code(prefix)
+
+    def _compute_category_auto_generate(self):
+        """Flag form: kategori terpilih auto generate kode? (true/false)."""
+        category = self._resolve_category()
+        self.category_auto_generate = bool(
+            category is not None and getattr(category, 'auto_generate', False)
+        )
+
+    def save(self, *args, **kwargs):
+        self._run_compute()  # hitung SKU lebih dulu (bila kategori auto generate)
+        # SKU kosong disimpan sebagai NULL agar constraint unik hanya berlaku
+        # untuk kode yang benar-benar terisi ('' tidak boleh dobel).
+        if self.code is not None and not str(self.code).strip():
+            self.code = None
+        # Guard unik (case-insensitive) — pesan jelas sebelum constraint DB
+        if self.code:
+            dup = self.__class__.objects.filter(code__iexact=self.code)
+            if self.pk:
+                dup = dup.exclude(pk=self.pk)
+            if dup.exists():
+                raise ValueError(f'Kode produk "{self.code}" sudah dipakai produk lain.')
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name or ''

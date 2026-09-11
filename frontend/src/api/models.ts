@@ -25,15 +25,20 @@ export interface FieldConfig {
  *  - hide_when      : {field: value}  → sembunyikan field saat kondisi cocok
  *  - readonly_when  : {field: value}  → jadikan field readonly saat kondisi cocok
  *  - field_props    : {prop: {depends_on, <nilai>: <prop value>}}
- *  - compute_fields : ['code'] → saat field berubah, minta nilai dari compute API
+ *  - compute_fields : ['code'] → saat field berubah, minta nilai dari compute API.
+ *                     Bentuk objek {field, refresh?, keep_manual?}:
+ *                     refresh     = buang nilai lama dari payload (backend hitung ulang)
+ *                     keep_manual = jangan timpa bila user sudah mengubah nilainya manual
  *  - populate_lines : {target, source, mapping} → isi line items dari relasi
  */
+export type ComputeFieldEntry = string | { field: string; refresh?: boolean; keep_manual?: boolean };
+
 export interface FieldConfigRule {
   hide_when?: Record<string, unknown>;
   readonly_when?: Record<string, unknown>;
   editable_when?: Record<string, unknown>;
   field_props?: Record<string, Record<string, unknown>>;
-  compute_fields?: string[];
+  compute_fields?: ComputeFieldEntry[];
   populate_lines?: Record<string, unknown>;
   [key: string]: unknown;
 }

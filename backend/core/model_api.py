@@ -165,10 +165,14 @@ def model_compute(request, model_name):
         return Response({'error': f'Compute failed: {str(e)}'}, status=400)
 
     result = {}
-    for fname in model_cls.get_computed_fields():
-        val = getattr(obj, fname)
-        fd = model_cls._field_descriptors.get(fname)
-        if fd and hasattr(fd, 'to_representation'):
+    # Semua field ber-compute (termasuk virtual/frontend-only, mis. flag form
+    # `category_auto_generate`) ikut dikirim — frontend hanya memakai field yang
+    # diminta lewat field_config_rules.compute_fields.
+    for fname, fd in model_cls._field_descriptors.items():
+        if not getattr(fd, 'compute', None):
+            continue
+        val = getattr(obj, fname, None)
+        if hasattr(fd, 'to_representation'):
             val = fd.to_representation(val)
         result[fname] = val
 
@@ -200,6 +204,9 @@ def _log_field_changes(model_cls, obj, old_data=None, user=None):
         if field_name in ('id', 'is_deleted', 'created_at', 'updated_at', 'deleted_at', 'created_by'):
             continue
         if getattr(fd, 'field_type', None) in ('one2many', 'many2many'):
+            continue
+        # Virtual (frontend-only) tidak punya kolom — jangan dicatat di chatter
+        if getattr(fd, 'virtual', False):
             continue
 
         new_val = getattr(obj, field_name, None)

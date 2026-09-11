@@ -28,7 +28,7 @@
  * 5. Semua perubahan di atas tetap memicu indikator "Perubahan belum disimpan".
  * ============================================================================
  */
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { Modal, message } from 'antd';
 import type { FormInstance } from 'antd';
 import { modelApi, type ModelConfig } from '../../api/models';
@@ -47,6 +47,11 @@ export function useFormChangeHandler(params: {
   isRevertingRef: React.MutableRefObject<boolean>;
 }) {
   const { form, config, setLineItems, lineItems, setSummaryRevision, childConfigs, computeDirty, setDirtyFlag, lastSnapshotRef, prevFieldValuesRef, isRevertingRef } = params;
+
+  // Nilai terakhir yang DIISI OTOMATIS oleh compute_fields — dipakai mendeteksi
+  // apakah field sudah diubah manual user (antd `isFieldTouched` tidak bisa
+  // dipakai: nilai dari setFieldsValue pun ikut dianggap touched).
+  const autoSetRef = useRef<Record<string, unknown>>({});
 
   return useCallback((changedValues?: Record<string, unknown>) => {
     if (lastSnapshotRef.current) {
@@ -124,19 +129,40 @@ export function useFormChangeHandler(params: {
       // compute_fields: saat field berubah → minta nilai field terhitung dari
       // backend (compute API) lalu isi ke form. Definisi di model:
       //   config.field_config_rules[field].compute_fields = ['code']
+      //   → bentuk objek: {field, refresh?, keep_manual?}
+      //      refresh     : buang nilai lama dari payload → backend hitung ulang
+      //      keep_manual : jangan timpa bila user sudah mengetik sendiri
       // Contoh: pilih Kategori auto generate → SKU terisi <prefix>-001.
       Object.entries(changedValues).forEach(([fieldName]) => {
-        const targets = (config?.field_config_rules?.[fieldName]?.compute_fields as string[] | undefined) || [];
-        if (!targets.length || isRevertingRef.current) return;
+        const rawEntries = (config?.field_config_rules?.[fieldName]?.compute_fields as
+          (string | { field: string; refresh?: boolean; keep_manual?: boolean })[] | undefined) || [];
+        const entries = rawEntries.map((e) => (typeof e === 'string' ? { field: e } : e));
+        if (!entries.length || isRevertingRef.current) return;
         const payload = { ...form.getFieldsValue(), ...changedValues };
+        entries.forEach((e) => { if (e.refresh) delete payload[e.field]; });
         modelApi.compute(config.model_name, payload).then((computed) => {
           const updates: Record<string, unknown> = {};
-          targets.forEach((target) => {
-            const val = computed[target];
+          entries.forEach(({ field, keep_manual }) => {
+            const current = form.getFieldValue(field);
+            const filledByUs = autoSetRef.current[field];
+            // keep_manual: jangan timpa nilai yang sudah diubah manual user
+            // (bukan nilai kosong & bukan nilai hasil isian otomatis kita)
+            if (keep_manual && current !== undefined && current !== null && current !== '' && current !== filledByUs) {
+              return;
+            }
+            const val = computed[field];
             // Biarkan kosong bila backend tidak menghitung nilai (mis. kategori manual)
-            if (val !== undefined && val !== null && val !== '') updates[target] = val;
+            if (val !== undefined && val !== null && val !== '') updates[field] = val;
           });
-          if (Object.keys(updates).length > 0) form.setFieldsValue(updates);
+          if (Object.keys(updates).length > 0) {
+            form.setFieldsValue(updates);
+            Object.entries(updates).forEach(([f, v]) => { autoSetRef.current[f] = v; });
+            // setFieldsValue TIDAK memicu re-render untuk field tanpa Form.Item
+            // (mis. flag virtual `category_auto_generate`) → paksa refresh agar
+            // field_config_rules (readonly_when/hide_when/field_props) langsung
+            // dievaluasi ulang dengan nilai baru.
+            setSummaryRevision((v) => v + 1);
+          }
         }).catch(() => {
           // best-effort — nilai tetap dihitung backend saat simpan
         });
