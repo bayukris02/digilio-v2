@@ -84,8 +84,9 @@ Diatur **hanya di shell** (prop `bordered` + `scroll={{ x: 'max-content' }}` + t
 - **Garis**: `borderColor #d9d9d9`; **rapat**: `cellPaddingBlockSM 4`, `cellPaddingInlineSM 8`.
 - **Baris Total** (`summaryCells`): background `#fafafa` (via `.rpt-sheet .ant-table-summary`).
 - Angka tetap rata kanan lewat `align: 'right'` di metadata kolom (standar Excel).
-- **Lebar halaman**: konten report **90%** dari area kerja (prop `maxWidth` opsional bila perlu batas atas),
-  sehingga responsif saat window di-zoom / ukuran layar berubah.
+- **Lebar halaman**: konten report memakai **lebar penuh area kerja** (`width: '100%'`, padding halaman 8)
+  → margin kiri/kanan seminimal mungkin dan responsif saat window di-zoom / ukuran layar berubah.
+  `maxWidth` opsional, hanya bila report butuh batas atas.
 - **Tombol `Filter` (oranye, di kanan tombol Refresh)**: show/hide card filter. Saat card filter
   disembunyikan, card tabel otomatis naik. Tampil hanya jika report punya filter di card.
 

@@ -389,9 +389,10 @@ export default function ReportPage<T extends object>({
     : undefined;
 
   return (
-    <div style={{ padding: 16 }}>
-      {/* Lebar 90% dari area kerja (responsif terhadap zoom/ukuran layar). */}
-      <div style={{ width: '90%', margin: '0 auto', ...(maxWidth ? { maxWidth } : null) }}>
+    <div style={{ padding: 8 }}>
+      {/* Memakai lebar area kerja maksimal (responsif terhadap zoom/ukuran layar) —
+          margin kiri/kanan seminimal mungkin; `maxWidth` hanya bila perlu batas atas. */}
+      <div style={{ width: '100%', ...(maxWidth ? { maxWidth, margin: '0 auto' } : null) }}>
         {/* Header — judul sejajar dengan filter header + tombol aksi.
             marginBottom dilebihkan kalau ada filter header (info tanggal italic di bawahnya). */}
         <div
