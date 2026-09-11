@@ -13,6 +13,7 @@ import GenericDashboardPage from '../pages/dashboard/DashboardPage';
 import FinancialReportPage from '../pages/base/FinancialReportPage';
 import StockBalancePage from '../pages/base/StockBalancePage';
 import StockCardPage from '../pages/base/StockCardPage';
+import StockLedgerPage from '../pages/base/StockLedgerPage';
 import TaxReportPage from '../pages/base/TaxReportPage';
 import AccessRightsPage from '../pages/base/AccessRightsPage';
 import ComingSoon from '../pages/ComingSoon';
@@ -92,7 +93,7 @@ export const router = createBrowserRouter([
       { path: 'inventory.stock_in/new', element: <ModelFormPage modelName="inventory.stock_in" basePath="/inventory.stock_in" /> },
       { path: 'inventory.stock_in/:recordId', element: <ModelFormPage modelName="inventory.stock_in" basePath="/inventory.stock_in" /> },
       // Inventory -> Stock Ledger (report read-only, ditulis StockEngine)
-      { path: 'inventory.stock_ledger', element: <ModelListPage modelName="inventory.stock_ledger" basePath="/inventory.stock_ledger" readOnly /> },
+      { path: 'inventory.stock_ledger', element: <StockLedgerPage /> },
       { path: 'inventory.stock_ledger/new', element: <ModelFormPage modelName="inventory.stock_ledger" basePath="/inventory.stock_ledger" readOnly /> },
       { path: 'inventory.stock_ledger/:recordId', element: <ModelFormPage modelName="inventory.stock_ledger" basePath="/inventory.stock_ledger" readOnly /> },
       { path: 'inventory/pivot', element: <ComingSoon /> },

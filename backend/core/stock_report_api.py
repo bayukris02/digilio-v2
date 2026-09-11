@@ -61,3 +61,24 @@ def stock_card(request):
         date_to=request.query_params.get('date_to') or None,
     )
     return Response(payload)
+
+
+def _labels(raw):
+    """Parse 'a,b' → list[str] (buang kosong)."""
+    if not raw:
+        return []
+    return [p.strip() for p in str(raw).split(',') if p.strip()]
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def stock_ledger(request):
+    """Laporan Stock Ledger — daftar mentah pergerakan stok + total masuk/keluar."""
+    payload = StockEngine.stock_ledger(
+        product_id=_opt_int(request.query_params.get('product')),
+        warehouse_ids=_warehouse_ids(request.query_params.get('warehouses')),
+        date_from=request.query_params.get('date_from') or None,
+        date_to=request.query_params.get('date_to') or None,
+        source_models=_labels(request.query_params.get('sources')),
+    )
+    return Response(payload)

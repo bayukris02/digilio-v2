@@ -3,7 +3,7 @@ from core.model_api import model_list, model_config, model_compute, ModelRecordV
 from core.dashboard_api import dashboard_data
 from core.report_api import report_data
 from core.pivot_api import pivot_data
-from core.stock_report_api import stock_balance, stock_card
+from core.stock_report_api import stock_balance, stock_card, stock_ledger
 from core.tax_report_api import tax_report
 from core.access_api import (
     access_roles, access_role_detail, access_role_permissions,
@@ -20,6 +20,7 @@ urlpatterns = [
     # Stock reports (agregasi via StockEngine dari row stock ledger)
     path('stock/balance/', stock_balance, name='stock-balance'),
     path('stock/card/', stock_card, name='stock-card'),
+    path('stock/ledger/', stock_ledger, name='stock-ledger'),
     # Tax report (rekap pajak per tag dari baris dokumen lintas modul)
     path('tax/report/', tax_report, name='tax-report'),
     # RBAC — role & checklist akses menu

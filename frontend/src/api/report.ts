@@ -90,6 +90,47 @@ export const stockCardApi = {
     api.get<StockCardData>('/stock/card/', { params }).then((r) => r.data),
 };
 
+// ── Stock ledger (daftar mentah pergerakan stok) ──
+
+export interface StockLedgerRow {
+  id: number;
+  date: string;
+  product_id: number;
+  code: string;
+  name: string;
+  uom: string;
+  location_id: number;
+  location_name: string;
+  quantity: number;
+  qty_in: number | null;
+  qty_out: number | null;
+  unit_cost: number;
+  source_model: string;
+  source_label: string;
+  reference: string;
+  description: string;
+}
+
+export interface StockLedgerData {
+  key: string;
+  title: string;
+  filters: {
+    product_id: number | null;
+    warehouse_ids: number[];
+    date_from: string;
+    date_to: string;
+    source_models: string[];
+  };
+  sources: { value: string; label: string }[];
+  rows: StockLedgerRow[];
+  totals: { qty_in: number; qty_out: number; net: number; count: number };
+}
+
+export const stockLedgerApi = {
+  get: (params?: { product?: number; warehouses?: string; date_from?: string; date_to?: string; sources?: string }) =>
+    api.get<StockLedgerData>('/stock/ledger/', { params }).then((r) => r.data),
+};
+
 // ── Tax report (rekap pajak per tag dari baris dokumen lintas modul) ──
 
 export interface TaxReportModule {

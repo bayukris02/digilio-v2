@@ -1,16 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Typography, Space, Button, DatePicker, Select, Table, Card, message, Tag, Switch } from 'antd';
-import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
-import dayjs, { Dayjs } from 'dayjs';
+import { Typography, message } from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
 import { stockBalanceApi } from '../../api/report';
 import { modelApi } from '../../api/models';
-import { exportXlsx, numCell } from '../../utils/exportExcel';
+import { fmtQty, fmtReportDate } from '../../utils/reportFormat';
+import ReportPage from '../../components/report/ReportPage';
+import type { ReportColumn, ReportFilter, ReportSummaryCell } from '../../components/report/types';
 
-const { Title, Text } = Typography;
-
-const fmtQty = (v: number | null | undefined) =>
-  Number(v ?? 0).toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+const { Text } = Typography;
 
 const fmtDelta = (v: number | null | undefined) => {
   const n = Number(v ?? 0);
@@ -18,12 +16,23 @@ const fmtDelta = (v: number | null | undefined) => {
   return n > 0 ? `+${s}` : n < 0 ? `−${s}` : s;
 };
 
-const PRESETS: { key: string; label: string; offsetDays: number }[] = [
-  { key: 'today', label: 'Hari Ini', offsetDays: 0 },
-  { key: 'yesterday', label: 'Kemarin', offsetDays: 1 },
-  { key: 'lastweek', label: 'Minggu Lalu', offsetDays: 7 },
-  { key: 'lastmonth', label: 'Bulan Lalu', offsetDays: 30 },
+/** Opsi dropdown periode — snapshot SATU tanggal (mode 'date'). */
+const DATE_OPTIONS: { key: string; label: string }[] = [
+  { key: 'today', label: 'Hari Ini' },
+  { key: 'yesterday', label: 'Kemarin' },
+  { key: 'last_week', label: 'Minggu Lalu' },
+  { key: 'last_month', label: 'Bulan Lalu' },
+  { key: 'all', label: 'Stok Terkini' },
 ];
+
+/** Tanggal snapshot untuk key periode (null = seluruh row aktif / stok terkini). */
+const snapshotDate = (key: string): Dayjs | null => {
+  if (key === 'today') return dayjs().startOf('day');
+  if (key === 'yesterday') return dayjs().subtract(1, 'day').startOf('day');
+  if (key === 'last_week') return dayjs().subtract(7, 'day').startOf('day');
+  if (key === 'last_month') return dayjs().subtract(1, 'month').startOf('day');
+  return null;
+};
 
 /** Blok tanggal di masa depan (stok masa depan tidak mungkin). */
 const notFuture = (d: Dayjs) => d.isAfter(dayjs().endOf('day'));
@@ -40,16 +49,26 @@ interface MergedRow {
 /**
  * Stock Balance — saldo stok per produk pada SATU tanggal (opsional compare
  * dua tanggal). Route: /inventory/stock_balance
+ *
+ * Layout/UI memakai standar <ReportPage /> (2 card: filter 4 kolom + tabel);
+ * halaman ini hanya mendefinisikan metadata filter, kolom, dan export.
  */
 export default function StockBalancePage() {
-  const today = useMemo(() => dayjs().startOf('day'), []);
-  const [date, setDate] = useState<Dayjs>(() => dayjs().startOf('day'));
+  const [period, setPeriod] = useState('today');
+  const [customDate, setCustomDate] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [compare, setCompare] = useState(false);
   const [date2, setDate2] = useState<Dayjs | null>(null);
   const [warehouseIds, setWarehouseIds] = useState<number[]>([]);
   const [productId, setProductId] = useState<number | undefined>(undefined);
   const [productLabel, setProductLabel] = useState<string | undefined>(undefined);
   const [productSearch, setProductSearch] = useState('');
+
+  /** Tanggal snapshot efektif (dropdown periode / kustom). */
+  const date = useMemo(
+    () => (period === 'custom' ? customDate?.[0] ?? null : snapshotDate(period)),
+    [period, customDate],
+  );
+  const resolvedRange = useMemo(() => [date, null] as [Dayjs | null, Dayjs | null], [date]);
 
   // ── Sumber filter ──
   const warehousesQuery = useQuery({
@@ -116,13 +135,8 @@ export default function StockBalancePage() {
   const loading = q1.isLoading || (compare && q2.isLoading);
   const refreshing = (q1.isFetching || (compare && !!q2 && q2.isFetching)) && !loading;
 
-  const activePreset = PRESETS.find((p) => date?.isSame(today.subtract(p.offsetDays, 'day'), 'day'));
-  const dateLabel = activePreset
-    ? activePreset.label
-    : date
-      ? date.format('DD MMM YYYY')
-      : '—';
-  const date2Label = date2 ? date2.format('DD MMM YYYY') : '—';
+  const dateLabel = date ? fmtReportDate(date.format('YYYY-MM-DD')) : 'Stok Terkini';
+  const date2Label = date2 ? fmtReportDate(date2.format('YYYY-MM-DD')) : '—';
 
   const onRefresh = useCallback(() => {
     q1.refetch();
@@ -132,9 +146,7 @@ export default function StockBalancePage() {
   const toggleCompare = useCallback(
     (on: boolean) => {
       setCompare(on);
-      if (on && !date2) {
-        setDate2(date.subtract(7, 'day'));
-      }
+      if (on && !date2) setDate2((date ?? dayjs()).subtract(7, 'day').startOf('day'));
     },
     [date, date2],
   );
@@ -168,34 +180,36 @@ export default function StockBalancePage() {
     };
   }, [compare, dataRows, q1.data]);
 
-  // ── Kolom ──
-  const fixedCols = [
-    { title: 'Kode', dataIndex: 'code', width: 120 },
-    { title: 'Produk', dataIndex: 'name' },
-    { title: 'Satuan', dataIndex: 'uom', width: 90 },
+  // ── Kolom (metadata) ──
+  const fixedCols: ReportColumn<MergedRow>[] = [
+    { key: 'code', title: 'Kode', dataIndex: 'code', width: 120 },
+    { key: 'name', title: 'Produk', dataIndex: 'name' },
+    { key: 'uom', title: 'Satuan', dataIndex: 'uom', width: 90 },
   ];
-  const qtyCols = compare
+  const qtyCols: ReportColumn<MergedRow>[] = compare
     ? [
         {
+          key: 'qty_a',
           title: `Saldo · ${dateLabel}`,
           dataIndex: 'qtyA',
-          align: 'right' as const,
+          align: 'right',
           width: 140,
-          render: (v: number) => <Text strong>{fmtQty(v)}</Text>,
+          render: (r) => <Text strong>{fmtQty(r.qtyA)}</Text>,
         },
         {
+          key: 'qty_b',
           title: `Saldo · ${date2Label}`,
           dataIndex: 'qtyB',
-          align: 'right' as const,
+          align: 'right',
           width: 140,
-          render: (v: number) => <Text strong>{fmtQty(v)}</Text>,
+          render: (r) => <Text strong>{fmtQty(r.qtyB)}</Text>,
         },
         {
+          key: 'delta',
           title: 'Selisih',
-          dataIndex: 'delta',
-          align: 'right' as const,
+          align: 'right',
           width: 120,
-          render: (_: unknown, r: MergedRow) => {
+          render: (r) => {
             const d = r.qtyB - r.qtyA;
             return (
               <Text strong style={{ color: d > 0 ? '#389e0d' : d < 0 ? '#cf1322' : undefined }}>
@@ -203,196 +217,142 @@ export default function StockBalancePage() {
               </Text>
             );
           },
+          export: { value: (r) => r.qtyB - r.qtyA },
         },
       ]
     : [
         {
+          key: 'qty_a',
           title: `Saldo · ${dateLabel}`,
           dataIndex: 'qtyA',
-          align: 'right' as const,
+          align: 'right',
           width: 140,
-          render: (v: number) => <Text strong>{fmtQty(v)}</Text>,
+          render: (r) => <Text strong>{fmtQty(r.qtyA)}</Text>,
         },
       ];
 
-  const columns = [...fixedCols, ...qtyCols];
+  const columns: ReportColumn<MergedRow>[] = [...fixedCols, ...qtyCols];
 
-  // ── Export Excel ──
-  const onExport = useCallback(() => {
-    const rows: (string | number)[][] = [
-      ['Stock Balance'],
-      ['Tanggal', compare ? `${dateLabel} vs ${date2Label}` : dateLabel],
-      ['Gudang', warehouseLabel],
-      ['Produk', productLabel ?? 'Semua Produk'],
-      [],
-    ];
-    if (compare) {
-      rows.push(['Kode', 'Produk', 'Satuan', `Saldo ${dateLabel}`, `Saldo ${date2Label}`, 'Selisih']);
-      for (const r of dataRows) rows.push([r.code, r.name, r.uom, numCell(r.qtyA), numCell(r.qtyB), numCell(r.qtyB - r.qtyA)]);
-      rows.push(['', 'Total', '', numCell(totals.qtyA), numCell(totals.qtyB), numCell(totals.delta)]);
-    } else {
-      rows.push(['Kode', 'Produk', 'Satuan', `Saldo ${dateLabel}`]);
-      for (const r of dataRows) rows.push([r.code, r.name, r.uom, numCell(r.qtyA)]);
-      rows.push(['', 'Total', '', numCell(totals.qtyA)]);
-    }
-    exportXlsx({
-      filename: `Stock_Balance_${compare && date2 ? `${date.format('YYYY-MM-DD')}_vs_${date2.format('YYYY-MM-DD')}` : date.format('YYYY-MM-DD')}.xlsx`,
+  /** Baris Total — selnya mengikuti jumlah kolom yang sedang tampil. */
+  const summaryCells: ReportSummaryCell[] = [
+    { colSpan: 3, value: <Text strong>Total</Text> },
+    { align: 'right', value: <Text strong>{fmtQty(totals.qtyA)}</Text> },
+    ...(compare
+      ? [
+          { align: 'right' as const, value: <Text strong>{fmtQty(totals.qtyB)}</Text> },
+          {
+            align: 'right' as const,
+            value: (
+              <Text strong style={{ color: totals.delta > 0 ? '#389e0d' : totals.delta < 0 ? '#cf1322' : undefined }}>
+                {fmtDelta(totals.delta)}
+              </Text>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  // ── Filter (metadata) — grid 4 kolom: 1+1+1+1 ──
+  const filters: ReportFilter[] = [
+    {
+      key: 'product',
+      label: 'Produk',
+      type: 'select',
+      value: productId,
+      options: productOptions,
+      showSearch: true,
+      serverSearch: true,
+      placeholder: 'Cari produk…',
+      loading: productsQuery.isFetching,
+      onSearch: (v) => setProductSearch(v),
+      notFoundContent: productSearch ? 'Produk tidak ditemukan' : 'Ketik untuk mencari produk…',
+      onChange: (v, o) => {
+        const id = v as number | undefined;
+        setProductId(id);
+        const label = (o as { label?: string } | undefined)?.label;
+        setProductLabel(id !== undefined ? label ?? `#${id}` : undefined);
+      },
+    },
+    {
+      key: 'warehouse',
+      label: 'Gudang',
+      type: 'select',
+      value: warehouseIds,
+      options: warehouseOptions,
+      multiple: true,
+      showSearch: true,
+      placeholder: 'Semua Gudang',
+      loading: warehousesQuery.isLoading,
+      onChange: (v) => setWarehouseIds((v as number[] | undefined) ?? []),
+    },
+    {
+      key: 'compare',
+      label: 'Compare',
+      type: 'boolean',
+      value: compare,
+      onChange: toggleCompare,
+    },
+    {
+      key: 'compare_date',
+      label: `Pembanding · ${date2Label}`,
+      type: 'date',
+      value: date2,
+      disabled: !compare,
+      disabledDate: notFuture,
+      onChange: (d) => setDate2(d ? d.startOf('day') : null),
+    },
+    {
+      key: 'period',
+      label: 'Periode',
+      type: 'period',
+      mode: 'date',
+      place: 'header',
+      width: 220,
+      value: period,
+      range: customDate,
+      resolvedRange,
+      options: DATE_OPTIONS,
+      disabledDate: notFuture,
+      onChange: ({ key, range: r }) => {
+        setPeriod(key);
+        if (key === 'custom') setCustomDate(r ?? (date ? [date, null] : null));
+      },
+    },
+  ];
+
+  // ── Export Excel (header & isi diturunkan shell dari metadata kolom) ──
+  const exportConfig = useMemo(
+    () => ({
+      filename: () =>
+        `Stock_Balance_${
+          compare && date2
+            ? `${date?.format('YYYY-MM-DD') ?? 'all'}_vs_${date2.format('YYYY-MM-DD')}`
+            : date?.format('YYYY-MM-DD') ?? 'all'
+        }.xlsx`,
       sheetName: 'Stock Balance',
-      rows,
-      colWidths: [14, 36, 10, 16, 16, 12],
-    });
-  }, [compare, date, date2, dateLabel, warehouseLabel, productLabel, dataRows, totals]);
+      meta: [
+        ['Tanggal', compare ? `${dateLabel} vs ${date2Label}` : dateLabel],
+        ['Gudang', warehouseLabel],
+        ['Produk', productLabel ?? 'Semua Produk'],
+      ] as (string | number)[][],
+    }),
+    [compare, date, date2, dateLabel, date2Label, warehouseLabel, productLabel],
+  );
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ maxWidth: 1000, margin: '0 auto', width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div>
-            <Title level={4} style={{ margin: 0 }}>
-              Stock Balance
-            </Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              Saldo stok per <Tag style={{ marginRight: 0 }}>{dateLabel}</Tag> · {warehouseLabel}
-            </Text>
-          </div>
-          <Space>
-            <Button size="small" icon={<DownloadOutlined />} onClick={onExport} disabled={!q1.data?.rows?.length}>
-              Export Excel
-            </Button>
-            <Button size="small" icon={<ReloadOutlined spin={refreshing} />} onClick={onRefresh} loading={refreshing}>
-              Refresh
-            </Button>
-          </Space>
-        </div>
-
-        {/* Filter panel */}
-        <Card size="small" style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, rowGap: 10 }}>
-            <Space size={4} align="center">
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Gudang:
-              </Text>
-              <Select
-                size="small"
-                mode="multiple"
-                allowClear
-                showSearch
-                optionFilterProp="label"
-                placeholder="Semua Gudang"
-                style={{ minWidth: 220, maxWidth: 360 }}
-                value={warehouseIds}
-                options={warehouseOptions}
-                loading={warehousesQuery.isLoading}
-                onChange={(v) => setWarehouseIds(v)}
-              />
-            </Space>
-            <Space size={4} align="center">
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Produk:
-              </Text>
-              <Select
-                size="small"
-                allowClear
-                showSearch
-                placeholder="Cari produk…"
-                style={{ width: 220 }}
-                value={productId}
-                options={productOptions}
-                loading={productsQuery.isFetching}
-                filterOption={false}
-                onSearch={(v) => setProductSearch(v)}
-                onChange={(v, o) => {
-                  setProductId(v);
-                  const label = (o as { label?: string } | undefined)?.label;
-                  setProductLabel(v !== undefined ? label ?? `#${v}` : undefined);
-                }}
-                notFoundContent={productSearch ? 'Produk tidak ditemukan' : 'Ketik untuk mencari produk…'}
-              />
-            </Space>
-            <Space size={4} align="center">
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Tanggal:
-              </Text>
-              {PRESETS.map((p) => {
-                const presetDate = today.subtract(p.offsetDays, 'day');
-                const active = !!date?.isSame(presetDate, 'day') && !compare;
-                return (
-                  <Button
-                    key={p.key}
-                    size="small"
-                    type={active ? 'primary' : 'default'}
-                    onClick={() => {
-                      setDate(presetDate);
-                      if (compare) setCompare(false);
-                    }}
-                  >
-                    {p.label}
-                  </Button>
-                );
-              })}
-              <DatePicker
-                size="small"
-                value={date}
-                allowClear={false}
-                disabledDate={notFuture}
-                onChange={(d) => setDate((d ?? today).startOf('day'))}
-              />
-            </Space>
-            <Space size={4} align="center">
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Compare:
-              </Text>
-              <Switch size="small" checked={compare} onChange={toggleCompare} />
-              {compare ? (
-                <DatePicker
-                  size="small"
-                  value={date2}
-                  allowClear={false}
-                  disabledDate={notFuture}
-                  onChange={(d) => setDate2((d ?? today).startOf('day'))}
-                />
-              ) : null}
-            </Space>
-          </div>
-        </Card>
-
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 48, color: '#8c8c8c' }}>Loading report…</div>
-        ) : (
-          <Card size="small">
-            <Table
-              size="small"
-              rowKey="product_id"
-              columns={columns}
-              dataSource={dataRows}
-              pagination={false}
-              locale={{ emptyText: 'Tidak ada stok pada tanggal tersebut' }}
-              summary={() => (
-                <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={3}>
-                    <Text strong>Total</Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={3} align="right">
-                    <Text strong>{fmtQty(totals.qtyA)}</Text>
-                  </Table.Summary.Cell>
-                  {compare ? (
-                    <>
-                      <Table.Summary.Cell index={4} align="right">
-                        <Text strong>{fmtQty(totals.qtyB)}</Text>
-                      </Table.Summary.Cell>
-                      <Table.Summary.Cell index={5} align="right">
-                        <Text strong style={{ color: totals.delta > 0 ? '#389e0d' : totals.delta < 0 ? '#cf1322' : undefined }}>
-                          {fmtDelta(totals.delta)}
-                        </Text>
-                      </Table.Summary.Cell>
-                    </>
-                  ) : null}
-                </Table.Summary.Row>
-              )}
-            />
-          </Card>
-        )}
-      </div>
-    </div>
+    <ReportPage<MergedRow>
+      title="Stock Balance"
+      filters={filters}
+      fetchedAt={q1.dataUpdatedAt || null}
+      loading={loading}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      columns={columns}
+      dataSource={dataRows}
+      rowKey="product_id"
+      summaryCells={summaryCells}
+      emptyText="Tidak ada stok pada tanggal tersebut"
+      exportConfig={exportConfig}
+    />
   );
 }

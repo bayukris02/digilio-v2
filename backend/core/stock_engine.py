@@ -430,6 +430,142 @@ class StockEngine:
         return {'key': 'stock_card', 'title': 'Stock Card',
                 'filters': filters, 'rows': rows}
 
+    @classmethod
+    def stock_ledger(cls, product_id=None, warehouse_ids=None, date_from=None,
+                     date_to=None, source_models=None):
+        """Laporan Stock Ledger — daftar mentah pergerakan stok (1 row = 1 pergerakan).
+
+        Sumber sama dengan stock card (row inventory.stock_ledger aktif), tanpa
+        agregasi saldo berjalan — hanya daftar pergerakan + total masuk/keluar.
+
+        source_models: list string source_model (kosong = semua).
+        Return: {key, title, filters, sources, rows, totals}
+          rows: [{id, date, product_id, code, name, uom, location_id, location_name,
+                  qty_in, qty_out, quantity, unit_cost, source_model, source_label,
+                  reference, description}]
+          totals: {qty_in, qty_out, net, count}
+          sources: [{value, label}] — pilihan filter "Model Sumber"
+        """
+        from datetime import datetime, date as date_cls
+
+        def _norm(v):
+            if v is None:
+                return None
+            if isinstance(v, date_cls):
+                return v
+            try:
+                return datetime.strptime(str(v)[:10], '%Y-%m-%d').date()
+            except ValueError:
+                return None
+
+        d_from = _norm(date_from)
+        d_to = _norm(date_to)
+        sources = list(source_models or [])
+        filters = {
+            'product_id': product_id,
+            'warehouse_ids': warehouse_ids or [],
+            'date_from': str(d_from or ''),
+            'date_to': str(d_to or ''),
+            'source_models': sources,
+        }
+        ledger_cls = cls._ledger_cls()
+        empty = {'key': 'stock_ledger', 'title': 'Stock Ledger',
+                 'filters': filters, 'sources': [], 'rows': [],
+                 'totals': {'qty_in': 0.0, 'qty_out': 0.0, 'net': 0.0, 'count': 0}}
+        if ledger_cls is None:
+            return empty
+
+        def _base_qs():
+            qs = ledger_cls.objects.filter(is_deleted=False)
+            if product_id is not None:
+                qs = qs.filter(product_id=product_id)
+            loc_ids = cls._resolve_location_ids(warehouse_ids)
+            if loc_ids is not None:
+                qs = qs.filter(location_id__in=loc_ids)
+            if d_from is not None:
+                qs = qs.filter(date__gte=d_from)
+            if d_to is not None:
+                qs = qs.filter(date__lte=d_to)
+            return qs
+
+        # Pilihan "Model Sumber" = distinct dari seluruh row yang cocok filter lain
+        src_values = sorted({
+            str(r['source_model']) for r in _base_qs().values('source_model').distinct()
+            if r['source_model']
+        })
+        src_payload = [{'value': v, 'label': cls.SOURCE_LABELS.get(v, v)} for v in src_values]
+        empty['sources'] = src_payload
+
+        qs = _base_qs()
+        if sources:
+            qs = qs.filter(source_model__in=sources)
+
+        events = list(qs.values(
+            'id', 'date', 'product_id', 'location_id', 'quantity', 'unit_cost',
+            'source_model', 'source_reference', 'description').order_by('-date', '-id'))
+        if not events:
+            return empty
+
+        product_cls = ErpModelBase._model_registry.get('inventory.product')
+        pmeta = {}
+        if product_cls is not None:
+            for p in product_cls.objects.filter(id__in={e['product_id'] for e in events}, is_deleted=False):
+                pmeta[p.pk] = {
+                    'code': getattr(p, 'code', None) or '',
+                    'name': str(p),
+                    'uom': str(getattr(p, 'uom', '') or ''),
+                }
+        loc_cls = ErpModelBase._model_registry.get('inventory.warehouse_location')
+        lmeta = {}
+        if loc_cls is not None:
+            for loc in loc_cls.objects.filter(id__in={e['location_id'] for e in events}, is_deleted=False):
+                lmeta[loc.pk] = str(loc)
+
+        rows = []
+        qty_in = qty_out = 0.0
+        for e in events:
+            pid = e['product_id']
+            lid = e['location_id']
+            pm = pmeta.get(pid, {'code': '', 'name': f'#{pid}', 'uom': ''})
+            qty = float(e['quantity'] or 0)
+            if qty > 0:
+                qty_in += qty
+            elif qty < 0:
+                qty_out += -qty
+            model = e['source_model'] or ''
+            rows.append({
+                'id': e['id'],
+                'date': str(e['date']) if e['date'] else '',
+                'product_id': pid,
+                'code': pm['code'],
+                'name': pm['name'],
+                'uom': pm['uom'],
+                'location_id': lid,
+                'location_name': lmeta.get(lid, f'#{lid}'),
+                'quantity': round(qty, 3),
+                'qty_in': round(qty, 3) if qty > 0 else None,
+                'qty_out': round(-qty, 3) if qty < 0 else None,
+                'unit_cost': float(e['unit_cost'] or 0),
+                'source_model': model,
+                'source_label': cls.SOURCE_LABELS.get(model, model),
+                'reference': e['source_reference'] or '',
+                'description': e['description'] or '',
+            })
+
+        return {
+            'key': 'stock_ledger',
+            'title': 'Stock Ledger',
+            'filters': filters,
+            'sources': src_payload,
+            'rows': rows,
+            'totals': {
+                'qty_in': round(qty_in, 3),
+                'qty_out': round(qty_out, 3),
+                'net': round(qty_in - qty_out, 3),
+                'count': len(rows),
+            },
+        }
+
     # ── Helpers ──
 
     @classmethod
