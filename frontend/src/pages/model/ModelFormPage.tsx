@@ -786,6 +786,34 @@ export default function ModelFormPage({
       }
     }
 
+    // ── Notifikasi aksi (generik — berlaku semua model) ──
+    // Sebelumnya `${actionName} completed` (Inggris, tanpa info model). Sekarang menyebut
+    // aksi + model (verbose_name) + referensi record, mis. "Konfirmasi Permintaan Pembelian
+    // berhasil — PR/2026/0001".
+    const actionLabel = (btn.label as string) || actionName;
+    // Judul notifikasi = "<Aksi> <Model>", tanpa mengulang nama model bila label aksinya
+    // sudah memuatnya (mis. aksi "Proses Penerimaan" pada model "Penerimaan Barang").
+    const repeatGuard = () => {
+      const words = entityLabel.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+      const actionLc = actionLabel.toLowerCase();
+      return words.length > 0 && words.some((w) => actionLc.includes(w))
+        ? actionLabel
+        : `${actionLabel} ${entityLabel}`;
+    };
+    // Referensi record diambil dari response aksi lebih dulu (nilai terbaru, mis. nomor
+    // sequence hasil konfirmasi), baru fallback ke nilai yang tampil di form.
+    const actionDoneText = (data?: Record<string, unknown>) => {
+      const raw = data && displayField ? data[displayField] : undefined;
+      const val = raw ?? displayValue;
+      let ref = '';
+      if (typeof val === 'string' || typeof val === 'number') {
+        ref = String(val);
+      } else if (val && typeof val === 'object' && 'name' in val) {
+        ref = String((val as { name?: unknown }).name ?? '');
+      }
+      return `${repeatGuard()} berhasil${ref ? ` — ${ref}` : ''}`;
+    };
+
     // ── Execute action ──
     // Helper: terapkan response sukses (normalisasi + set form + toast)
     const applyActionSuccess = (result: Record<string, unknown>) => {
@@ -832,7 +860,7 @@ export default function ModelFormPage({
       if (result.message) {
         message.success(result.message as string);
       } else {
-        message.success(`${actionName} completed`);
+        message.success(actionDoneText(recordData));
       }
     };
 
@@ -906,7 +934,7 @@ export default function ModelFormPage({
         if (result.message) {
           message.success(result.message as string);
         } else {
-          message.success(`${actionName} completed`);
+          message.success(actionDoneText(result));
         }
         return;
       }
