@@ -506,6 +506,10 @@ export default function ModelFormPage({
 
   const displayValue = Form.useWatch(displayField || '', form);
 
+  // Label entitas untuk notifikasi simpan (generik — dari verbose_name model,
+  // jadi tiap model beda: Produk, Kategori, Penjualan, dst)
+  const entityLabel = (config?.verbose_name as string) || (config?.model_name as string) || 'data';
+
   // Watch semua form values untuk trigger re-render column_config_rules
   const allFormValues = Form.useWatch([], form);
 
@@ -768,7 +772,10 @@ export default function ModelFormPage({
         }
         setChatterKey((prev) => prev + 1);
         queryClient.invalidateQueries({ queryKey: ['model-records'] });
-        message.success({ content: 'Data tersimpan', key: saveKey, duration: 1 });
+        message.success({
+          content: isNew ? `Berhasil menambah data ${entityLabel}` : `Berhasil menyimpan data ${entityLabel}`,
+          key: saveKey, duration: 1,
+        });
         syncSaveSnapshot();
       } catch {
         message.error({ content: 'Gagal menyimpan, aksi dibatalkan', key: saveKey });
@@ -1519,7 +1526,7 @@ export default function ModelFormPage({
         const result = await modelApi.createRecord(apiModelName, prepared);
         syncSaveSnapshot();
         skipBlockerRef.current = true;
-        message.success('Berhasil dibuat');
+        message.success(`Berhasil menambah data ${entityLabel}`);
         navigate(`${basePath}/${result?.id || recordId}`);
       } else {
         const result = await modelApi.updateRecord(apiModelName, Number(recordId), prepared);
@@ -1538,7 +1545,7 @@ export default function ModelFormPage({
         form.setFieldsValue(result);
         setRecordData(result);
         syncSaveSnapshot();
-        message.success('Berhasil disimpan');
+        message.success(`Berhasil menyimpan data ${entityLabel}`);
       }
       queryClient.invalidateQueries({ queryKey: ['model-records'] });
       setChatterKey((prev) => prev + 1); // refresh chatter logs
