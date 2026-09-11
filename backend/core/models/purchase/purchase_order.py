@@ -254,6 +254,7 @@ class PurchaseOrder(BaseModel):
                             'relation': 'order_lines',
                             'columns': ['product', 'qty', 'done_qty', 'in_receipt_qty', 'remaining_qty'],
                             'show_for_modes': ['save_draft', 'confirm'],
+                            'qty_label': 'Qty Diterima',
                         },
                     },
                 },

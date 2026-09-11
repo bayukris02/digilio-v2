@@ -192,6 +192,7 @@ class SalesOrder(BaseModel):
                             'relation': 'order_lines',
                             'columns': ['product', 'qty', 'delivered_qty', 'in_delivery_qty', 'remaining_qty'],
                             'show_for_modes': ['save_draft', 'confirm'],
+                            'qty_label': 'Qty Dikirim',
                         },
                     },
                 },

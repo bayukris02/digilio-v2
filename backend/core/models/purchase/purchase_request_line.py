@@ -30,7 +30,7 @@ class PurchaseRequestLine(BaseModel):
             depends=['qty', 'estimated_cost'],
         ),
         'processed_qty': FloatField(label='Qty Diproses', default=0, virtual=True),
-        'remaining_qty': FloatField(label='Qty Sisa', default=0, virtual=True),
+        'remaining_qty': FloatField(label='Qty Belum Diproses', default=0, virtual=True),
         'draft_po_qty': FloatField(label='Draft PO Qty', default=0, virtual=True, editable_statuses=[]),
         'confirmed_po_qty': FloatField(label='Konfirm PO Qty', default=0, virtual=True, editable_statuses=[]),
         'received_qty': FloatField(label='Qty Diterima', default=0, virtual=True, editable_statuses=[]),
