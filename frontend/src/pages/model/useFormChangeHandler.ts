@@ -23,6 +23,9 @@
  *    notebook ikut ter-reset.
  * 3. Field dengan `confirm_onchange` → saat ada line items: muncul modal
  *    konfirmasi; "OK" → baris di-reset; "Batal" → nilai balik ke semula.
+ *    Bila konfigurasi punya `reset_seed: {field, row}` → baris pertama hasil
+ *    reset diisi dari nilai baru field tsb (mis. baris satuan utama produk
+ *    mengikuti field Satuan header).
  * 4. Field dengan `populate_lines` (mis. pilih Order Template) → line items
  *    terisi dari template; kalau sudah ada baris → konfirmasi dulu.
  * 5. Semua perubahan di atas tetap memicu indikator "Perubahan belum disimpan".
@@ -96,12 +99,19 @@ export function useFormChangeHandler(params: {
       });
 
       // confirm_onchange: jika field berubah dan ada line items → konfirmasi dulu
-      // definisinya di model: Many2OneField(..., confirm_onchange={message, reset_relations})
+      // definisinya di model: Many2OneField(..., confirm_onchange={message,
+      // reset_relations, reset_seed})
       Object.entries(changedValues).forEach(([fieldName, newValue]) => {
         const fieldCfg = config.fields?.[fieldName];
         const confirmCfg = fieldCfg?.confirm_onchange as Record<string, unknown> | undefined;
-        if (!confirmCfg || isRevertingRef.current) return;
+        if (!confirmCfg) return;
         const oldValue = prevFieldValuesRef.current[fieldName];
+        // Catat nilai terbaru SELALU — form bisa terisi dari server saat load
+        // (setFieldsValue memicu onValuesChange) sehingga nilai lama sering belum
+        // tercatat saat config baru dimuat. Tanpa ini, ganti nilai oleh user
+        // tidak terdeteksi dan dialog konfirmasi tidak pernah muncul.
+        prevFieldValuesRef.current = { ...prevFieldValuesRef.current, [fieldName]: newValue };
+        if (isRevertingRef.current) return;
         if (oldValue === newValue || oldValue === undefined) return;
         const resetRels = (confirmCfg.reset_relations as string[]) || [];
         const hasLines = resetRels.some((rel: string) => {
@@ -109,13 +119,33 @@ export function useFormChangeHandler(params: {
           return items.filter((item) => !item._isAddButton).length > 0;
         });
         if (!hasLines) return;
+        // reset_seed (opsional): baris pertama hasil reset diisi dari NILAI BARU
+        // field ini (mis. baris "satuan utama" = field Satuan header). Bentuk:
+        //   {field: 'uom', row: {is_base: true, konversi: 1}}
+        // Nilai disimpan sebagai {id, value} — kompatibel dengan AG Grid cell
+        // editor many2one; label & keterangan final diisi oleh compute API.
+        const seed = confirmCfg.reset_seed as
+          { field?: string; row?: Record<string, unknown> } | undefined;
         Modal.confirm({
           title: 'Konfirmasi Perubahan',
           content: (confirmCfg.message as string) || 'Mengubah nilai ini akan mereset data baris. Lanjutkan?',
           onOk: () => {
             setLineItems((prev) => {
               const updated = { ...prev };
-              resetRels.forEach((rel: string) => { updated[rel] = []; });
+              resetRels.forEach((rel: string) => {
+                const seedField = seed?.field;
+                if (!seedField || newValue === undefined || newValue === null) {
+                  updated[rel] = [];
+                  return;
+                }
+                const raw = newValue as { id?: unknown; value?: unknown };
+                const id = Number(raw?.id ?? raw?.value ?? newValue);
+                updated[rel] = [{
+                  _key: `line_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                  [seedField]: { id, value: id },
+                  ...(seed?.row || {}),
+                }];
+              });
               return updated;
             });
             setSummaryRevision((v) => v + 1);

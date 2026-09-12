@@ -151,14 +151,31 @@ def get_model_config(cls):
     # Column config rules untuk AG Grid
     config['column_config_rules'] = {
         'order_lines': {
+            # Aturan per BARIS (dinilai dari nilai baris, bukan header)
+            '_row': {'required_skip_when': {'is_base': True}},   # baris turunan header bebas wajib
+            '_action': {'hide_when_row': {'is_base': True}},      # baris turunan tanpa tombol hapus
             'discount_percentage': {
                 'hide_when': {'discount_method': 'nominal', 'discount_type': 'global'},
+                'readonly_when_row': {'is_base': True},
             },
             'discount_amount': {
                 'readonly_when': {'discount_type': 'global'},
                 'editable_when': {'discount_method': 'nominal'},
             },
         },
+    }
+
+    # Konfirmasi saat field berubah (mis. ganti Satuan → reset baris notebook).
+    # reset_seed: baris pertama hasil reset diisi dari NILAI BARU field ini.
+    fields = {
+        'uom': Many2OneField(
+            label='Satuan', relation='inventory.uom', required=True,
+            confirm_onchange={
+                'message': 'Mengganti Satuan akan mereset tab Multi Satuan. Lanjutkan?',
+                'reset_relations': ['units'],
+                'reset_seed': {'field': 'uom', 'row': {'is_base': True, 'konversi': 1}},
+            },
+        ),
     }
 
     # Field config rules untuk form fields

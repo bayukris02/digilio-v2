@@ -53,11 +53,15 @@ export function isLineFieldEmpty(val: unknown): boolean {
 
 /** Collect missing required field errors for ALL non-add-button lines.
  *  Returns [{ key, label }] per missing field.
- *  @param inverseField — if provided, skip this field (e.g. the FK/inverse back-link auto-set by backend) */
+ *  @param inverseField — if provided, skip this field (e.g. the FK/inverse back-link auto-set by backend)
+ *  @param skipRowWhen  — baris yang cocok dikecualikan dari validasi wajib
+ *                        (mis. baris turunan header: {is_base: true}). Dibaca
+ *                        dari column_config_rules[rel]._row.required_skip_when */
 export function collectRequiredErrors(
   items: Record<string, unknown>[],
   childCfg: Record<string, unknown>,
-  inverseField?: string
+  inverseField?: string,
+  skipRowWhen?: Record<string, unknown> | null,
 ): { key: string; label: string; row: number }[] {
   const errors: { key: string; label: string; row: number }[] = [];
   const childFields = (childCfg as any)?.fields as Record<string, any> | undefined;
@@ -66,7 +70,10 @@ export function collectRequiredErrors(
     .filter(([k, f]) => f.required && k !== inverseField)
     .map(([k, f]) => ({ key: k, label: f.label || k }));
   if (requiredFields.length === 0) return errors;
+  const rowSkipped = (item: Record<string, unknown>) =>
+    !!skipRowWhen && Object.entries(skipRowWhen).some(([f, v]) => item[f] === v);
   items.filter((item) => !item._isAddButton).forEach((item, idx) => {
+    if (rowSkipped(item)) return;
     requiredFields.forEach(({ key, label }) => {
       if (isLineFieldEmpty(item[key])) {
         errors.push({ key, label, row: idx + 1 });
@@ -74,6 +81,18 @@ export function collectRequiredErrors(
     });
   });
   return errors;
+}
+
+/** Kondisi baris yang DIKECUALIKAN dari validasi wajib kolom notebook.
+ *  Dibaca generik dari `column_config_rules[rel]._row.required_skip_when`
+ *  (mis. baris turunan header: {'is_base': true}). */
+export function requiredSkipRowWhen(
+  config: ModelConfig | null,
+  relationField: string,
+): Record<string, unknown> | undefined {
+  const rows = config?.column_config_rules?.[relationField];
+  const rule = (rows?._row as { required_skip_when?: Record<string, unknown> } | undefined);
+  return rule?.required_skip_when;
 }
 
 export function useModelFormActions(params: {
@@ -188,7 +207,10 @@ export function useModelFormActions(params: {
     if (items.length > 0) {
       const fieldMeta = config?.fields?.[relationField];
       const inverseField = fieldMeta?.type === 'one2many' ? (fieldMeta as Record<string, string>).inverse_field : undefined;
-      const errors = collectRequiredErrors(items, childCfg as Record<string, unknown>, inverseField);
+      const errors = collectRequiredErrors(
+        items, childCfg as Record<string, unknown>, inverseField,
+        requiredSkipRowWhen(config, relationField),
+      );
       if (errors.length > 0) {
         const fieldList = [...new Set(errors.map((e) => e.label))].join(', ');
         message.warning(`Lengkapi kolom wajib pada baris sebelumnya: ${fieldList}`);

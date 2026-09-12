@@ -32,12 +32,20 @@ export interface FieldConfig {
  *  - with_record    : true → sertakan id record pada payload compute (backend
  *                     membaca nilai tersimpan, mis. SKU lama dipertahankan)
  *  - populate_lines : {target, source, mapping} → isi line items dari relasi
+ *  - required_skip_when : dipakai pada key khusus `_row` di column_config_rules
+ *                     → baris yang cocok dikecualikan dari validasi kolom wajib
+ *                     (mis. {'is_base': true} untuk baris turunan header)
  */
 export type ComputeFieldEntry = string | { field: string; refresh?: boolean; keep_manual?: boolean };
 
 export interface FieldConfigRule {
   hide_when?: Record<string, unknown>;
   readonly_when?: Record<string, unknown>;
+  /** Khusus key `_row`: baris yang cocok dikecualikan dari validasi wajib kolom. */
+  required_skip_when?: Record<string, unknown>;
+  /** Khusus key `_row`/kolom: kondisi per BARIS (dinilai dari nilai baris). */
+  readonly_when_row?: Record<string, unknown>;
+  hide_when_row?: Record<string, unknown>;
   editable_when?: Record<string, unknown>;
   field_props?: Record<string, Record<string, unknown>>;
   compute_fields?: ComputeFieldEntry[];

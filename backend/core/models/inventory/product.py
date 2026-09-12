@@ -62,6 +62,20 @@ class Product(BaseModel):
             label='Satuan',
             relation='inventory.uom',
             required=True,
+            # Ganti Satuan → seluruh baris Multi Satuan direset (baris pertama
+            # adalah Satuan header, jadi ikut berubah). Konfirmasi dulu; bila
+            # user membatalkan, nilai Satuan dikembalikan ke semula.
+            # `reset_seed` menandai baris pertama hasil reset (is_base = true)
+            # sehingga label & keterangannya terisi ulang oleh compute API.
+            confirm_onchange={
+                'message': (
+                    'Mengganti Satuan akan mereset seluruh data di tab Multi '
+                    'Satuan. Baris pertama otomatis menjadi Satuan baru. '
+                    'Lanjutkan?'
+                ),
+                'reset_relations': ['units'],
+                'reset_seed': {'field': 'uom', 'row': {'is_base': True, 'konversi': 1}},
+            },
         ),
         'weight': FloatField(label='Berat (kg)'),
         'is_active': BooleanField(label='Aktif', default=True),
@@ -145,6 +159,9 @@ class Product(BaseModel):
         # bisa diubah & tanpa tombol hapus.
         config['column_config_rules'] = {
             'units': {
+                # Baris turunan header (satuan utama) dikecualikan dari validasi
+                # wajib kolom — nilainya bukan input user (lihat `to_record`).
+                '_row': {'required_skip_when': {'is_base': True}},
                 '_action': {'hide_when_row': {'is_base': True}},
                 'uom': {'readonly_when_row': {'is_base': True}},
                 'sifat': {'readonly_when_row': {'is_base': True}},
@@ -200,23 +217,38 @@ class Product(BaseModel):
             if not isinstance(line, dict):
                 continue
             if line.get('is_base'):
-                keterangan = KETERANGAN_BASE
-            else:
-                keterangan = ProductUnit.build_keterangan(
-                    base_uom, line.get('uom'), line.get('sifat'), line.get('konversi'),
-                )
+                # Baris satuan utama selalu turunan field Satuan di header →
+                # kembalikan `uom`/`konversi`/`keterangan` supaya grid langsung
+                # menampilkan label satuan baru setelah ganti Satuan (baris
+                # baris hasil reset hanya dikirim sebagai penanda is_base).
+                base_out = {
+                    '_key': line.get('_key'),
+                    'konversi': 1,
+                    'keterangan': KETERANGAN_BASE,
+                }
+                if self.uom_id:
+                    base_out['uom'] = {
+                        'id': self.uom_id,
+                        'name': ProductUnit.uom_display(self.uom),
+                    }
+                out.append(base_out)
+                continue
+            keterangan = ProductUnit.build_keterangan(
+                base_uom, line.get('uom'), line.get('sifat'), line.get('konversi'),
+            )
             out.append({'_key': line.get('_key'), 'keterangan': keterangan})
         self._computed_o2m_lines = {'units': out}
 
     def to_record(self):
         """Override: baris pertama Multi Satuan = satuan utama (turunan header)."""
-        from core.models.inventory.product_unit import KETERANGAN_BASE
+        from core.models.inventory.product_unit import KETERANGAN_BASE, ProductUnit
         data = super().to_record()
         base_row = {
             'id': None,
             'product': {'id': self.pk, 'name': str(self)} if self.pk else None,
             'uom': (
-                {'id': self.uom_id, 'name': str(self.uom)}
+                # Kolom "Nama Satuan" → tampilkan nama saja (tanpa "[KODE] Nama")
+                {'id': self.uom_id, 'name': ProductUnit.uom_display(self.uom)}
                 if self.uom_id else None
             ),
             'sifat': None,

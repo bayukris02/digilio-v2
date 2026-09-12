@@ -31,12 +31,13 @@ class ProductUnit(BaseModel):
         ),
         'sifat': SelectionField(
             label='Sifat Satuan',
+            required=True,
             options=[
                 (SIFAT_BESAR, 'Lebih besar dari satuan utama'),
                 (SIFAT_KECIL, 'Lebih kecil dari satuan utama'),
             ],
         ),
-        'konversi': FloatField(label='Konversi', default=1),
+        'konversi': FloatField(label='Konversi', default=1, required=True),
         # Virtual + compute → kolom readonly di tabel baris (dan baris satuan
         # utama selalu FALSE karena hanya baris turunan header yang TRUE).
         'is_base': BooleanField(
@@ -87,6 +88,16 @@ class ProductUnit(BaseModel):
         if uom is None:
             return ''
         return getattr(uom, 'code', None) or getattr(uom, 'name', None) or ''
+
+    @classmethod
+    def uom_display(cls, uom):
+        """Nama tampil satuan untuk kolom Nama Satuan — HANYA nama (tanpa prefix
+        kode). Mengikuti `_display_name` model satuan bila dideklarasikan."""
+        uom = cls.resolve_uom(uom)
+        if uom is None:
+            return ''
+        field = getattr(uom, '_display_name', None) or 'name'
+        return getattr(uom, field, None) or getattr(uom, 'name', None) or str(uom)
 
     @classmethod
     def build_keterangan(cls, base_uom, uom, sifat, konversi):

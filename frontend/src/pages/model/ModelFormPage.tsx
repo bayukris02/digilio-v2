@@ -22,7 +22,7 @@ import ProgressBar from '../../components/ProgressBar';
 import { SmartButton, renderField, Many2OneCellEditor, Many2ManyCellEditor, resolveMany2oneDomain } from './formControls';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard';
 import { useFormChangeHandler } from './useFormChangeHandler';
-import { useModelFormActions, collectRequiredErrors } from './useModelFormActions';
+import { useModelFormActions, collectRequiredErrors, requiredSkipRowWhen } from './useModelFormActions';
 import { buildTabItems as renderSectionsBuildTabItems, type TabConfig } from './renderSections';
 import type { ColDef, ICellRendererParams } from 'ag-grid-community';
 import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community';
@@ -751,7 +751,10 @@ export default function ModelFormPage({
           const childCfg = childConfigs[fieldName];
           const fMeta = config?.fields?.[fieldName];
           const inverseField = fMeta?.type === 'one2many' ? (fMeta as Record<string, string>).inverse_field : undefined;
-          const errors = collectRequiredErrors(items, childCfg as Record<string, unknown>, inverseField);
+          const errors = collectRequiredErrors(
+            items, childCfg as Record<string, unknown>, inverseField,
+            requiredSkipRowWhen(config, fieldName),
+          );
           if (errors.length > 0) {
             hasLineErrors = true;
             errors.forEach((err) => {
@@ -1424,8 +1427,18 @@ export default function ModelFormPage({
         } else {
           col.cellRenderer = (params: ICellRendererParams) => {
             const val = params.value;
-            if (typeof val === 'object' && val?.name) return val.name;
-            if (typeof val === 'object' && val?.label) return val.label;
+            // Objek many2one bisa datang TANPA `name`/`label` (mis. baris hasil
+            // reset confirm_onchange yang hanya berisi {id, value} sebelum
+            // compute API mengisi labelnya) → kembalikan string, JANGAN objek
+            // (React error: "Objects are not valid as a React child").
+            if (typeof val === 'object' && val !== null) {
+              const o = val as { name?: unknown; label?: unknown; value?: unknown; id?: unknown };
+              const text = o.name ?? o.label;
+              if (text !== undefined && text !== null && text !== '') return String(text);
+              const id = o.value ?? o.id;
+              if (id === undefined || id === null || id === '') return '';
+              return `#${String(id)}`;
+            }
             return val ?? '';
           };
         }
@@ -1724,7 +1737,10 @@ export default function ModelFormPage({
         const childCfg = childConfigs[fieldName];
         const fMeta = config?.fields?.[fieldName];
         const inverseField = fMeta?.type === 'one2many' ? (fMeta as Record<string, string>).inverse_field : undefined;
-        const errors = collectRequiredErrors(items, childCfg as Record<string, unknown>, inverseField);
+        const errors = collectRequiredErrors(
+          items, childCfg as Record<string, unknown>, inverseField,
+          requiredSkipRowWhen(config, fieldName),
+        );
         if (errors.length > 0) {
           hasLineErrors = true;
           errors.forEach((err) => {
