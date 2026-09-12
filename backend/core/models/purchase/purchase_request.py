@@ -129,7 +129,11 @@ class PurchaseRequest(BaseModel):
                 },
             ],
             'smart_buttons': [
-                {'label': 'Purchase Order', 'model': 'purchase.order', 'icon': 'ShoppingCartOutlined'},
+                {
+                    'label': 'Purchase Order', 'model': 'purchase.order', 'icon': 'ShoppingCartOutlined',
+                    # Kolom yang tampil di wizard smart button (bisa >1 PO per PR)
+                    'preview_columns': ['reference', 'vendor', 'order_date', 'status'],
+                },
             ],
         },
         'notebook': [

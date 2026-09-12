@@ -122,7 +122,7 @@ export function useModelFormActions(params: {
   const handleSmartButtonClick = useCallback((btn: { label: string; model?: string }) => {
     if (!btn.model) return;
     const previews = (recordData as Record<string, unknown>)?._smart_button_previews as
-      Record<string, { id: number; display_name: string; status?: string }[]> | undefined;
+      Record<string, Record<string, unknown>[]> | undefined;
     const children = previews?.[btn.model];
 
     if (children && children.length > 0) {
@@ -132,7 +132,8 @@ export function useModelFormActions(params: {
         const urlName = apiToUrlName(btn.model);
         navigate(`/${urlName}/${child.id}?from=${apiModelName}&fromId=${recordId}`);
       } else {
-        setWizardData({ model: btn.model, records: children });
+        // >1 record → wizard pilih record; label tombol dipakai sebagai judul wizard
+        setWizardData({ model: btn.model, label: btn.label, records: children });
         setWizardVisible(true);
       }
       return;

@@ -828,6 +828,20 @@ def model_action(request, model_name, record_id):
                 except Exception as e:
                     return Response({'error': str(e)}, status=400)
 
+        # ── Gerbang konfirmasi generik (mis. transisi 'cancel' yang irreversible) ──
+        # Konvensi: transisi menuju state 'cancelled' wajib dikonfirmasi user dulu
+        # (lihat BaseModel._transition_needs_confirm). Frontend menampilkan pilihan
+        # Kembali / Ya / Ya & Buat Baru, lalu mengirim ulang dengan {confirmed: true}.
+        needs_confirm = (
+            model_cls._transition_needs_confirm(transition)
+            if hasattr(model_cls, '_transition_needs_confirm') else False
+        )
+        confirm_mode = request.data.get('confirm_mode') or ''
+        # 'back' (tombol Kembali) = user membatalkan aksi → jangan mutasi apa pun.
+        # Frontend tidak mengirim request untuk 'back'; ini jaring pengaman sisi server.
+        if needs_confirm and (not request.data.get('confirmed') or confirm_mode == 'back'):
+            return Response(model_cls._build_confirm_payload(obj, transition))
+
         # Apply the transition: change status
         target_state = transition.get('to', current_status)
         setattr(obj, 'status', target_state)
@@ -846,6 +860,24 @@ def model_action(request, model_name, record_id):
         if request.user.is_authenticated:
             obj.updated_by = request.user
         obj.save()
+
+        # ── 'Ya, Batalkan & Buat Baru': salin dokumen yang baru dibatalkan jadi draft baru ──
+        # Generik (BaseModel.duplicate_record) — berlaku untuk semua model bertransisi cancel.
+        if (request.data.get('confirm_mode') or '') in ('new', 'yes_new'):
+            try:
+                new_obj = obj.duplicate_record()
+            except Exception as e:
+                return Response(
+                    {'error': f'Dokumen berhasil dibatalkan, tetapi gagal membuat dokumen baru: {e}'},
+                    status=400,
+                )
+            return Response({
+                '_action_type': 'open_record',
+                'model': model_name,
+                'record_id': new_obj.pk,
+                'message': f'{obj.reference or obj.pk} dibatalkan — dokumen baru '
+                           f'{getattr(new_obj, "reference", "") or new_obj.pk} dibuat sebagai draft.',
+            })
 
         # Refresh from DB and return
         obj.refresh_from_db()

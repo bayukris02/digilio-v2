@@ -620,6 +620,7 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
         smart_buttons = (getattr(self, '_form_view', {}) or {}).get('header', {}).get('smart_buttons', [])
         if smart_buttons:
             previews = {}
+            columns_meta = {}
             for btn in smart_buttons:
                 btn_model = btn.get('model')
                 if not btn_model:
@@ -655,48 +656,25 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
                         if getattr(fd, 'field_type', None) == 'many2one' and getattr(fd, 'relation', None) == btn_model:
                             parent_obj = getattr(self, fname, None)
                             if parent_obj is not None:
-                                display_name = (
-                                    getattr(parent_obj, 'reference', None)
-                                    or getattr(parent_obj, 'name', None)
-                                    or getattr(parent_obj, 'code', None)
-                                    or f'#{parent_obj.pk}'
-                                )
-                                previews[btn_model] = [{
-                                    'id': parent_obj.pk,
-                                    'display_name': display_name,
-                                    'status': getattr(parent_obj, 'status', None),
-                                }]
+                                parent_cls = ErpModelBase._model_registry.get(btn_model)
+                                cols = self._smart_button_columns(btn, parent_cls)
+                                rec = {'id': parent_obj.pk}
+                                for col in cols:
+                                    rec[col['key']] = self._preview_cell(parent_obj, col['key'])
+                                columns_meta[btn_model] = cols
+                                previews[btn_model] = [rec]
                             break
 
                 if children_qs is not None:
-                    # Build preview list — query minimal fields that actually exist on the model
-                    db_fields = {f.name for f in children_qs.model._meta.get_fields()}
-                    display_field = next(
-                        (f for f in ('reference', 'name', 'code') if f in db_fields),
-                        None,
-                    )
-                    has_status = 'status' in db_fields
-
-                    records = []
-                    for child in children_qs.only('id', *(f for f in ('reference', 'name', 'code', 'status') if f in db_fields)):
-                        display_name = (
-                            child.reference if hasattr(child, 'reference') and child.reference
-                            else child.name if hasattr(child, 'name') and child.name
-                            else child.code if hasattr(child, 'code') and child.code
-                            else f'#{child.pk}'
-                        )
-                        rec = {
-                            'id': child.pk,
-                            'display_name': display_name,
-                        }
-                        if has_status:
-                            rec['status'] = child.status
-                        records.append(rec)
-
+                    child_cls = ErpModelBase._model_registry.get(btn_model) or children_qs.model
+                    cols, records = self._build_smart_button_preview(btn, child_cls, children_qs)
+                    columns_meta[btn_model] = cols
                     previews[btn_model] = records
 
             if previews:
                 data['_smart_button_previews'] = previews
+            if columns_meta:
+                data['_smart_button_columns'] = columns_meta
 
         return data
 
@@ -753,6 +731,108 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
                 counts[btn_model] = count
 
         return counts
+
+    # ── Preview smart button (generik, meta-driven) ──────────────────────────
+    # Kolom preview ditentukan per smart button di config model:
+    #   {'label': 'Purchase Order', 'model': 'purchase.order', 'icon': '...',
+    #    'preview_columns': ['reference', 'vendor', 'order_date', 'status']}
+    # Bila `preview_columns` tidak diisi → default ['display_name', 'status']
+    # (kompatibel dengan perilaku lama: referensi + status).
+    PREVIEW_DEFAULT_COLUMNS = ['display_name', 'status']
+
+    @staticmethod
+    def _preview_scalar(val):
+        """Konversi nilai field apa pun → tipe primitif yang aman dikirim ke frontend."""
+        from decimal import Decimal
+
+        if val is None or isinstance(val, (str, int, float, bool)):
+            return val
+        if isinstance(val, Decimal):
+            return float(val)
+        if hasattr(val, 'pk') and hasattr(val, '_meta'):        # relasi many2one
+            for attr in ('reference', 'name', 'code', 'username'):
+                disp = getattr(val, attr, None)
+                if disp:
+                    return disp
+            return f'#{val.pk}'
+        if hasattr(val, 'isoformat'):
+            return val.isoformat()
+        return str(val)
+
+    @classmethod
+    def _preview_cell(cls, obj, key):
+        """Nilai satu kolom preview untuk sebuah record anak."""
+        if key == 'display_name':
+            for attr in ('reference', 'name', 'code'):
+                val = getattr(obj, attr, None)
+                if val:
+                    return val
+            return f'#{obj.pk}'
+        return cls._preview_scalar(getattr(obj, key, None))
+
+    @classmethod
+    def _smart_button_columns(cls, btn, child_cls):
+        """Metadata kolom preview (label + tipe) untuk satu smart button.
+
+        Diambil dari config model (`preview_columns`); field yang tidak ada di model
+        anak diabaikan supaya config yang salah tidak memecahkan halaman.
+        """
+        keys = list(btn.get('preview_columns') or cls.PREVIEW_DEFAULT_COLUMNS)
+        cols = []
+        for key in keys:
+            if key == 'display_name':
+                cols.append({
+                    'key': 'display_name',
+                    'label': btn.get('display_label') or 'Referensi',
+                    'type': 'text',
+                })
+                continue
+            fd = (child_cls._field_descriptors or {}).get(key) if child_cls else None
+            if fd is None:
+                continue                     # field tidak dikenal → dilewati
+            ftype = getattr(fd, 'field_type', None)
+            col = {
+                'key': key,
+                'label': getattr(fd, 'label', None) or key.replace('_', ' ').title(),
+                'type': {
+                    'date': 'date',
+                    'datetime': 'date',
+                    'monetary': 'number',
+                    'float': 'number',
+                    'integer': 'number',
+                    'many2one': 'text',
+                    'selection': 'text',
+                }.get(ftype, 'text'),
+            }
+            # Kolom `status` → sertakan label & warna state model anak (dari _states)
+            if key == 'status':
+                states = getattr(child_cls, '_states', None) or {}
+                col['type'] = 'status'
+                col['options'] = [
+                    {'value': k, 'label': v.get('label', k), 'color': v.get('color', 'default')}
+                    for k, v in states.items()
+                ]
+            cols.append(col)
+        return cols or [{'key': 'display_name', 'label': 'Referensi', 'type': 'text'}]
+
+    def _build_smart_button_preview(self, btn, child_cls, children_qs):
+        """Susun daftar preview + metadata kolom untuk satu smart button."""
+        cols = self._smart_button_columns(btn, child_cls)
+        # Hindari N+1: ambil sekaligus relasi many2one yang dipakai sebagai kolom
+        m2o = [
+            c['key'] for c in cols
+            if c['key'] != 'display_name'
+            and child_cls
+            and getattr((child_cls._field_descriptors or {}).get(c['key']), 'field_type', None) == 'many2one'
+        ]
+        qs = children_qs.select_related(*m2o) if m2o else children_qs
+        records = []
+        for child in qs:
+            rec = {'id': child.pk}
+            for col in cols:
+                rec[col['key']] = self._preview_cell(child, col['key'])
+            records.append(rec)
+        return cols, records
 
     @classmethod
     def batch_compute_smart_button_counts(cls, records):
@@ -960,3 +1040,109 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
         if hasattr(self, 'reference') and not self.reference:
             self.reference = f'Draft#{self.pk}'
             super().save(update_fields=['reference'])
+
+    # ── Duplikat dokumen (generik) ──────────────────────────────────────────
+    # Dipakai fitur "Batal & Buat Baru" (dan bisa dipakai aksi duplikat lain).
+    # Kolom sistem tidak disalin; nomor dokumen dikosongkan (jadi Draft#<id> baru);
+    # status kembali ke state awal model (umumnya 'draft').
+    DUPLICATE_EXCLUDE = {
+        'id', 'pk', 'created_at', 'updated_at', 'is_deleted',
+        'created_by', 'updated_by', 'reference', 'status',
+    }
+
+    @classmethod
+    def _has_field(cls, name: str) -> bool:
+        """True bila `name` benar-benar field DB pada model ini (bukan sekadar atribut)."""
+        return any(f.name == name or f.attname == name for f in cls._meta.concrete_fields)
+
+    def duplicate_record(self, include_children: bool = True):
+        """Salin record ini menjadi dokumen BARU (status awal model, nomor kosong).
+
+        Generik untuk semua model:
+          * field scalar/FK disalin, kecuali kolom sistem (pk, audit, reference, status);
+          * status di-set ke state pertama `_states` (biasanya draft);
+          * baris one2many ikut disalin dan diarahkan ke record baru (1 level);
+          * reference dibiarkan kosong → BaseModel.save() mengisi `Draft#<id>`.
+        """
+        cls = self.__class__
+        values = {}
+        for field in cls._meta.concrete_fields:
+            if field.primary_key or field.name in self.DUPLICATE_EXCLUDE or field.attname in self.DUPLICATE_EXCLUDE:
+                continue
+            values[field.attname] = field.value_from_object(self)
+
+        new_obj = cls(**values)
+        states = getattr(cls, '_states', None) or {}
+        if states and self._has_field('status'):
+            new_obj.status = next(iter(states))          # state awal (draft)
+        if self._has_field('reference'):
+            new_obj.reference = ''
+        for audit in ('created_by_id', 'updated_by_id'):
+            if self._has_field(audit):
+                setattr(new_obj, audit, None)
+        new_obj.is_deleted = False
+        new_obj.save()
+
+        if include_children:
+            for _fname, fd in (cls._field_descriptors or {}).items():
+                if getattr(fd, 'field_type', None) != 'one2many':
+                    continue
+                child_cls = ErpModelBase._model_registry.get(fd.relation)
+                if child_cls is None:
+                    continue
+                children = child_cls.objects.filter(
+                    **{fd.inverse_field: self.pk, 'is_deleted': False}
+                )
+                for child in children:
+                    child_copy = child.duplicate_record(include_children=False)
+                    setattr(child_copy, f'{fd.inverse_field}_id', new_obj.pk)
+                    child_copy.save()
+
+        return new_obj
+
+    # ── Konfirmasi transisi (generik) ───────────────────────────────────────
+    # Konvensi: transisi yang berakhir di state 'cancelled' TIDAK BISA dikembalikan
+    # ke draft → wajib dikonfirmasi user dulu. Bisa dioverride per transisi:
+    #   {'name': 'cancel', ..., 'confirm': False}                 # matikan
+    #   {'name': 'x', 'confirm': True, 'confirm_message': '...'}  # transisi lain
+    #   {'name': 'x', 'confirm_options': [...]}                   # tombol custom
+    @classmethod
+    def _transition_needs_confirm(cls, transition: dict) -> bool:
+        if 'confirm' in transition:
+            return bool(transition['confirm'])
+        return transition.get('to') == 'cancelled'
+
+    @classmethod
+    def _build_confirm_payload(cls, obj, transition: dict) -> dict:
+        """Payload konfirmasi yang dikirim ke frontend (_action_type 'confirm')."""
+        label = transition.get('label') or transition.get('name') or 'Lanjutkan'
+        target = transition.get('to')
+        # Kata kerja untuk tombol: 'Batalkan' bila transisi menuju state cancelled
+        verb = 'Batalkan' if target == 'cancelled' else label
+        entity = getattr(cls._meta, 'verbose_name', None) or cls.__name__
+        reference = ''
+        try:
+            reference = obj.to_record().get('display_name') or ''
+        except Exception:
+            reference = getattr(obj, 'reference', '') or f'#{obj.pk}'
+
+        default_message = (
+            f'Yakin ingin {verb.lower()} {entity} {reference}? '
+            'Dokumen yang dibatalkan tidak bisa dikembalikan ke Draft atau diedit ulang — '
+            'harus membuat dokumen baru.'
+        ) if target == 'cancelled' else f'Yakin ingin melanjutkan {label} pada {entity} {reference}?'
+
+        # Nilai opsi ('value') dipakai apa adanya oleh frontend sebagai `confirm_mode`
+        # saat request dikirim ulang — jadi kontraknya harus sama dengan yang dibaca
+        # backend: 'back' (batal), 'yes' (jalankan), 'new' (jalankan + buat dokumen baru).
+        options = transition.get('confirm_options') or [
+            {'value': 'back', 'label': 'Kembali', 'type': 'default'},
+            {'value': 'yes', 'label': f'Ya, {verb}', 'type': 'danger'},
+            *([{'value': 'new', 'label': f'Ya, {verb} & Buat Baru', 'type': 'primary'}]
+              if target == 'cancelled' or transition.get('confirm_new') else []),
+        ]
+        return {
+            '_action_type': 'confirm',
+            'confirm_message': transition.get('confirm_message') or default_message,
+            'confirm_options': options,
+        }

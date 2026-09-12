@@ -296,8 +296,14 @@ class PurchaseOrder(BaseModel):
                 {'label': 'Batal', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed']},
             ],
             'smart_buttons': [
-                {'label': 'Penerimaan Barang', 'model': 'purchase.goods_receipt', 'icon': 'InboxOutlined'},
-                {'label': 'Tagihan', 'model': 'accounting.vendor_bill', 'icon': 'FileTextOutlined'},
+                {
+                    'label': 'Penerimaan Barang', 'model': 'purchase.goods_receipt', 'icon': 'InboxOutlined',
+                    'preview_columns': ['reference', 'receipt_date', 'location', 'status'],
+                },
+                {
+                    'label': 'Tagihan', 'model': 'accounting.vendor_bill', 'icon': 'FileTextOutlined',
+                    'preview_columns': ['reference', 'vendor', 'bill_date', 'status'],
+                },
             ],
         },
         'notebook': [

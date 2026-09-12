@@ -509,6 +509,9 @@ function Section4Transitions() {
           { key: '5', param: 'icon', type: 'string', required: 'Opsional', desc: 'Nama icon Ant Design (e.g. CheckOutlined)' },
           { key: '6', param: 'guard', type: 'string', required: 'Opsional', desc: 'Nama method penjaga. Core panggil method ini SEBELUM transisi' },
           { key: '7', param: 'effect', type: 'string', required: 'Opsional', desc: 'Nama method efek. Core panggil method ini SETELAH status berubah' },
+          { key: '8', param: 'confirm', type: 'bool', required: 'Opsional', desc: "Wajib konfirmasi user sebelum transisi jalan. Default: True otomatis untuk transisi ke state 'cancelled' (false = matikan)" },
+          { key: '9', param: 'confirm_message', type: 'string', required: 'Opsional', desc: 'Pesan dialog konfirmasi (default dibuat otomatis dari label + nama model + nomor dokumen)' },
+          { key: '10', param: 'confirm_options', type: 'object[]', required: 'Opsional', desc: "Tombol pilihan dialog: [{value, label, type}]. `value` dikirim frontend sebagai confirm_mode → nilai yang dikenali core: 'back' (batalkan aksi) · 'yes' (jalankan) · 'new' (jalankan + buat dokumen baru). Default untuk cancel: Kembali / Ya, Batalkan / Ya, Batalkan & Buat Baru" },
         ]}
         columns={[
           { title: 'Parameter', dataIndex: 'param', key: 'param', render: (v: string) => <Text code>{v}</Text> },
@@ -529,10 +532,13 @@ function Section4Transitions() {
 2. Core:   Cari transisi dengan name = "confirm" di _transitions[]
 3. Core:   Validasi status sekarang ada di "from"?
 4. Core:   Panggil method guard (jika ada)  ← cek apakah boleh jalan
-5. Core:   Set status = "confirmed"          ← ubah status
-6. Core:   Panggil method effect (jika ada)  ← efek setelah transisi
-7. Core:   Save ke database
-8. Core:   Return record terbaru ke frontend`} />
+5. Core:   Perlu konfirmasi? (transisi ke state 'cancelled')
+          → balas { _action_type: 'confirm', confirm_message, confirm_options }
+6. Frontend: dialog Kembali / Ya / Ya & Buat Baru → POST ulang { confirmed: true, confirm_mode }
+7. Core:   Set status = "confirmed"          ← ubah status
+8. Core:   Panggil method effect (jika ada)  ← efek setelah transisi
+9. Core:   confirm_mode 'new' → duplikat dokumen jadi draft baru (open_record)
+10. Core:  Save ke database → return record terbaru ke frontend`} />
 
       <Title level={3}>Contoh dari Purchase Order</Title>
       <CodeBlock code={`_transitions = [
@@ -872,6 +878,8 @@ function Section7FormView() {
           { key: '1', param: 'label', type: 'string', desc: 'Label tombol' },
           { key: '2', param: 'model', type: 'string', desc: 'Nama model child yang ditampilkan' },
           { key: '3', param: 'icon', type: 'string', desc: 'Nama icon Ant Design' },
+          { key: '4', param: 'preview_columns', type: 'string[]', desc: "Kolom wizard saat data >1 (default: ['display_name', 'status'])" },
+          { key: '5', param: 'display_label', type: 'string', desc: "Label kolom display_name saat dipakai di preview_columns (default: 'Referensi')" },
         ]}
         columns={[
           { title: 'Key', dataIndex: 'param', key: 'param', render: (v: string) => <Text code>{v}</Text> },
@@ -886,6 +894,13 @@ function Section7FormView() {
       <Paragraph>
         Smart buttons menampilkan jumlah record child di badge. Saat diklik, navigasi
         ke halaman form child. Jumlah dihitung otomatis dari <Text code>_document_flow.children</Text>.
+      </Paragraph>
+      <Paragraph>
+        Bila jumlah record <Text code>&gt; 1</Text>, muncul wizard pilihan record (kolom mengikuti{' '}
+        <Text code>preview_columns</Text> — label &amp; tipe diambil dari field model child, kolom{' '}
+        <Text code>status</Text> otomatis memakai label/warna <Text code>_states</Text> model child).
+        Tiap baris bisa diklik untuk membuka record, atau lewat tombol{' '}
+        <Text strong>Buka di Tab Baru</Text> di sisi kanan untuk membukanya di tab browser baru.
       </Paragraph>
 
       <Title level={3}>Opsi notebook</Title>

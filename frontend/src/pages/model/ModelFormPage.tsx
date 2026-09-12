@@ -3,14 +3,14 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Typography, Card, Row, Col, Form, Button, Space, Spin,
-  message, Breadcrumb, Steps, Tabs, Tag, Modal, List, Dropdown,
+  message, Breadcrumb, Steps, Tabs, Tag, Modal, Table, Dropdown,
 } from 'antd';
 import {
   SaveOutlined, CloseOutlined, ArrowLeftOutlined, ArrowRightOutlined,
   PlusOutlined, DeleteOutlined, FileTextOutlined, MailOutlined,
   MoreOutlined, InboxOutlined, CheckOutlined, PrinterOutlined,
   DownloadOutlined, SendOutlined, EditOutlined, CopyOutlined,
-  StopOutlined, UndoOutlined, HolderOutlined, DownOutlined,
+  StopOutlined, UndoOutlined, HolderOutlined, DownOutlined, ExportOutlined,
 } from '@ant-design/icons';
 import { modelApi, type ModelConfig, type FieldConfig } from '../../api/models';
 import { parseDate, formatDate, formatLastUpdate } from '../../utils/format';
@@ -78,7 +78,14 @@ export default function ModelFormPage({
   const [printPdfUrl, setPrintPdfUrl] = useState<string | null>(null);
   const [quickView, setQuickView] = useState<{ modelName: string; recordId: number } | null>(null);
   const [wizardVisible, setWizardVisible] = useState(false);
-  const [wizardData, setWizardData] = useState<{ model: string; records: { id: number; display_name: string; status?: string }[] } | null>(null);
+  /** Dialog konfirmasi aksi (generik) — payload + tombol dari backend (_action_type 'confirm') */
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string;
+    options: { value: string; label: string; type?: string }[];
+    run: (mode: string) => void;
+  } | null>(null);
+  /** Wizard smart button (data >1): { model, label, records } — records + definisi kolom dari config model */
+  const [wizardData, setWizardData] = useState<{ model: string; label?: string; records: Record<string, unknown>[] } | null>(null);
   const [parentRecord, setParentRecord] = useState<{ id: number; display_name: string; verbose_name: string } | null>(null);
   // ── Action wizard (modal with mode + line selection) ──
   const [actionWizardVisible, setActionWizardVisible] = useState(false);
@@ -621,6 +628,25 @@ export default function ModelFormPage({
     return isReadOnly;
   }, [config, currentStatus, isReadOnly]);
 
+  // ── Dialog konfirmasi aksi (generik, berlaku semua model) ──
+  // Backend membalas `_action_type: 'confirm'` + `confirm_options` (mis. Kembali / Ya, Batalkan /
+  // Ya, Batalkan & Buat Baru) sebelum transisi irreversible dijalankan. Tanpa `confirm_options`
+  // → perilaku lama (Lanjut / Tidak).
+  const askConfirm = useCallback((payload: Record<string, unknown>, run: (mode: string) => void) => {
+    const options = payload.confirm_options as { value: string; label: string; type?: string }[] | undefined;
+    if (options && options.length) {
+      setConfirmDialog({ message: String(payload.confirm_message || ''), options, run });
+      return;
+    }
+    Modal.confirm({
+      title: 'Konfirmasi',
+      content: payload.confirm_message as string,
+      okText: 'Lanjut',
+      cancelText: 'Tidak',
+      onOk: () => run('yes'),
+    });
+  }, []);
+
   // ── Handle action button click ──
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const handleAction = useCallback(async (btn: Record<string, unknown>) => {
@@ -902,17 +928,77 @@ export default function ModelFormPage({
         }
         return;
       }
-      // Konfirmasi dialog: backend minta user pilih Lanjut/Tidak sebelum action dijalankan
+      // Konfirmasi dialog: backend minta user konfirmasi sebelum action dijalankan
       if (result._action_type === 'confirm' && result.confirm_message) {
-        Modal.confirm({
-          title: 'Konfirmasi',
-          content: result.confirm_message as string,
-          okText: 'Lanjut',
-          cancelText: 'Tidak',
-          onOk: async () => {
-            const res2 = await modelApi.postAction(apiModelName, currentRecordId!, actionName, { confirmed: true });
-            applyActionSuccess(res2);
-          },
+        askConfirm(result, async (mode) => {
+          // Opsi 'back' (Kembali) = user membatalkan aksi → JANGAN kirim apa pun,
+          // state dokumen harus tetap seperti semula.
+          if (!mode || mode === 'back') return;
+
+          // ── 'Ya, Batalkan & Buat Baru' (mode 'new') — UX bertahap, tetap 1 request ──
+          //    (1) UI dokumen berubah dulu ke state Batalkan (identik dengan memilih
+          //        'Ya, Batalkan'): form jadi read-only, stepper & chatter ikut,
+          //    (2) lalu loading 'Proses duplikat data dan membuat data xxx baru...',
+          //    (3) baru pindah ke dokumen baru (open_record).
+          //    State target dibaca dari label opsi ('Ya, Batalkan & Buat Baru') agar
+          //    hanya transisi menuju 'cancelled' yang memakai efek ini.
+          const optLabel = ((result.confirm_options as { value: string; label: string }[] | undefined) || [])
+            .find((o) => o.value === mode)?.label || '';
+          const isCancelNew = (mode === 'new' || mode === 'yes_new') && /batalkan/i.test(optLabel);
+          const dupKey = `cancel_new_${actionName}`;
+          // Durasi minimum tampilnya loading 'proses duplikat & buat data baru'
+          // (ms) — supaya proses tidak terkesan instan walau backend balas cepat.
+          const CANCEL_NEW_MIN_LOADING_MS = 3000;
+          let loadingStartedAt = 0;
+          if (isCancelNew) {
+            // (1) Tampilkan state Batalkan lebih dulu (optimistis, sebelum request).
+            //     Hanya field `status` yang ditulis ke form — nilai mentah dari
+            //     recordData (tanggal string, many2one id) tidak boleh dimasukkan
+            //     ulang ke form, karena DatePicker antd butuh objek dayjs
+            //     (gejala: getUDayjs(...).isValid is not a function).
+            const cancelled = { ...(recordData || {}), status: 'cancelled' };
+            if (config?.fields?.status) form.setFieldsValue({ status: 'cancelled' });
+            setRecordData(cancelled);
+            if (config?.fields?.status?.options) {
+              const idx = config.fields.status.options.findIndex((o) => o.value === 'cancelled');
+              if (idx >= 0) setCurrentStep(idx);
+            }
+            setChatterKey((prev) => prev + 1);
+            queryClient.invalidateQueries({ queryKey: ['model-records'] });
+            // Beri kesempatan React melukis state Batalkan sebelum loading tampil.
+            await new Promise((r) => setTimeout(r, 400));
+            // (2) Loading proses duplikat — ditahan MINIMAL 3 detik walau data
+            //     sudah siap lebih cepat (loadingStartedAt jadi patokan durasi).
+            loadingStartedAt = Date.now();
+            message.loading({
+              content: `Proses duplikat data dan membuat data ${entityLabel} baru...`,
+              key: dupKey, duration: 0,
+            });
+          }
+
+          const res2 = await modelApi.postAction(apiModelName, currentRecordId!, actionName, {
+            confirmed: true, confirm_mode: mode,
+          });
+          if (isCancelNew) {
+            // Tahan loading sampai durasi minimum terpenuhi baru lanjut.
+            const remaining = CANCEL_NEW_MIN_LOADING_MS - (Date.now() - loadingStartedAt);
+            if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
+            message.destroy(dupKey);
+          }
+          if (res2.error) {
+            // Sinkronkan UI dengan state nyata server (mis. cancel sukses tapi
+            // duplikat gagal → dokumen tetap tampil Batalkan).
+            if (isCancelNew) setReloadKey((prev) => prev + 1);
+            message.error(res2.error as string);
+            return;
+          }
+          // 'Ya, Batalkan & Buat Baru' → backend mengembalikan dokumen baru (open_record)
+          if (res2._action_type === 'open_record' && res2.model && res2.record_id) {
+            navigate(`/${apiToUrlName(res2.model as string)}/${res2.record_id}?from=${apiModelName}&fromId=${recordId}`);
+            if (res2.message) message.success(res2.message as string);
+            return;
+          }
+          applyActionSuccess(res2);
         });
         return;
       }
@@ -1023,17 +1109,20 @@ export default function ModelFormPage({
 
       const result = await modelApi.postAction(apiModelName, currentRecordId!, actionName, extraData);
 
-      // Konfirmasi dialog: backend minta user pilih Lanjut/Tidak sebelum action dijalankan
+      // Konfirmasi dialog: backend minta user konfirmasi sebelum action dijalankan
       if (result._action_type === 'confirm' && result.confirm_message) {
-        Modal.confirm({
-          title: 'Konfirmasi',
-          content: result.confirm_message as string,
-          okText: 'Lanjut',
-          cancelText: 'Tidak',
-          onOk: async () => {
-            const res2 = await modelApi.postAction(apiModelName, currentRecordId!, actionName, { ...extraData, confirmed: true });
-            finishWizardAction(res2);
-          },
+        askConfirm(result, async (mode) => {
+          // Opsi 'back' (Kembali) = user membatalkan aksi → JANGAN kirim apa pun,
+          // state dokumen harus tetap seperti semula.
+          if (!mode || mode === 'back') return;
+          const res2 = await modelApi.postAction(apiModelName, currentRecordId!, actionName, {
+            ...extraData, confirmed: true, confirm_mode: mode,
+          });
+          if (res2.error) {
+            message.error(res2.error as string);
+            return;
+          }
+          finishWizardAction(res2);
         });
         return;
       }
@@ -1067,6 +1156,61 @@ export default function ModelFormPage({
     setWizardData, setWizardVisible, form, setMany2oneOptions,
     many2oneMeta, setMany2oneMeta,
   });
+
+  // ── Wizard smart button (data >1): kolom meta-driven ──
+  // Definisi kolom ada di config model: smart_buttons[].preview_columns → backend mengirim
+  // record._smart_button_columns[model] = [{key,label,type,options}]. Tanpa config →
+  // default Referensi + Status (perilaku lama).
+  const wizardColumns = useMemo(() => {
+    type ColMeta = {
+      key: string; label: string; type?: string;
+      options?: { value: string; label: string; color?: string }[];
+    };
+    const meta = (recordData as Record<string, unknown>)?._smart_button_columns as
+      Record<string, ColMeta[]> | undefined;
+    const configured = wizardData?.model ? meta?.[wizardData.model] : undefined;
+    const cols: ColMeta[] = configured?.length
+      ? configured
+      : [
+          { key: 'display_name', label: 'Referensi', type: 'text' },
+          { key: 'status', label: 'Status', type: 'status' },
+        ];
+    return cols.map((col) => ({
+      title: col.label,
+      dataIndex: col.key,
+      key: col.key,
+      ellipsis: true,
+      render: (val: unknown) => {
+        if (val === null || val === undefined || val === '') return '—';
+        if (col.type === 'status') {
+          const opt = col.options?.find((o) => o.value === String(val));
+          return (
+            <Tag color={opt?.color || 'default'} style={{ fontSize: 10, lineHeight: '16px' }}>
+              {String(opt?.label ?? val).toUpperCase()}
+            </Tag>
+          );
+        }
+        if (col.type === 'date') return formatDate(String(val));
+        if (col.type === 'number') {
+          const num = Number(val);
+          return Number.isFinite(num) ? num.toLocaleString('id-ID') : String(val);
+        }
+        return String(val);
+      },
+    }));
+  }, [recordData, wizardData]);
+
+  /** Buka record dari wizard smart button — tab yang sama, atau tab baru browser. */
+  const openWizardRecord = useCallback((id: number, newTab = false) => {
+    if (!wizardData?.model || !id) return;
+    const url = `/${apiToUrlName(wizardData.model)}/${id}?from=${apiModelName}&fromId=${recordId}`;
+    if (newTab) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setWizardVisible(false);
+    navigate(url);
+  }, [wizardData, apiModelName, recordId, navigate]);
 
   // ── Fetch parent record for breadcrumb chain ──
   useEffect(() => {
@@ -2217,40 +2361,80 @@ export default function ModelFormPage({
         />
       )}
 
-      {/* ═══ SMART BUTTON WIZARD — pilih record anak ═══ */}
+      {/* ═══ DIALOG KONFIRMASI AKSI — tombol & pesan dari payload backend ═══ */}
       <Modal
-        title="Select Record"
+        open={!!confirmDialog}
+        title="Konfirmasi"
+        onCancel={() => setConfirmDialog(null)}
+        footer={
+          <Space>
+            {(confirmDialog?.options || []).map((opt) => (
+              <Button
+                key={opt.value}
+                type={opt.type === 'primary' ? 'primary' : 'default'}
+                danger={opt.type === 'danger'}
+                onClick={() => {
+                  const run = confirmDialog?.run;
+                  setConfirmDialog(null);
+                  if (run) run(opt.value);
+                }}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </Space>
+        }
+      >
+        <div style={{ whiteSpace: 'pre-line' }}>{confirmDialog?.message}</div>
+      </Modal>
+
+      {/* ═══ SMART BUTTON WIZARD — pilih record anak (data >1) ═══ */}
+      {/* Kolom & label dari config model: smart_buttons[].preview_columns (meta-driven).
+          Setiap baris: klik = buka record, tombol kanan = buka di tab baru. */}
+      <style>{`
+        .sb-wizard-row { cursor: pointer; }
+        .sb-wizard-row:hover { background: #e6f4ff; }
+        .sb-wizard-row:hover td { background: #e6f4ff !important; }
+      `}</style>
+      <Modal
+        title={wizardData?.label ? `Pilih ${wizardData.label}` : 'Pilih Data'}
         open={wizardVisible}
         onCancel={() => setWizardVisible(false)}
         footer={null}
-        width={420}
+        width={Math.min(260 + wizardColumns.length * 170, 1000)}
       >
-        <List
+        <Table
+          size="small"
+          rowKey="id"
           dataSource={wizardData?.records || []}
-          renderItem={(item) => {
-            const st = item.status || '';
-            const statusColors = config?.fields?.status?.colors as Record<string, string> | undefined;
-            return (
-              <List.Item
-                key={item.id}
-                style={{ cursor: 'pointer' }}
-                onClick={() => {
-                  setWizardVisible(false);
-                  const urlName = apiToUrlName(wizardData?.model || '');
-                  navigate(`/${urlName}/${item.id}?from=${apiModelName}&fromId=${recordId}`);
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 500 }}>{item.display_name}</span>
-                  {st && (
-                    <Tag color={statusColors?.[st] || 'default'} style={{ fontSize: 10, lineHeight: '16px' }}>
-                      {st.toUpperCase()}
-                    </Tag>
-                  )}
-                </div>
-              </List.Item>
-            );
-          }}
+          pagination={(wizardData?.records?.length ?? 0) > 10 ? { pageSize: 10, size: 'small' } : false}
+          scroll={{ y: 380 }}
+          locale={{ emptyText: 'Tidak ada data' }}
+          onRow={(rec) => ({
+            className: 'sb-wizard-row',
+            onClick: () => openWizardRecord(Number(rec.id)),
+          })}
+          columns={[
+            ...wizardColumns,
+            {
+              title: '',
+              key: '_open_tab',
+              width: 120,
+              align: 'right' as const,
+              render: (_: unknown, rec: Record<string, unknown>) => (
+                <Button
+                  size="small"
+                  icon={<ExportOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openWizardRecord(Number(rec.id), true);
+                  }}
+                >
+                  Tab Baru
+                </Button>
+              ),
+            },
+          ]}
         />
       </Modal>
     </div>
