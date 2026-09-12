@@ -149,7 +149,7 @@ export default function PrintWizardModal({
       footer={null}
       style={{ top: 0 }}
       styles={{
-        wrapper: { top: 0, paddingTop: 0, alignItems: 'flex-start' },
+        wrapper: { top: 0, paddingTop: 25, paddingBottom: 25, alignItems: 'flex-start' },
         container: { top: 0, marginTop: 0 },
         header: { padding: '10px 16px', marginBottom: 0 },
         body: { padding: '8px 12px 12px' },
