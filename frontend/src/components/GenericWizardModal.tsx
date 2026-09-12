@@ -157,6 +157,10 @@ interface LineSelectionConfig {
   qty_label?: string;
   editable_columns?: EditableColumnConfig[];
   default_selected?: boolean;
+  /** Field baris yang dipakai sebagai nilai awal kolom qty ("autofill").
+   *  Mis. 'remaining_qty' (sisa terima) atau 'remaining_bill_qty' (sisa tagih).
+   *  Bila tidak diisi → rantai fallback lama: remaining_bill_qty → remaining_qty → qty. */
+  qty_default_from?: string;
   // Kolom yang dirender sebagai progress bar (ProgressBar) — config-driven,
   // default kosong → wizard lain (PO/SO/PR) tidak berubah
   progress_columns?: string[];
@@ -165,6 +169,11 @@ interface LineSelectionConfig {
 export interface WizardConfig {
   title: string;
   modes: WizardMode[];
+  /** Cara memilih tipe di modal: 'cards' = kartu tipe di atas (mis. wizard Buat
+   *  Tagihan), 'buttons' = tombol aksi di footer. Bila tidak diisi, perilaku
+   *  lama dipakai: seluruh mode menampilkan tabel baris → footer buttons,
+   *  sebagian saja → kartu tipe. Generic, dari config model. */
+  mode_selector?: 'cards' | 'buttons';
   line_selection?: LineSelectionConfig;
 }
 
@@ -610,8 +619,18 @@ export default function GenericWizardModal({
       const allIds = items.filter((item) => item.id != null).map((item) => Number(item.id));
       setSelectedIds(config.line_selection?.default_selected === false ? [] : allIds);
       const defaultQtys: Record<number, number> = {};
+      // Field sumber autofill qty: dari config model (`qty_default_from`) bila ada,
+      // selain itu rantai fallback lama (sisa tagih → sisa terima → qty pesan).
+      const qtyFromField = config.line_selection?.qty_default_from;
       items.forEach((item) => {
-        if (item.id != null) defaultQtys[Number(item.id)] = Number(item.remaining_bill_qty ?? item.remaining_qty ?? item.qty ?? 0);
+        if (item.id != null) {
+          const fromCfg = qtyFromField
+            ? (item as Record<string, unknown>)[qtyFromField]
+            : undefined;
+          defaultQtys[Number(item.id)] = Number(
+            fromCfg ?? item.remaining_bill_qty ?? item.remaining_qty ?? item.qty ?? 0
+          );
+        }
       });
       setQtys(defaultQtys);
       // Reset editable values
@@ -623,8 +642,13 @@ export default function GenericWizardModal({
     }
   }, [itemsFingerprint]);
 
-  // Deteksi mode: semua mode punya line_selection = render sebagai footer buttons
-  const allModesShowTable = config.line_selection?.show_for_modes?.length === config.modes.length;
+  // Deteksi mode: semua mode punya line_selection = render sebagai footer buttons.
+  // Bisa dipaksa dari config model lewat `mode_selector` ('cards' | 'buttons') —
+  // generic, tanpa nama model. Kartu tipe (= wizard Buat Tagihan) dipakai bila
+  // config meminta 'cards' walau semua mode menampilkan tabel baris.
+  const allModesShowTable = config.mode_selector
+    ? config.mode_selector === 'buttons'
+    : config.line_selection?.show_for_modes?.length === config.modes.length;
   const showLines = config.line_selection?.show_for_modes?.includes(selectedMode) ?? false;
   const columns = config.line_selection?.columns || [];
   // Label kolom input qty — WAJIB dari config model (`qty_label`); fallback generik 'Qty'

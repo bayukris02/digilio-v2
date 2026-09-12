@@ -1486,6 +1486,25 @@ export default function ModelFormPage({
       // column_config_rules mendefinikan hide/readonly berdasarkan field value
       const columnRules = config?.column_config_rules?.[relationField];
       const rule = columnRules?.[key];
+      if (rule?.readonly_when_row) {
+        // Lock per BARIS: kondisi dinilai dari nilai baris (params.data), bukan
+        // header. Mis. baris "satuan utama" (is_base = true) tidak bisa diedit.
+        const rowConds = rule.readonly_when_row as Record<string, unknown>;
+        const baseEditable = col.editable;
+        const baseCellStyle = col.cellStyle;
+        const rowLocked = (data: Record<string, unknown> | undefined) =>
+          !!data && Object.entries(rowConds).some(([f, v]) => data[f] === v);
+        col.editable = (params: any) => {
+          if (params.data?._isAddButton) return false;
+          if (rowLocked(params.data)) return false;
+          return typeof baseEditable === 'function' ? baseEditable(params) : !!baseEditable;
+        };
+        col.cellStyle = (params: any) => {
+          if (params.data?._isAddButton || params.node?.rowPinned) return undefined;
+          if (rowLocked(params.data)) return { backgroundColor: '#f5f5f5' };
+          return typeof baseCellStyle === 'function' ? baseCellStyle(params) : baseCellStyle;
+        };
+      }
       if (rule?.hide_when) {
         const shouldHide = Object.entries(rule.hide_when).some(
           ([field, value]) => columnFieldValues[field] === value,
@@ -1527,6 +1546,13 @@ export default function ModelFormPage({
     // Action column with delete button (only in edit mode)
     const gridReadOnly = isReadOnly || tabReadOnly;
     if (!gridReadOnly) {
+      // Rule per baris untuk kolom aksi (hapus): `_action.hide_when_row` —
+      // mis. baris turunan header (satuan utama) tidak boleh dihapus.
+      const actionHideConds = (config?.column_config_rules?.[relationField]?._action as
+        { hide_when_row?: Record<string, unknown> } | undefined)?.hide_when_row;
+      const rowActionHidden = (data: Record<string, unknown> | undefined) =>
+        !!data && !!actionHideConds &&
+        Object.entries(actionHideConds).some(([f, v]) => data[f] === v);
       cols.unshift({
         headerName: 'Action',
         field: '_action',
@@ -1535,6 +1561,7 @@ export default function ModelFormPage({
         flex: 0,
         cellRenderer: (params: ICellRendererParams) => {
           if (params.data?._isAddButton || params.node?.rowPinned) return null;
+          if (rowActionHidden(params.data as Record<string, unknown>)) return null;
           return (
           <Button
             type="text"

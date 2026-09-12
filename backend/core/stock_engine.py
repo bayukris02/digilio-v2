@@ -183,9 +183,14 @@ class StockEngine:
         avco_ids = cls._avg_product_ids(product_ids)
         product_cls = ErpModelBase._model_registry.get('inventory.product')
         for pid in avco_ids:
-            avg = avg_map.get(pid)
-            if avg is None or product_cls is None:
+            if product_cls is None:
                 continue
+            avg = avg_map.get(pid)
+            if avg is None:
+                # Tidak ada row ledger aktif lagi (mis. seluruh dokumen masuk/keluar
+                # sudah dibatalkan) → HPP dikosongkan (0). Tanpa ini HPP menyimpan
+                # nilai lama padahal Laporan Stock sudah kosong → tidak konsisten.
+                avg = 0.0
             current = product_cls.objects.filter(pk=pid).values_list('cost', flat=True).first()
             if round(float(current or 0), 2) != round(float(avg), 2):
                 # queryset.update → tidak memicu Product.save() (guard/compute)

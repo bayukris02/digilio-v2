@@ -106,7 +106,7 @@ class PurchaseOrder(BaseModel):
         'code': TextField(label='Kode Vendor', virtual=True),
         'description': TextField(label='Deskripsi'),
         'notes': TextField(label='Catatan', chatter_show=False),
-        'order_date': DateField(label='Tanggal Pesanan'),
+        'order_date': DateField(label='Tanggal Pesanan', required=True),
         'expected_date': DateField(label='Perkiraan Tanggal Terima'),
         'category': SelectionField(
             label='Kategori',
@@ -246,15 +246,38 @@ class PurchaseOrder(BaseModel):
                     'states': ['confirmed'],
                     'wizard': {
                         'title': 'Penerimaan Barang',
+                        # Tipe ditampilkan sebagai kartu pilihan (seperti wizard Buat
+                        # Tagihan), bukan tombol aksi di footer.
+                        'mode_selector': 'cards',
                         'modes': [
-                            {'value': 'save_draft', 'label': '📄 Buat Draft Dokumen', 'icon': 'FileAddOutlined'},
-                            {'value': 'confirm', 'label': '✅ Konfirm Penerimaan', 'icon': 'CheckCircleOutlined'},
+                            {
+                                'value': 'schedule',
+                                'label': '📅 Jadwalkan Penerimaan',
+                                'icon': 'FileTextOutlined',
+                                'inputs': [
+                                    {'key': 'schedule_date', 'label': 'Jadwal Penerimaan', 'type': 'date', 'default': 'today'},
+                                    {'key': 'warehouse', 'label': 'Gudang', 'type': 'many2one', 'relation': 'inventory.warehouse'},
+                                    {'key': 'location', 'label': 'Lokasi', 'type': 'many2one', 'relation': 'inventory.warehouse_location'},
+                                ],
+                            },
+                            {
+                                'value': 'receipt',
+                                'label': '✅ Proses Penerimaan',
+                                'icon': 'CheckCircleOutlined',
+                                'inputs': [
+                                    {'key': 'receipt_date', 'label': 'Tanggal Penerimaan', 'type': 'date', 'default': 'today'},
+                                    {'key': 'warehouse', 'label': 'Gudang', 'type': 'many2one', 'relation': 'inventory.warehouse'},
+                                    {'key': 'location', 'label': 'Lokasi', 'type': 'many2one', 'relation': 'inventory.warehouse_location'},
+                                ],
+                            },
                         ],
                         'line_selection': {
                             'relation': 'order_lines',
                             'columns': ['product', 'qty', 'done_qty', 'in_receipt_qty', 'remaining_qty'],
-                            'show_for_modes': ['save_draft', 'confirm'],
-                            'qty_label': 'Qty Diterima',
+                            'show_for_modes': ['schedule', 'receipt'],
+                            'qty_label': 'Input Qty',
+                            # Autofill qty = Qty Sisa (remaining_qty), bukan sisa tagih.
+                            'qty_default_from': 'remaining_qty',
                         },
                     },
                 },
@@ -290,12 +313,18 @@ class PurchaseOrder(BaseModel):
                             'columns': ['product', 'qty', 'billed_qty', 'remaining_bill_qty'],
                             'show_for_modes': ['bill_all'],
                             'qty_label': 'Bill Qty',
+                            # Autofill qty = sisa yang belum ditagih.
+                            'qty_default_from': 'remaining_bill_qty',
                         },
                     },
                 },
                 {'label': 'Batal', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'confirmed']},
             ],
             'smart_buttons': [
+                {
+                    'label': 'Permintaan Pembelian', 'model': 'purchase.request', 'icon': 'FileTextOutlined',
+                    'preview_columns': ['reference', 'request_date', 'estimated_receipt_date', 'status'],
+                },
                 {
                     'label': 'Penerimaan Barang', 'model': 'purchase.goods_receipt', 'icon': 'InboxOutlined',
                     'preview_columns': ['reference', 'receipt_date', 'location', 'status'],
@@ -341,10 +370,19 @@ class PurchaseOrder(BaseModel):
         verbose_name = 'Purchase Order'
         verbose_name_plural = 'Purchase Orders'
 
+    # ── Tanggal Pesanan wajib diisi ──
+    # Default hari ini supaya PO yang lahir dari alur lain (mis. wizard PR yang
+    # membuat PO langsung lewat API) tetap punya Tanggal Pesanan, bukan NULL.
+    def save(self, *args, **kwargs):
+        if not self.order_date:
+            from datetime import date
+            self.order_date = date.today()
+        super().save(*args, **kwargs)
+
     # ── Guards ──
 
     def _guard_confirm(self):
-        """Wajib pilih sequence sebelum konfirmasi."""
+        """Wajib pilih sequence, minimal 1 order line, & konfirmasi bila ada harga 0."""
         if not self.sequence_id:
             raise ValueError('Silakan pilih Sequence terlebih dahulu.')
 
@@ -353,14 +391,38 @@ class PurchaseOrder(BaseModel):
             raise ValueError('Record belum disimpan.')
         from core.model_meta import ErpModelBase
         fd = self._field_descriptors.get('order_lines')
+        zero_price_lines = []
         if fd:
             child_model = ErpModelBase._model_registry.get(fd.relation)
             if child_model:
-                count = child_model.objects.filter(
+                lines = child_model.objects.filter(
                     **{fd.inverse_field: self.pk, 'is_deleted': False}
-                ).count()
-                if count == 0:
+                )
+                if not lines.exists():
                     raise ValueError('Minimal harus ada 1 Order Line sebelum konfirmasi.')
+                # ── Kumpulkan baris dengan harga satuan 0 (mis. barang gratis) ──
+                for line in lines:
+                    if abs(float(line.price or 0)) < 0.005:
+                        zero_price_lines.append(
+                            str(line.name or line.product or f'#{line.pk}')
+                        )
+
+        # ── Guard harga 0: tetap boleh dikonfirmasi, tapi user harus konfirmasi
+        #    ulang (payload yang sama seperti transisi confirm_mode 'yes').
+        if zero_price_lines and not (getattr(self, '_action_request_data', None) or {}).get('confirmed'):
+            shown = ', '.join(zero_price_lines[:5])
+            more = f' (+{len(zero_price_lines) - 5} baris lainnya)' if len(zero_price_lines) > 5 else ''
+            return {
+                '_action_type': 'confirm',
+                'confirm_message': (
+                    f'{len(zero_price_lines)} baris pesanan memiliki harga satuan 0: {shown}{more}.\n\n'
+                    'Pastikan hal ini memang disengaja (mis. barang gratis) sebelum PO dikonfirmasi.'
+                ),
+                'confirm_options': [
+                    {'value': 'back', 'label': 'Kembali', 'type': 'default'},
+                    {'value': 'yes', 'label': 'Ya, Lanjut Konfirmasi', 'type': 'danger'},
+                ],
+            }
 
     def _guard_cancel(self):
         """Prevent cancel if children are active."""
@@ -573,6 +635,10 @@ class PurchaseOrder(BaseModel):
         if active_seq:
             config['fields']['sequence_id']['default'] = active_seq.pk
 
+        # Tanggal Pesanan default = hari ini (wajib diisi, bisa diubah user)
+        from datetime import date
+        config['fields']['order_date']['default'] = date.today().isoformat()
+
         # -- Generic column config rules untuk frontend --
         # Memberi tahu frontend kolom mana yg di-hide/readonly berdasarkan field value
         # tanpa hardcode nama field di ModelFormPage.tsx
@@ -674,18 +740,48 @@ class PurchaseOrder(BaseModel):
 
     def _action_receive_goods(self, data=None):
         """Buat Goods Receipt + copy lines dari PO, lalu open form GR.
-        
-        data: dict dari frontend wizard — {mode, selected_lines}
-          mode = save_draft | confirm
-            save_draft → GR status = waiting (draft)
-            confirm   → GR status = done
+
+        data: dict dari frontend wizard — {mode, selected_lines, ...input wizard}
+          mode = schedule | receipt   (kompatibel dgn mode lama save_draft | confirm)
+            schedule ('Jadwalkan Penerimaan') → GR status = waiting
+            receipt  ('Proses Penerimaan')    → GR status = done
+          Input wajib per tipe:
+            schedule → schedule_date (Jadwal Penerimaan), warehouse, location
+            receipt  → receipt_date (Tanggal Penerimaan), warehouse, location
           selected_lines = [{id, qty}, ...] — selalu dikirim dari frontend,
             semua line = ALL, sebagian = PARTIAL (dari checklist user)
         """
         from django.db import transaction
 
-        mode = (data or {}).get('mode', 'save_draft')
-        gr_status = 'done' if mode == 'confirm' else 'waiting'
+        mode = (data or {}).get('mode', 'schedule')
+        # Normalisasi mode lama → tipe baru
+        if mode in ('save_draft', 'draft'):
+            mode = 'schedule'
+        elif mode == 'confirm':
+            mode = 'receipt'
+
+        is_receipt = mode == 'receipt'
+        date_field = 'receipt_date' if is_receipt else 'schedule_date'
+        date_label = 'Tanggal Penerimaan' if is_receipt else 'Jadwal Penerimaan'
+        gr_status = 'done' if is_receipt else 'waiting'
+
+        # ── Validasi input wajib wizard (Jadwal/Tanggal, Gudang, Lokasi) ──
+        data = data or {}
+        for key, label in ((date_field, date_label), ('warehouse', 'Gudang'),
+                           ('location', 'Lokasi Penyimpanan')):
+            if not data.get(key):
+                return {'error': f'Silakan isi {label} terlebih dahulu.'}
+
+        from core.models.inventory.warehouse_location import WarehouseLocation
+        warehouse_id = int(data.get('warehouse') or 0)
+        location_id = int(data.get('location') or 0)
+        location_obj = WarehouseLocation.objects.filter(
+            pk=location_id, is_deleted=False
+        ).first()
+        if location_obj is None:
+            return {'error': 'Lokasi Penyimpanan tidak ditemukan.'}
+        if location_obj.warehouse_id_id != warehouse_id:
+            return {'error': 'Lokasi Penyimpanan tidak sesuai dengan Gudang yang dipilih.'}
 
         # selected_lines: [{id: line_id, qty: received_qty}, ...]
         selected_lines_raw = (data or {}).get('selected_lines')
@@ -755,6 +851,11 @@ class PurchaseOrder(BaseModel):
             # Set status sesuai mode
             child_data['status'] = gr_status
 
+            # ── Input wizard: tanggal (Jadwal/Tanggal Penerimaan), Gudang, Lokasi ──
+            child_data[date_field] = data.get(date_field)
+            child_data['warehouse_id'] = warehouse_id
+            child_data['location_id'] = location_id
+
             # Buat GR
             gr = GoodsReceipt.objects.create(**child_data)
 
@@ -782,7 +883,14 @@ class PurchaseOrder(BaseModel):
                             unit_price=line.price,
                         )
 
-        mode_label = 'draft dibuat' if mode == 'save_draft' else 'diterima'
+            # ── Proses Penerimaan (status langsung 'done') → posting stok + HPP ──
+            # Tanpa ini GR berstatus Selesai tetapi tidak masuk Laporan Stock dan
+            # HPP master produk tidak ter-update (efek transisi 'mark_done' dilewati
+            # karena GR dibuat langsung dengan status done).
+            if gr_status == 'done':
+                gr._effect_mark_done()
+
+        mode_label = 'diproses' if is_receipt else 'dijadwalkan'
         return {
             '_action_type': 'open_record',
             'model': 'purchase.goods_receipt',

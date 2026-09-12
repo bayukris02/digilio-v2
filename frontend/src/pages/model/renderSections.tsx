@@ -374,8 +374,13 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
           </>
           )}
         </div>
-        {tab.summary && (
-          <div style={{ borderTop: '2px solid #d9d9d9', paddingTop: 45 }}>
+        {!!tab.summary && (
+          // Wrapper (garis + jarak) hanya saat kartu Summary benar-benar tampil.
+          // Summary tanpa subtotal/grand_total tetap dimount supaya compute API
+          // jalan (mis. perhitungan keterangan tiap baris), tanpa artefak visual.
+          <div style={(tab.summary.subtotal || tab.summary.grand_total)
+            ? { borderTop: '2px solid #d9d9d9', paddingTop: 45 }
+            : undefined}>
           <SummaryCard
             summary={tab.summary}
             lineItems={lineItems[tab.relation!] || []}

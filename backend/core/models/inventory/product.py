@@ -2,7 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from core.fields import (
     CharField, TextField, BooleanField, MonetaryField,
-    SelectionField, FloatField, Many2OneField,
+    SelectionField, FloatField, Many2OneField, One2ManyField,
 )
 from core.model_meta import BaseModel
 
@@ -65,6 +65,17 @@ class Product(BaseModel):
         ),
         'weight': FloatField(label='Berat (kg)'),
         'is_active': BooleanField(label='Aktif', default=True),
+        # Frontend-only: pemicu compute per-barisan Multi Satuan (keterangan live
+        # di grid). Tidak dirender; nilainya tidak dipakai.
+        'units_compute': CharField(
+            label='Multi Satuan (compute)', virtual=True, chatter_show=False,
+            compute='_compute_units',
+        ),
+        'units': One2ManyField(
+            label='Multi Satuan',
+            relation='inventory.product_unit',
+            inverse_field='product',
+        ),
     }
 
     _list_view = {
@@ -85,6 +96,18 @@ class Product(BaseModel):
                 'key': 'details',
                 'label': 'Detail',
                 'fields': ['description'],
+            },
+            {
+                'key': 'multi_satuan',
+                'label': 'Multi Satuan',
+                'relation': 'units',
+                # Baris 1 (satuan utama) turunan field Satuan header → readonly.
+                # Baris 2+ diisi user: nama satuan, sifat, konversi.
+                'columns': ['uom', 'sifat', 'konversi', 'is_base', 'keterangan'],
+                'add_line_guard': ['uom'],
+                # `summary` hanya untuk memicu compute API (keterangan tiap baris
+                # live) — tanpa subtotal/grand_total → kartu Summary tidak tampil.
+                'summary': {'compute_deps': ['uom']},
             },
         ],
     }
@@ -116,7 +139,93 @@ class Product(BaseModel):
             # HPP readonly bila kategori pakai AVCO (milik mesin) atau Non-Stock.
             'cost': {'readonly_when': {'category_cost_method': 'avco', 'tipe_product': 'Non Stock'}},
         }
+        # -- Column config rules notebook: aturan per BARIS (dibaca frontend) --
+        # `readonly_when_row`/`hide_when_row` dinilai dari nilai baris, bukan header.
+        # Baris satuan utama (is_base = true) turunan field Satuan header → tidak
+        # bisa diubah & tanpa tombol hapus.
+        config['column_config_rules'] = {
+            'units': {
+                '_action': {'hide_when_row': {'is_base': True}},
+                'uom': {'readonly_when_row': {'is_base': True}},
+                'sifat': {'readonly_when_row': {'is_base': True}},
+                'konversi': {'readonly_when_row': {'is_base': True}},
+            },
+        }
         return config
+
+    # ── Multi Satuan (baris anak `units`) ────────────────────────────────────
+
+    @classmethod
+    def _validate_children(cls, one2many_data):
+        """Normalisasi baris Multi Satuan sebelum disimpan.
+
+        Baris **satuan utama** (is_base = true) TIDAK disimpan — nilainya turunan
+        field `Satuan` di header produk (ditampilkan lagi oleh `to_record`).
+        Baris lain wajib punya Nama Satuan, Sifat Satuan, dan Konversi > 0.
+        """
+        units = (one2many_data or {}).get('units')
+        if not units:
+            return
+        rows = []
+        for line in units:
+            if not isinstance(line, dict):
+                continue
+            if line.get('is_base'):
+                continue                     # baris turunan header — jangan disimpan
+            if not line.get('uom'):
+                raise ValidationError('Multi Satuan: Nama Satuan wajib diisi.')
+            if not line.get('sifat'):
+                raise ValidationError('Multi Satuan: Sifat Satuan wajib dipilih.')
+            try:
+                faktor = float(line.get('konversi') or 0)
+            except (TypeError, ValueError):
+                faktor = 0
+            if faktor <= 0:
+                raise ValidationError('Multi Satuan: Konversi harus lebih besar dari 0.')
+            line['is_base'] = False
+            rows.append(line)
+        one2many_data['units'] = rows
+
+    def _compute_units(self):
+        """Isi `keterangan` tiap baris Multi Satuan di compute API (grid live).
+
+        Dipakai SummaryCard/notebook → response `_computed_o2m_lines` di-merge ke
+        baris tabel, jadi keterangan langsung tampil saat user mengubah baris.
+        """
+        from core.models.inventory.product_unit import ProductUnit, KETERANGAN_BASE
+        lines = (getattr(self, '_tmp_one2many', None) or {}).get('units') or []
+        base_uom = self.uom if self.uom_id else None
+        out = []
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+            if line.get('is_base'):
+                keterangan = KETERANGAN_BASE
+            else:
+                keterangan = ProductUnit.build_keterangan(
+                    base_uom, line.get('uom'), line.get('sifat'), line.get('konversi'),
+                )
+            out.append({'_key': line.get('_key'), 'keterangan': keterangan})
+        self._computed_o2m_lines = {'units': out}
+
+    def to_record(self):
+        """Override: baris pertama Multi Satuan = satuan utama (turunan header)."""
+        from core.models.inventory.product_unit import KETERANGAN_BASE
+        data = super().to_record()
+        base_row = {
+            'id': None,
+            'product': {'id': self.pk, 'name': str(self)} if self.pk else None,
+            'uom': (
+                {'id': self.uom_id, 'name': str(self.uom)}
+                if self.uom_id else None
+            ),
+            'sifat': None,
+            'konversi': 1,
+            'is_base': True,
+            'keterangan': KETERANGAN_BASE,
+        }
+        data['units'] = [base_row] + list(data.get('units') or [])
+        return data
 
     # ── Guard: field yang terkunci setelah ada mutasi stok ──
     _LOCKED_AFTER_MOVEMENT = (

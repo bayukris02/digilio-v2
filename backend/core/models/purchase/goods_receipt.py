@@ -64,15 +64,24 @@ class GoodsReceipt(BaseModel):
             relation='purchase.quick_purchase',
             required=False,
         ),
-        'receipt_date': DateField(label='Tanggal Terima', editable_statuses=['draft', 'waiting']),
+        'receipt_date': DateField(
+            label='Tanggal Terima', required=True,
+            editable_statuses=['draft', 'waiting'],
+        ),
+        'schedule_date': DateField(
+            label='Jadwal Penerimaan', editable_statuses=['draft', 'waiting'],
+            help_text='Tanggal rencana penerimaan barang (diisi saat Jadwalkan Penerimaan)',
+        ),
         'warehouse': Many2OneField(
             label='Gudang',
             relation='inventory.warehouse',
+            required=True,
         ),
         'location': Many2OneField(
             label='Lokasi Penyimpanan',
             relation='inventory.warehouse_location',
             domain={'warehouse_id': 'warehouse'},
+            required=True,
         ),
         'notes': TextField(label='Catatan'),
         'receipt_lines': One2ManyField(
@@ -83,8 +92,8 @@ class GoodsReceipt(BaseModel):
     }
 
     _list_view = {
-        'columns': ['reference', 'sequence_id', 'purchase_order', 'receipt_date', 'status', 'warehouse', 'location'],
-        'filters': ['status', 'receipt_date', 'warehouse', 'location'],
+        'columns': ['reference', 'sequence_id', 'purchase_order', 'schedule_date', 'receipt_date', 'status', 'warehouse', 'location'],
+        'filters': ['status', 'receipt_date', 'schedule_date', 'warehouse', 'location'],
         'default_sort': ['-receipt_date'],
     }
 
@@ -94,7 +103,7 @@ class GoodsReceipt(BaseModel):
                 {
                     'key': 'general',
                     'label': 'Umum',
-                    'fields': ['status', 'reference', 'sequence_id', 'purchase_order', 'receipt_date', 'warehouse', 'location'],
+                    'fields': ['reference', 'sequence_id', 'purchase_order', 'schedule_date', 'receipt_date', 'warehouse', 'location'],
                 },
                 {
                     'key': 'details',
@@ -160,6 +169,12 @@ class GoodsReceipt(BaseModel):
             raise ValueError('Silakan pilih Lokasi Penyimpanan terlebih dahulu.')
         if self.warehouse_id and self.location and self.location.warehouse_id_id != self.warehouse_id:
             raise ValueError('Lokasi Penyimpanan tidak sesuai dengan Gudang yang dipilih.')
+        # GR hasil 'Jadwalkan Penerimaan' belum punya Tanggal Terima — isi hari ini
+        # supaya row ledger punya tanggal (kalau NULL, row tidak muncul di
+        # Laporan Stock saat difilter tanggal).
+        if not self.receipt_date:
+            from datetime import date
+            self.receipt_date = date.today()
 
     def _effect_mark_done(self):
         """Posting stok masuk (+qty) ke stock ledger."""
