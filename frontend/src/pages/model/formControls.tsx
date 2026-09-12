@@ -17,6 +17,7 @@
  *                             (boolean/selection/date/monetary/integer/percentage/
  *                             text/many2one/char + virtual read-only)
  *  - Many2OneCellEditor     : cell editor AG Grid (Ant Select + infinite scroll)
+ *  - MonetaryCellEditor     : cell editor AG Grid monetary (separator ribuan live)
  *
  * ATURAN: file ini core frontend — WAJIB generik. Dilarang hardcode
  * model-specific logic (`if model_name === ...`) di sini.
@@ -45,6 +46,8 @@
  *      kolom terkait jalan, lalu summary recompute.
  * 6. Regresi umum: new record, save, cancel, prev/next record, dirty-warning
  *    saat pindah halaman tanpa save — semua tetap normal.
+ * 7. MonetaryCellEditor: ketik angka di kolom monetary grid → langsung muncul
+ *    separator ribuan (tanpa "Rp"); nilai tersimpan tetap number.
  * ============================================================================
  */
 import { useEffect, useState, useMemo, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
@@ -723,3 +726,72 @@ export const Many2ManyCellEditor = forwardRef<{ getValue: () => Array<Record<str
   },
 );
 Many2ManyCellEditor.displayName = 'Many2ManyCellEditor';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MonetaryCellEditor — cell editor AG Grid untuk kolom monetary (Rp)
+// -----------------------------------------------------------------------------
+// Saat user MENGETIK, angka langsung diberi separator ribuan (tanpa prefix
+// "Rp" / simbol mata uang) — mis. ketik 1000000 → tampil 1.000.000.
+// Nilai yang di-commit tetap number (dibaca proxy AG Grid via onValueChange).
+// Generik: dipakai semua kolom `monetary` di grid notebook (semua model).
+// ─────────────────────────────────────────────────────────────────────────────
+interface MonetaryEditorProps {
+  value?: number | string | null;
+  onValueChange?: (value: number | null) => void;
+  stopEditing?: () => void;
+}
+
+/** Normalisasi input mentah → teks ber-separator ribuan + nilai number. */
+const formatThousands = (raw: string): { text: string; num: number | null } => {
+  const cleaned = raw.replace(/[^0-9,]/g, '');
+  const [intRaw, ...decRest] = cleaned.split(',');
+  const hasDec = decRest.length > 0;
+  const dec = decRest.join('').slice(0, 2);
+  const intDigits = intRaw.replace(/^0+(?=\d)/, '');
+  const grouped = intDigits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const text = hasDec ? `${grouped},${dec}` : grouped;
+  const num = Number(`${intDigits || '0'}${dec ? `.${dec}` : ''}`);
+  return { text, num: Number.isNaN(num) ? null : num };
+};
+
+export const MonetaryCellEditor = forwardRef<{ getValue: () => number | null }, MonetaryEditorProps>(
+  ({ value, onValueChange }, ref) => {
+    // `value` dari grid bisa number mentah — normalisasi dulu agar aman
+    const initial = formatThousands(value == null ? '' : String(value));
+    const [text, setText] = useState(initial.text);
+    const numRef = useRef<number | null>(initial.num);
+    const inputRef = useRef<any>(null);
+
+    // AG Grid mencuri fokus setelah editor mount → fokuskan input eksplisit
+    useEffect(() => {
+      const t = setTimeout(() => {
+        const el = inputRef.current?.input as HTMLInputElement | undefined;
+        el?.focus();
+        el?.select();
+      }, 30);
+      return () => clearTimeout(t);
+    }, []);
+
+    useImperativeHandle(ref, () => ({ getValue: () => numRef.current }));
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const { text: next, num } = formatThousands(e.target.value);
+      numRef.current = num;
+      setText(next);
+      // Sinkronkan ke grid (proxy AG Grid React membaca nilai via prop ini)
+      onValueChange?.(num);
+    };
+
+    return (
+      <Input
+        ref={inputRef}
+        value={text}
+        inputMode="decimal"
+        placeholder="0"
+        style={{ width: '100%' }}
+        onChange={handleChange}
+      />
+    );
+  },
+);
+MonetaryCellEditor.displayName = 'MonetaryCellEditor';

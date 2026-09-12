@@ -11,7 +11,6 @@ import {
   MoreOutlined, InboxOutlined, CheckOutlined, PrinterOutlined,
   DownloadOutlined, SendOutlined, EditOutlined, CopyOutlined,
   StopOutlined, UndoOutlined, HolderOutlined, DownOutlined, ExportOutlined,
-  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { modelApi, type ModelConfig, type FieldConfig } from '../../api/models';
 import { parseDate, formatDate, formatLastUpdate } from '../../utils/format';
@@ -21,7 +20,7 @@ import QuickViewModal from '../../components/QuickViewModal';
 import GenericWizardModal from '../../components/GenericWizardModal';
 import PrintWizardModal from '../../components/PrintWizardModal';
 import ProgressBar from '../../components/ProgressBar';
-import { SmartButton, renderField, Many2OneCellEditor, Many2ManyCellEditor, resolveMany2oneDomain } from './formControls';
+import { SmartButton, renderField, Many2OneCellEditor, Many2ManyCellEditor, MonetaryCellEditor, resolveMany2oneDomain } from './formControls';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard';
 import { useFormChangeHandler } from './useFormChangeHandler';
 import { useModelFormActions, collectRequiredErrors, requiredSkipRowWhen } from './useModelFormActions';
@@ -612,7 +611,7 @@ export default function ModelFormPage({
       global.push({
         label: 'Action',
         color: 'default',
-        icon: 'ThunderboltOutlined',
+        icon: 'MoreOutlined',
         _global: 'actions',
         menu: config?.actions_menu,
       });
@@ -1273,28 +1272,8 @@ export default function ModelFormPage({
       });
     }
     const cols: ColDef[] = [];
-    // Drag handle column — pindah urutan baris via drag & drop
-    // Nomor # dihitung dari posisi ARRAY (lineItems) supaya recompute
-    // mengikuti urutan data setelah drag (sync di onRowDragEnd).
-    if (!(isReadOnly || tabReadOnly)) {
-      cols.push({
-        headerName: '',
-        field: '_drag',
-        width: 40,
-        minWidth: 40,
-        maxWidth: 40,
-        flex: 0,
-        sortable: false,
-        resizable: false,
-        editable: false,
-        // rowDrag callback: row +Add tidak draggable → grip default AG Grid tidak dirender
-        rowDrag: (params) => !(params.data as Record<string, unknown> | undefined)?._isAddButton,
-        cellRenderer: (params: ICellRendererParams) => {
-          if (params.data?._isAddButton || params.node?.rowPinned) return null;
-          return <HolderOutlined style={{ color: '#999', cursor: 'grab' }} />;
-        },
-      });
-    }
+    // Kolom aksi baris (drag handle + hapus) dibuat di bawah — digabung jadi
+    // SATU kolom ber-header "Action" (lihat blok `_action`).
     // Row number column — atau tombol "+ Add" untuk baris add-button
     cols.push({
       headerName: 'No.',
@@ -1359,6 +1338,8 @@ export default function ModelFormPage({
         col.type = 'numericColumn';
       }
       if (field.type === 'monetary') {
+        // Editor khusus: separator ribuan tampil LIVE saat mengetik (tanpa "Rp")
+        col.cellEditor = MonetaryCellEditor;
         col.valueFormatter = (params) => {
           if (params.value == null) return '';
           return `Rp ${Number(params.value).toLocaleString('id-ID')}`;
@@ -1602,21 +1583,30 @@ export default function ModelFormPage({
       cols.unshift({
         headerName: 'Action',
         field: '_action',
-        width: 60,
-        minWidth: 60,
+        width: 96,
+        minWidth: 96,
         flex: 0,
+        // Drag & drop pindah urutan baris digabung di kolom ini (dulu kolom
+        // terpisah tanpa header). Seluruh sel jadi area drag; ikon grip hanya
+        // penanda visual. Baris +Add tidak draggable.
+        rowDrag: (params) => !(params.data as Record<string, unknown> | undefined)?._isAddButton,
         cellRenderer: (params: ICellRendererParams) => {
           if (params.data?._isAddButton || params.node?.rowPinned) return null;
-          if (rowActionHidden(params.data as Record<string, unknown>)) return null;
+          const hideDelete = rowActionHidden(params.data as Record<string, unknown>);
           return (
-          <Button
-            type="text"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            loading={deletingKey === params.data._key}
-            onClick={() => { setDeletingKey(params.data._key); deleteLine(relationField, params.data._key); setDeletingKey(null); }}
-          />
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              {!hideDelete && (
+                <Button
+                  type="text"
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined />}
+                  loading={deletingKey === params.data._key}
+                  onClick={() => { setDeletingKey(params.data._key); deleteLine(relationField, params.data._key); setDeletingKey(null); }}
+                />
+              )}
+              <HolderOutlined style={{ color: '#999', cursor: 'grab' }} />
+            </span>
           );
         },
         editable: false,
@@ -2263,7 +2253,7 @@ export default function ModelFormPage({
                       color="default"
                       icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
                     >
-                      {btn.label} <DownOutlined />
+                      {btn.label}
                     </Button>
                   </Dropdown>
                 );
