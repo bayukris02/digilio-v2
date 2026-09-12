@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Print Preview - {{ model_label }} {{ print_meta.document }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 2cm;
+  }
+
+  body {
+    font-family: 'DejaVu Sans', 'Arial', sans-serif;
+    font-size: 11px;
+    color: #222;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #1677ff;
+  }
+  .header .company-name { font-size: 18px; font-weight: bold; color: #1677ff; }
+  .header .company-detail { font-size: 10px; color: #555; }
+
+  .doc-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 20px 0;
+    text-transform: uppercase;
+  }
+  .doc-sub { text-align: center; font-size: 12px; color: #555; margin-top: -14px; margin-bottom: 18px; }
+
+  table.info { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+  table.info td { vertical-align: top; padding: 3px 6px; border-bottom: 1px solid #f0f0f0; }
+  table.info td.label { font-weight: bold; width: 34%; color: #555; }
+
+  table.items { width: 100%; border-collapse: collapse; margin: 15px 0; }
+  table.items caption {
+    caption-side: top; text-align: left;
+    font-weight: bold; color: #1677ff; padding-bottom: 4px;
+  }
+  table.items thead th {
+    background-color: #1677ff; color: white; padding: 8px 6px;
+    text-align: left; font-size: 10px; text-transform: uppercase;
+  }
+  table.items tbody td { padding: 6px; border-bottom: 1px solid #ddd; }
+  table.items tbody tr:nth-child(even) { background-color: #f9f9f9; }
+  .empty { text-align: center; color: #999; padding: 12px; }
+
+  .signature { margin-top: 40px; width: 100%; }
+  .signature td { text-align: center; padding-top: 8px; }
+
+  .footer {
+    margin-top: 40px; font-size: 10px; color: #888;
+    text-align: center; border-top: 1px solid #ddd; padding-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="company-name">{{ company.name|default:'DIGILIO TEKNOLOGI' }}</div>
+  <div class="company-detail">
+    {{ company.address|default:'Jl. Raya No. 123' }}<br>
+    Tel: {{ company.phone|default:'(021) 555-1234' }} | Email: {{ company.email|default:'info@digilio.id' }}
+  </div>
+</div>
+
+<div class="doc-title">{{ printout.label|default:model_label }}</div>
+{% if print_meta.document %}<div class="doc-sub">{{ print_meta.document }}{% if print_meta.status %} &middot; {{ print_meta.status }}{% endif %}</div>{% endif %}
+
+{% if print_meta %}
+<table class="info">
+  {% for f in print_meta.fields %}
+  {% if f.value %}
+  <tr>
+    <td class="label">{{ f.label }}</td>
+    <td>{{ f.value }}</td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty">Struktur cetak tidak tersedia.</div>
+{% endif %}
+
+{% for block in print_meta.lines %}
+<table class="items">
+  <caption>{{ block.label }}</caption>
+  <thead>
+    <tr>
+      <th style="width:32px;">#</th>
+      {% for col in block.header %}<th>{{ col }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in block.rows %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      {% for cell in row %}<td>{{ cell }}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+
+<div class="signature">
+  <table style="width:100%;">
+    <tr>
+      <td>
+        <div style="margin-bottom:50px;">_________________________</div>
+        <div>Dibuat Oleh</div>
+      </td>
+      <td>
+        <div style="margin-bottom:50px;">_________________________</div>
+        <div>Disetujui Oleh</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div class="footer">
+  Dokumen ini digenerate secara otomatis oleh Digilio ERP.
+</div>
+
+</body>
+</html>

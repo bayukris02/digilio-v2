@@ -112,7 +112,6 @@ class GoodsReceipt(BaseModel):
                 },
             ],
             'actions': [
-                {'label': 'Cetak', 'color': 'green', 'action': 'print'},
                 {'label': 'Proses Penerimaan', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {'label': 'Konfirmasi', 'color': 'primary', 'action': 'mark_done', 'states': ['waiting']},
                 {'label': 'Batal', 'color': 'red', 'action': 'cancel', 'states': ['draft', 'waiting', 'done']},
@@ -134,6 +133,16 @@ class GoodsReceipt(BaseModel):
         app_label = 'core'
         verbose_name = 'Penerimaan Barang'
         verbose_name_plural = 'Penerimaan Barang'
+
+    # ── Printout & menu Action (meta-driven — tombol global Print/Action) ──
+    # Template `print/purchase_goods_receipt.html` belum ada → otomatis memakai
+    # template generik (print/_generic.html).
+    _printouts = [
+        {'key': 'default', 'label': 'Penerimaan Barang'},
+    ]
+    _actions_menu = [
+        {'key': 'duplicate', 'label': 'Duplikat', 'icon': 'CopyOutlined'},
+    ]
 
     @classmethod
     def get_model_config(cls):

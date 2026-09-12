@@ -11,6 +11,7 @@ import {
   MoreOutlined, InboxOutlined, CheckOutlined, PrinterOutlined,
   DownloadOutlined, SendOutlined, EditOutlined, CopyOutlined,
   StopOutlined, UndoOutlined, HolderOutlined, DownOutlined, ExportOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { modelApi, type ModelConfig, type FieldConfig } from '../../api/models';
 import { parseDate, formatDate, formatLastUpdate } from '../../utils/format';
@@ -18,6 +19,7 @@ import { modelNameToApi, apiToUrlName } from '../../config/urlModelMap';
 import Chatter from '../../components/Chatter';
 import QuickViewModal from '../../components/QuickViewModal';
 import GenericWizardModal from '../../components/GenericWizardModal';
+import PrintWizardModal from '../../components/PrintWizardModal';
 import ProgressBar from '../../components/ProgressBar';
 import { SmartButton, renderField, Many2OneCellEditor, Many2ManyCellEditor, resolveMany2oneDomain } from './formControls';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard';
@@ -76,6 +78,8 @@ export default function ModelFormPage({
   const [currentIdx, setCurrentIdx] = useState(-1);
   const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
   const [printPdfUrl, setPrintPdfUrl] = useState<string | null>(null);
+  /** Wizard Print global (tombol Print) — pilihan printout + preview */
+  const [printWizardOpen, setPrintWizardOpen] = useState(false);
   const [quickView, setQuickView] = useState<{ modelName: string; recordId: number } | null>(null);
   const [wizardVisible, setWizardVisible] = useState(false);
   /** Dialog konfirmasi aksi (generik) — payload + tombol dari backend (_action_type 'confirm') */
@@ -586,8 +590,7 @@ export default function ModelFormPage({
     const all = config?.form_view?.header?.actions ?? [];
     if (!recordData) return [];
     const currentStatus = recordData?.status as string | undefined;
-    if (!currentStatus) return all;
-    return all.filter((btn: Record<string, unknown>) => {
+    const visible = !currentStatus ? all : all.filter((btn: Record<string, unknown>) => {
       // Tombol disembunyikan saat dokumen sudah Lunas (config `hide_when_paid`)
       if ((btn as Record<string, unknown>).hide_when_paid && (recordData as Record<string, unknown> | null)?.payment_status === 'paid') {
         return false;
@@ -596,7 +599,26 @@ export default function ModelFormPage({
       if (!states || states.length === 0) return true;
       return states.includes(currentStatus);
     });
-  }, [config, recordData]);
+
+    // ── Tombol GLOBAL (abu-abu) — selalu di posisi paling kiri ──
+    // Print  : meta-driven dari `config.printouts` (daftar printout model).
+    // Action : meta-driven dari `config.actions_menu`; kosong → tombol disembunyikan.
+    const global: Record<string, unknown>[] = [];
+    const hasRecord = !!recordId && recordId !== 'new' && !Number.isNaN(Number(recordId));
+    if ((config?.printouts || []).length && hasRecord) {
+      global.push({ label: 'Print', color: 'default', icon: 'PrinterOutlined', _global: 'print' });
+    }
+    if ((config?.actions_menu || []).length) {
+      global.push({
+        label: 'Action',
+        color: 'default',
+        icon: 'ThunderboltOutlined',
+        _global: 'actions',
+        menu: config?.actions_menu,
+      });
+    }
+    return [...global, ...visible];
+  }, [config, recordData, recordId]);
 
   // ── Editable / read-only mode ──
   const currentStatus = recordData?.status as string | undefined;
@@ -2201,13 +2223,59 @@ export default function ModelFormPage({
           <Space size={4}>
             {actionButtons.map((btn) => {
               const children = btn.children as Record<string, unknown>[] | undefined;
+              const globalKind = btn._global as string | undefined;
+              // Warna tombol: default = abu-abu (tombol global Print/Action)
+              const btnColor = (btn.color as 'green' | 'primary' | 'default' | undefined) || 'default';
+
+              // ── Tombol global Print → wizard printout + preview ──
+              if (globalKind === 'print') {
+                return (
+                  <Button
+                    key="__print__"
+                    variant="outlined"
+                    color="default"
+                    icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
+                    onClick={() => setPrintWizardOpen(true)}
+                  >
+                    {btn.label}
+                  </Button>
+                );
+              }
+
+              // ── Tombol global Action → dropdown aksi tambahan (meta-driven) ──
+              if (globalKind === 'actions') {
+                const menuItems = (btn.menu || []) as { key: string; action: string; label: string; icon?: string }[];
+                return (
+                  <Dropdown
+                    key="__action__"
+                    trigger={['click']}
+                    menu={{
+                      items: menuItems.map((m) => ({
+                        key: m.key,
+                        label: m.label,
+                        icon: (m.icon && ICON_MAP[m.icon as keyof typeof ICON_MAP]) || undefined,
+                        onClick: () => handleAction({ action: m.action }),
+                      })),
+                    }}
+                  >
+                    <Button
+                      variant="outlined"
+                      color="default"
+                      icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
+                    >
+                      {btn.label} <DownOutlined />
+                    </Button>
+                  </Dropdown>
+                );
+              }
+
               // Split button: children ada → tombol utama + panah dropdown (Odoo-style)
               if (children?.length) {
                 return (
                   <Space.Compact key={btn.label}>
                     <Button
                       variant="solid"
-                      color={btn.color as 'green' | 'primary'}
+                      color={btnColor}
                       icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
                       loading={actionLoading === btn.action}
                       onClick={() => handleAction(btn)}
@@ -2224,7 +2292,7 @@ export default function ModelFormPage({
                         })),
                       }}
                     >
-                      <Button variant="solid" color={btn.color as 'green' | 'primary'} icon={<DownOutlined />} />
+                      <Button variant="solid" color={btnColor} icon={<DownOutlined />} />
                     </Dropdown>
                   </Space.Compact>
                 );
@@ -2233,7 +2301,7 @@ export default function ModelFormPage({
                 <Button
                   key={btn.label}
                   variant="solid"
-                  color={btn.color as 'green' | 'primary'}
+                  color={btnColor}
                   icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
                   loading={actionLoading === btn.action}
                   onClick={() => handleAction(btn)}
@@ -2386,6 +2454,15 @@ export default function ModelFormPage({
       )}
 
       {/* ═══ QUICK VIEW MODAL ═══ */}
+      {/* ═══ PRINT WIZARD (global — pilihan printout + preview) ═══ */}
+      <PrintWizardModal
+        open={printWizardOpen}
+        onClose={() => setPrintWizardOpen(false)}
+        modelName={apiModelName}
+        recordId={recordId && recordId !== 'new' && !Number.isNaN(Number(recordId)) ? Number(recordId) : null}
+        printouts={config?.printouts || []}
+      />
+
       <QuickViewModal
         visible={!!quickView}
         modelName={quickView?.modelName || ''}

@@ -161,6 +161,16 @@ class PurchaseRequest(BaseModel):
         verbose_name = 'Permintaan Pembelian'
         verbose_name_plural = 'Permintaan Pembelian'
 
+    # ── Printout & menu Action (meta-driven — tombol global Print/Action) ──
+    # Template `print/purchase_request.html` belum ada → otomatis memakai
+    # template generik (print/_generic.html).
+    _printouts = [
+        {'key': 'default', 'label': 'Permintaan Pembelian'},
+    ]
+    _actions_menu = [
+        {'key': 'duplicate', 'label': 'Duplikat', 'icon': 'CopyOutlined'},
+    ]
+
     def __str__(self):
         return self.reference or f'PR#{self.pk}'
 

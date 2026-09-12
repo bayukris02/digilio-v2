@@ -237,7 +237,6 @@ class PurchaseOrder(BaseModel):
                 },
             ],
             'actions': [
-                {'label': 'Cetak', 'color': 'green', 'action': 'print'},
                 {'label': 'Konfirmasi', 'color': 'primary', 'action': 'confirm', 'states': ['draft']},
                 {
                     'label': 'Terima Barang',
@@ -369,6 +368,14 @@ class PurchaseOrder(BaseModel):
         app_label = 'core'
         verbose_name = 'Purchase Order'
         verbose_name_plural = 'Purchase Orders'
+
+    # ── Printout & menu Action (meta-driven — tombol global Print/Action) ──
+    _printouts = [
+        {'key': 'default', 'label': 'Purchase Order'},
+    ]
+    _actions_menu = [
+        {'key': 'duplicate', 'label': 'Duplikat', 'icon': 'CopyOutlined'},
+    ]
 
     # ── Tanggal Pesanan wajib diisi ──
     # Default hari ini supaya PO yang lahir dari alur lain (mis. wizard PR yang

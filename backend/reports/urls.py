@@ -8,13 +8,18 @@ urlpatterns = [
         name='print-preview',
     ),
     path(
+        'print/<str:model_name>/<int:record_id>/<str:template_key>/preview/',
+        print_preview,
+        name='print-preview-printout',
+    ),
+    path(
         'print/<str:model_name>/<int:record_id>/download/',
         print_download,
         name='print-download',
     ),
     path(
-        'print/<str:model_name>/<int:record_id>/<int:template_id>/download/',
+        'print/<str:model_name>/<int:record_id>/<str:template_key>/download/',
         print_download,
-        name='print-download-template',
+        name='print-download-printout',
     ),
 ]

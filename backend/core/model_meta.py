@@ -194,6 +194,21 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
     _fields = {}  # { 'field_name': FieldDescriptor(...), ... }
     _display_name = None  # Field to use for display in breadcrumbs, e.g. 'reference', 'code', 'name'
 
+    # ── Printout (meta-driven, opsional) ──
+    # Daftar printout untuk tombol Print global di form:
+    #   _printouts = [
+    #       {'key': 'default', 'label': 'Purchase Order'},
+    #       {'key': 'tanpa_harga', 'label': 'PO Tanpa Harga', 'template': 'print/po_noharga.html'},
+    #   ]
+    # Kosong/None → otomatis 1 printout memakai template `print/<model>.html`;
+    # bila file template belum ada → jatuh ke template generik `print/_generic.html`.
+    _printouts = None
+
+    # ── Menu tombol Action (meta-driven, opsional) ──
+    # Aksi tambahan yang jarang dipakai. None/kosong → tombol Action TIDAK tampil.
+    #   _actions_menu = [{'key': 'duplicate', 'label': 'Duplikat', 'icon': 'CopyOutlined'}]
+    _actions_menu = None
+
     # ── State Machine (optional) ──
     # Defines valid statuses and their config.
     # Auto-generates 'status' field, allow_edit/allow_delete enforcement.
@@ -334,7 +349,163 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
 
         result['preview_view'] = cls._build_preview_view()
 
+        # Printout & menu Action (meta-driven, dipakai tombol global Print/Action
+        # di header form — lihat ModelFormPage).
+        result['printouts'] = cls.get_printouts()
+        result['actions_menu'] = cls.get_actions_menu()
+
         return result
+
+    # ── Printout & Action menu (meta-driven) ────────────────────────────────
+
+    _PRINT_GENERIC_TEMPLATE = 'print/_generic.html'
+    # Field teknis yang tidak ikut tercetak di template generik
+    _PRINT_SKIP_FIELDS = {
+        'id', 'is_deleted', 'created_at', 'updated_at', 'created_by', 'updated_by',
+    }
+
+    @staticmethod
+    def _print_template_exists(template_name):
+        from django.template import TemplateDoesNotExist
+        from django.template.loader import get_template
+        try:
+            get_template(template_name)
+            return True
+        except TemplateDoesNotExist:
+            return False
+        except Exception:
+            return False
+
+    @classmethod
+    def get_printouts(cls):
+        """Daftar printout tersedia untuk model ini (dipakai tombol Print global).
+
+        Default (tanpa `_printouts`) → satu printout memakai template
+        `print/<model>.html`; bila file-nya belum ada → template generik
+        `print/_generic.html` yang menggambar struktur `_print` dari
+        `_print_context()`.
+        """
+        base = (cls._model_name or cls.__name__.lower()).replace('.', '_')
+        specs = [dict(s) for s in (cls._printouts or [])] or [{'key': 'default'}]
+        default_label = str(getattr(cls._meta, 'verbose_name', None) or base)
+        out = []
+        for spec in specs:
+            key = str(spec.get('key') or 'default')
+            template = spec.get('template') or (
+                f'print/{base}.html' if key == 'default' else f'print/{base}_{key}.html'
+            )
+            if not cls._print_template_exists(template):
+                template = cls._PRINT_GENERIC_TEMPLATE
+            out.append({
+                'key': key,
+                'label': str(spec.get('label') or default_label),
+                'template': template,
+            })
+        return out
+
+    @classmethod
+    def get_actions_menu(cls):
+        """Menu tombol Action global (meta-driven). Kosong → tombol disembunyikan."""
+        out = []
+        for spec in (cls._actions_menu or []):
+            key = spec.get('key') or spec.get('action')
+            if not key:
+                continue
+            out.append({
+                'key': str(key),
+                'action': str(spec.get('action') or key),
+                'label': str(spec.get('label') or key),
+                'icon': spec.get('icon'),
+            })
+        return out
+
+    # ── Format sel untuk template print generik ──
+
+    @staticmethod
+    def _print_cell(fd, value):
+        """Format satu nilai field jadi teks siap cetak (label selection,
+        Ya/Tidak, angka ribuan). Relasi → ambil `name`/`label`."""
+        if value is None or value == '':
+            return ''
+        if isinstance(value, dict):
+            value = value.get('name') or value.get('label') or value.get('id') or ''
+            if value == '':
+                return ''
+        ftype = getattr(fd, 'field_type', None)
+        if ftype == 'selection':
+            for opt in (getattr(fd, 'options', None) or []):
+                if isinstance(opt, (list, tuple)) and len(opt) >= 2 and str(opt[0]) == str(value):
+                    return str(opt[1])
+            return str(value)
+        if ftype == 'boolean':
+            return 'Ya' if value else 'Tidak'
+        if ftype in ('monetary', 'float', 'integer'):
+            try:
+                num = float(value)
+            except (TypeError, ValueError):
+                return str(value)
+            if ftype == 'monetary':
+                return f'{num:,.2f}'
+            return f'{num:,.6g}'
+        return str(value)
+
+    def _print_meta(self, data=None):
+        """Struktur generik untuk `print/_generic.html`: judul, field skalar, baris."""
+        cls = self.__class__
+        descriptors = cls._field_descriptors or {}
+        data = data if data is not None else self.to_record()
+
+        def is_relation(fd):
+            return getattr(fd, 'field_type', None) in ('one2many', 'many2many')
+
+        fields, lines = [], []
+        for fname, fd in descriptors.items():
+            if fname.startswith('_') or fname in self._PRINT_SKIP_FIELDS:
+                continue
+            label = str(getattr(fd, 'label', None) or fname)
+            if is_relation(fd):
+                if getattr(fd, 'field_type', None) != 'one2many':
+                    continue
+                rows_src = data.get(fname) or []
+                child_cls = ErpModelBase._model_registry.get(getattr(fd, 'relation', None))
+                if not child_cls or not rows_src:
+                    continue
+                inverse = getattr(fd, 'inverse_field', None)
+                child_fds = [
+                    (k, f) for k, f in (child_cls._field_descriptors or {}).items()
+                    if not k.startswith('_') and k not in self._PRINT_SKIP_FIELDS
+                    and k != inverse and not is_relation(f)
+                ]
+                rows = []
+                for row in rows_src:
+                    if not isinstance(row, dict):
+                        continue
+                    rows.append([self._print_cell(f, row.get(k)) for k, f in child_fds])
+                if not rows:
+                    continue
+                lines.append({
+                    'key': fname,
+                    'label': label,
+                    'header': [str(getattr(f, 'label', None) or k) for k, f in child_fds],
+                    'rows': rows,
+                })
+            else:
+                fields.append({
+                    'key': fname,
+                    'label': label,
+                    'value': self._print_cell(fd, data.get(fname)),
+                })
+
+        status_fd = descriptors.get('status')
+        return {
+            'title': str(getattr(cls._meta, 'verbose_name', None) or cls._model_name),
+            'document': str(
+                data.get('display_name') or data.get('reference') or f'#{self.pk}'
+            ),
+            'status': self._print_cell(status_fd, data.get('status')) if status_fd else '',
+            'fields': fields,
+            'lines': lines,
+        }
 
     # ── Meta-driven preview (drawer klik 1x pada baris list) ──
     @classmethod
@@ -983,6 +1154,13 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
             'email': 'info@digilio.id',
         }
 
+        # Struktur generik untuk template print generik (print/_generic.html)
+        # Nama variabel TIDAK boleh diawali "_" (dilarang Django template).
+        try:
+            data['print_meta'] = self._print_meta(data)
+        except Exception:
+            data['print_meta'] = None
+
         return data
 
     def soft_delete(self):
@@ -1099,6 +1277,23 @@ class BaseModel(dj_models.Model, metaclass=ErpModelBase):
                     child_copy.save()
 
         return new_obj
+
+    def _action_duplicate(self, data=None):
+        """Aksi generik `duplicate` — salin dokumen ini menjadi draft baru.
+
+        Dipakai menu tombol Action global (meta `_actions_menu`). Frontend
+        membuka record baru via `_action_type: 'open_record'`.
+        """
+        new_obj = self.duplicate_record()
+        return {
+            '_action_type': 'open_record',
+            'model': self._model_name,
+            'record_id': new_obj.pk,
+            'message': (
+                'Dokumen baru dibuat sebagai draft: '
+                f'{getattr(new_obj, "reference", "") or new_obj.pk}'
+            ),
+        }
 
     # ── Konfirmasi transisi (generik) ───────────────────────────────────────
     # Konvensi: transisi yang berakhir di state 'cancelled' TIDAK BISA dikembalikan

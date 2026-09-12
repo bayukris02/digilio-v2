@@ -111,6 +111,10 @@ export interface ModelConfig {
   preview_view?: PreviewViewConfig | null;
   /** false = model menolak create (data dibuat otomatis dari proses lain) */
   allow_create?: boolean;
+  /** Printout tersedia (meta-driven) — dipakai wizard tombol Print global */
+  printouts?: { key: string; label: string; template: string }[];
+  /** Menu tombol Action global (meta-driven). Kosong → tombol disembunyikan */
+  actions_menu?: { key: string; action: string; label: string; icon?: string }[];
 }
 
 export interface ModelInfo {
