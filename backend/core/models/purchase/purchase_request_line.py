@@ -31,6 +31,9 @@ class PurchaseRequestLine(BaseModel):
         ),
         'processed_qty': FloatField(label='Qty Diproses', default=0, virtual=True),
         'remaining_qty': FloatField(label='Qty Belum Diproses', default=0, virtual=True),
+        # Cerminan kolom "Jumlah" (qty) untuk tab Produk Status — nilainya sama
+        # dengan qty baris ini, hanya beda label kolom.
+        'request_qty': FloatField(label='Request Qty', default=0, virtual=True, editable_statuses=[]),
         'draft_po_qty': FloatField(label='Draft PO Qty', default=0, virtual=True, editable_statuses=[]),
         'confirmed_po_qty': FloatField(label='Konfirm PO Qty', default=0, virtual=True, editable_statuses=[]),
         'received_qty': FloatField(label='Qty Diterima', default=0, virtual=True, editable_statuses=[]),
@@ -76,6 +79,8 @@ class PurchaseRequestLine(BaseModel):
         processed_qty = float(agg['total'] or 0)
         data['processed_qty'] = processed_qty
         data['remaining_qty'] = max(float(self.qty or 0) - processed_qty, 0)
+        # Request Qty = kolom "Jumlah" (qty) — dipakai di tab Produk Status
+        data['request_qty'] = float(self.qty or 0)
         data['draft_po_qty'] = float(agg['draft'] or 0)
         data['confirmed_po_qty'] = float(agg['confirmed'] or 0)
 

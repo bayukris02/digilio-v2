@@ -285,7 +285,7 @@ export function Many2OneWithAutofill({ value, onChange, field, apiModelName, onQ
       value={value}
       onChange={handleChange}
       modelName={field.relation || ''}
-      placeholder={field.placeholder || `Select ${field.label}`}
+      placeholder={field.placeholder || `Pilih ${field.label}`}
       currentModel={apiModelName}
       onQuickView={onQuickView}
       disabled={disabled}
@@ -340,7 +340,7 @@ export function renderField(
     return (
       <Form.Item label={label} name={key} rules={required ? [{ required: true }] : []}>
         <Select
-          placeholder={field.placeholder || `Select ${label}`}
+          placeholder={field.placeholder || `Pilih ${label}`}
           allowClear
           options={field.options}
           disabled={disabled}
@@ -352,7 +352,12 @@ export function renderField(
   if (field.type === 'date') {
     return (
       <Form.Item label={label} name={key} rules={required ? [{ required: true, message: `${label} wajib diisi` }] : []} extra={field.help_text ? <span style={{ fontSize: 12, fontStyle: 'italic', color: '#888' }}>{field.help_text}</span> : undefined}>
-        <DatePicker format={DATE_FORMAT} style={{ width: '100%' }} disabled={disabled} />
+        <DatePicker
+          format={DATE_FORMAT}
+          style={{ width: '100%' }}
+          disabled={disabled}
+          placeholder={field.placeholder || 'Pilih tanggal'}
+        />
       </Form.Item>
     );
   }
@@ -408,7 +413,7 @@ export function renderField(
   if (field.type === 'text') {
     return (
       <Form.Item label={label} name={key} rules={required ? [{ required: true }] : []}>
-        <TextArea rows={3} placeholder={field.placeholder || `Enter ${label}`} disabled={disabled} />
+        <TextArea rows={3} placeholder={field.placeholder || `Masukkan ${label}`} disabled={disabled} />
       </Form.Item>
     );
   }
@@ -429,7 +434,7 @@ export function renderField(
         ) : (
           <Many2OneSelect
             modelName={(field as Record<string, string>).relation || ''}
-            placeholder={field.placeholder || `Select ${label}`}
+            placeholder={field.placeholder || `Pilih ${label}`}
             required={required}
             currentModel={currentModel}
             onQuickView={onQuickView ? (id) => onQuickView((field as Record<string, string>).relation!, id) : undefined}
@@ -450,7 +455,7 @@ export function renderField(
   return (
     <Form.Item label={label} name={key} rules={charRules} extra={field.help_text ? <span style={{ fontSize: 12, fontStyle: 'italic', color: '#888' }}>{field.help_text}</span> : undefined}>
       <Input
-        placeholder={field.placeholder || `Enter ${label}`}
+        placeholder={field.placeholder || `Masukkan ${label}`}
         disabled={disabled}
         {...(field.max_length ? { maxLength: field.max_length } : {})}
       />

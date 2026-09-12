@@ -1275,9 +1275,20 @@ export default function ModelFormPage({
     }
     // Row number column — atau tombol "+ Add" untuk baris add-button
     cols.push({
-      headerName: '#',
+      headerName: 'No.',
       field: '_rowNum',
-      width: 60,
+      // Lebar tetap secukupnya nomor saja: `flex: 0` menimpa defaultColDef
+      // (flex: 1) yang membuat kolom ini melebar sendiri.
+      width: 48,
+      minWidth: 48,
+      flex: 0,
+      // Kolom nomor bersifat readonly → beri background abu-abu seperti
+      // field readonly lain (baris add-button & baris pinned dikecualikan).
+      cellStyle: (params: any) => (
+        params.data?._isAddButton || params.node?.rowPinned
+          ? undefined
+          : { backgroundColor: '#f5f5f5' }
+      ),
       cellRenderer: (params: ICellRendererParams) => {
         if (params.data?._isAddButton) {
           return <Button type="dashed" size="small" icon={<PlusOutlined />} loading={addingLine} style={{ width: '100%', border: 'none', color: '#1890ff', fontWeight: 500 }}>Add</Button>;

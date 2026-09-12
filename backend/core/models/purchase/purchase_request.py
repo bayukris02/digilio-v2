@@ -151,7 +151,7 @@ class PurchaseRequest(BaseModel):
                 'label': 'Produk Status',
                 'relation': 'request_lines',
                 'read_only': True,
-                'columns': ['product', 'draft_po_qty', 'confirmed_po_qty', 'received_qty'],
+                'columns': ['product', 'request_qty', 'draft_po_qty', 'confirmed_po_qty', 'received_qty'],
             },
         ],
     }
