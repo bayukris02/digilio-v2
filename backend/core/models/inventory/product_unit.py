@@ -140,6 +140,11 @@ class ProductUnit(BaseModel):
         data['name'] = label
         if label:
             data['display_name'] = label
+        # Kolom "Nama Satuan" cukup nama satuan saja — buang prefix kode
+        # (mis. "[PCS] PCS" → "PCS").
+        uom_val = data.get('uom')
+        if label and isinstance(uom_val, dict):
+            data['uom'] = {**uom_val, 'name': label}
         return data
 
     def __str__(self):

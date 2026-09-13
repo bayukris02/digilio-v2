@@ -90,10 +90,11 @@ class PurchaseRequestLine(BaseModel):
         qs = ProductUnit.objects.filter(product_id=product_id, is_deleted=False).order_by('id')
         base_uom_id = getattr(self.product, 'uom_id', None)
 
-        # Utamakan baris satuan utama produk, fallback baris pertama
+        # Autofill HARUS mengikuti field Satuan di master produk: pakai baris
+        # Multi Satuan yang satuannya = Satuan produk. Kalau satuan utama itu
+        # belum terdaftar di tab Multi Satuan → biarkan kosong (user pilih
+        # sendiri dari daftar Multi Satuan).
         target = qs.filter(uom_id=base_uom_id).first() if base_uom_id else None
-        if target is None:
-            target = qs.first()
         self.uom_id = target.pk if target is not None else None
 
     def to_record(self):

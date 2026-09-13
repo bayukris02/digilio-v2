@@ -228,6 +228,13 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
             onRowClicked={(params) => {
               if (params.data?._isAddButton && !isReadOnly && !tab.read_only) {
                 setAddingLine(true);
+                // Baris baru HARUS mendarat di paling bawah. Kalau ada sort
+                // kolom yang aktif, AG Grid menempatkan baris baru sesuai
+                // urutan sort (kadang atas/tengah) → matikan sort dulu supaya
+                // urutan baris = urutan state (append di bawah).
+                try {
+                  (params.api as any).applyColumnState?.({ defaultState: { sort: null } });
+                } catch { /* abaikan bila API grid tidak tersedia */ }
                 addLine(tab.relation!);
                 setAddingLine(false);
               }
