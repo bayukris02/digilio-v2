@@ -471,3 +471,14 @@ class Product(BaseModel):
 
     def __str__(self):
         return self.name or ''
+
+    def to_list_record(self, batch_counts=None):
+        """Override: label relasi/dropdown memakai NAMA produk, bukan kode.
+
+        `_display_name = 'code'` dipakai untuk judul/breadcrumb; untuk opsi
+        many2one (mis. Minimum Stock, baris dokumen) yang ditampilkan frontend
+        adalah `display_name`, jadi di sini diisi nama produk.
+        """
+        data = super().to_list_record(batch_counts)
+        data['display_name'] = self.name or self.code or f'#{self.pk}'
+        return data

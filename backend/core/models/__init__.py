@@ -44,6 +44,7 @@ from core.models.inventory.stock_in_line import StockInLine
 from core.models.inventory.stock_adjustment import StockAdjustment
 from core.models.inventory.stock_adjustment_line import StockAdjustmentLine
 from core.models.inventory.stock_ledger import StockLedger
+from core.models.inventory.minimum_stock import MinimumStock
 from core.models.inventory.uom import Uom
 from core.models.accounting.chart_of_account import ChartOfAccount
 from core.models.accounting.jurnal import Jurnal

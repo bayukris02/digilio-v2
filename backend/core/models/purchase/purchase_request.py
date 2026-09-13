@@ -63,6 +63,11 @@ class PurchaseRequest(BaseModel):
             relation='settings.user',
             required=False,
         ),
+        'minimum_stock': Many2OneField(
+            label='Sumber Minimum Stock',
+            relation='inventory.minimum_stock',
+            required=False,
+        ),
         'request_date': DateField(label='Tanggal Permintaan', required=True),
         'estimated_receipt_date': DateField(label='Deadline Barang Terima'),
         'notes': TextField(label='Catatan'),

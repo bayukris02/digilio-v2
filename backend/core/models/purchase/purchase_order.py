@@ -170,6 +170,11 @@ class PurchaseOrder(BaseModel):
             relation='purchase.request',
             required=False,
         ),
+        'minimum_stock': Many2OneField(
+            label='Sumber Minimum Stock',
+            relation='inventory.minimum_stock',
+            required=False,
+        ),
         'order_template': Many2OneField(
             label='Template PO',
             relation='purchase.order_template',

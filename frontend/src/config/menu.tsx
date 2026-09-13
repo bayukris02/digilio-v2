@@ -89,6 +89,7 @@ export const menuItems: MenuNode[] = [
         { key: '/inventory.stock_receipt', label: 'Penerimaan Barang' },
         { key: '/inventory.stock_delivery', label: 'Pengiriman Barang' },
         { key: '/inventory.stock_adjustment', label: 'Stock Adjustment' },
+        { key: '/inventory.minimum_stock', label: 'Minimum Stock' },
       ]},
       {
         key: 'inventory.transfer_stock',

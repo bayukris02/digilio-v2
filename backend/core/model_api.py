@@ -423,6 +423,10 @@ class ModelRecordView(APIView):
             if getattr(fd, 'field_type', None) == 'one2many' and key in data:
                 one2many_data[key] = data.pop(key)
 
+        # Extract many2many data (pop dari payload — m2m baru bisa di-set
+        # setelah record punya pk, lihat _apply_m2m_fields di bawah).
+        m2m_payload = _pop_m2m_fields(model_cls, data)
+
         try:
             # Validasi child lines via hook per-model (jika didefinisikan) —
             # dijalankan SEBELUM parent disimpan agar error tidak meninggalkan
@@ -432,6 +436,8 @@ class ModelRecordView(APIView):
                 _validate_children(one2many_data)
 
             obj = model_cls.objects.create(**data)
+            # Set relasi many2many (butuh pk record)
+            _apply_m2m_fields(obj, m2m_payload)
             # Handle one2many child records
             for field_name, lines in one2many_data.items():
                 fd = model_cls._field_descriptors[field_name]
@@ -564,6 +570,9 @@ class ModelRecordView(APIView):
             if getattr(fd, 'field_type', None) == 'one2many' and key in data:
                 one2many_data[key] = data.pop(key)
 
+        # Extract many2many (di-set setelah save — record sudah punya pk)
+        m2m_payload = _pop_m2m_fields(model_cls, data)
+
         try:
             # Validasi child lines via hook per-model (jika didefinisikan) —
             # dijalankan SEBELUM parent disimpan agar error tidak meninggalkan
@@ -602,6 +611,8 @@ class ModelRecordView(APIView):
             if request.user.is_authenticated:
                 obj.updated_by = request.user
             obj.save()
+            # Set relasi many2many (butuh pk record)
+            _apply_m2m_fields(obj, m2m_payload)
             # Handle one2many: update existing children + soft-delete removed + create new
             for field_name, lines in one2many_data.items():
                 fd = model_cls._field_descriptors[field_name]

@@ -102,7 +102,21 @@ class StockEngine:
         if created:
             # AVCO: hitung ulang HPP rata-rata (avg_cost per row + HPP master produk)
             cls.recompute_avg_cost(product_ids)
+            # Minimum Stock: cek produk terdampak → buat order otomatis bila di bawah minimum
+            cls._check_minimum_stock(product_ids)
         return created
+
+    @classmethod
+    def _check_minimum_stock(cls, product_ids):
+        """Panggil otomatisasi Minimum Stock untuk produk terdampak (best-effort)."""
+        if not product_ids:
+            return
+        try:
+            rule_cls = ErpModelBase._model_registry.get('inventory.minimum_stock')
+            if rule_cls is not None:
+                rule_cls.check_and_fulfill(product_ids)
+        except Exception:
+            pass
 
     # ── Average costing (AVCO) ──
 
@@ -218,6 +232,7 @@ class StockEngine:
         if affected and product_ids:
             # AVCO: row hilang → HPP rata-rata & avg_cost dihitung ulang
             cls.recompute_avg_cost(product_ids)
+            cls._check_minimum_stock(product_ids)
         return affected
 
     @classmethod

@@ -312,6 +312,68 @@ export function Many2OneWithAutofill({ value, onChange, field, apiModelName, onQ
   );
 }
 
+/** Select multi (mode="multiple") untuk field many2many di form header/tab.
+ *  Nilai form = array of id; juga menerima array objek {id,name} (hasil to_record). */
+export function Many2ManySelect({ value, onChange, modelName, placeholder, disabled }: {
+  value?: unknown; onChange?: (v: number[]) => void; modelName: string; placeholder?: string; disabled?: boolean;
+}) {
+  const [options, setOptions] = useState<{ value: number; label: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!modelName) return;
+    setLoading(true);
+    modelApi.listRecords(modelName)
+      .then((response) => {
+        setOptions(response.results.map((r) => ({
+          value: r.id as number,
+          label: (() => {
+            const dn = r.display_name as string;
+            if (dn && !String(dn).startsWith('#')) return dn;
+            return (r.name as string) || dn || `#${r.id}`;
+          })(),
+        })));
+      })
+      .catch(() => { message.error(`Failed to load ${modelName}`); })
+      .finally(() => setLoading(false));
+  }, [modelName]);
+
+  // Normalisasi nilai tersimpan: [{id,name}] / [id] → [id]
+  const selected = useMemo<number[]>(() => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((v) => (typeof v === 'object' && v !== null
+        ? ((v as Record<string, unknown>).id ?? (v as Record<string, unknown>).value)
+        : v))
+      .filter((v) => v !== undefined && v !== null && v !== '')
+      .map((v) => Number(v));
+  }, [value]);
+
+  // Nilai terpilih yang belum ada di daftar opsi tetap tampil (label #id)
+  const mergedOptions = useMemo(() => {
+    const known = new Set(options.map((o) => o.value));
+    const extra = selected.filter((id) => !known.has(id)).map((id) => ({ value: id, label: `#${id}` }));
+    return [...options, ...extra];
+  }, [options, selected]);
+
+  return (
+    <Select
+      mode="multiple"
+      style={{ width: '100%' }}
+      value={selected}
+      onChange={(vals) => onChange?.((vals as number[]).map(Number))}
+      placeholder={placeholder || 'Pilih...'}
+      loading={loading}
+      options={mergedOptions}
+      disabled={disabled}
+      allowClear
+      filterOption={(input, option) =>
+        String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+      }
+    />
+  );
+}
+
 /** Render field based on config type */
 export function renderField(
   key: string,
@@ -462,6 +524,19 @@ export function renderField(
             form={form}
           />
         )}
+      </Form.Item>
+    );
+  }
+
+  // Many2Many → multi-select dari related model (config-gated: hanya tipe m2m)
+  if ((field as unknown as Record<string, unknown>).type === 'many2many') {
+    return (
+      <Form.Item label={label} name={key} rules={required ? [{ required: true }] : []}>
+        <Many2ManySelect
+          modelName={((field as unknown as Record<string, string>).relation) || ''}
+          placeholder={field.placeholder || `Pilih ${label}`}
+          disabled={disabled}
+        />
       </Form.Item>
     );
   }

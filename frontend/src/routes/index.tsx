@@ -83,6 +83,9 @@ export const router = createBrowserRouter([
       { path: 'inventory.stock_adjustment', element: <ModelListPage modelName="inventory.stock_adjustment" basePath="/inventory.stock_adjustment" /> },
       { path: 'inventory.stock_adjustment/new', element: <ModelFormPage modelName="inventory.stock_adjustment" basePath="/inventory.stock_adjustment" /> },
       { path: 'inventory.stock_adjustment/:recordId', element: <ModelFormPage modelName="inventory.stock_adjustment" basePath="/inventory.stock_adjustment" /> },
+      { path: 'inventory.minimum_stock', element: <ModelListPage modelName="inventory.minimum_stock" basePath="/inventory.minimum_stock" /> },
+      { path: 'inventory.minimum_stock/new', element: <ModelFormPage modelName="inventory.minimum_stock" basePath="/inventory.minimum_stock" /> },
+      { path: 'inventory.minimum_stock/:recordId', element: <ModelFormPage modelName="inventory.minimum_stock" basePath="/inventory.minimum_stock" /> },
       // Inventory -> Transfer Stock = coming soon (belum ada model)
       { path: 'inventory.stock_request', element: <ModelListPage modelName="inventory.stock_request" basePath="/inventory.stock_request" /> },
       { path: 'inventory.stock_request/new', element: <ModelFormPage modelName="inventory.stock_request" basePath="/inventory.stock_request" /> },
