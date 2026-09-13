@@ -83,6 +83,38 @@ export function collectRequiredErrors(
   return errors;
 }
 
+/** Tandai cell wajib yang belum diisi pada baris notebook → border merah.
+ *
+ *  Flag `_requiredErrors` (array nama field) disimpan di row data, dibaca
+ *  generik oleh `buildColumns` (cellStyle) di ModelFormPage, dan dibersihkan
+ *  saat cell diisi (onCellValueChanged, renderSections). Flag TIDAK ikut
+ *  terkirim ke backend (dibuang saat menyusun payload).
+ */
+export function markRequiredErrorCells(
+  setLineItems: React.Dispatch<React.SetStateAction<Record<string, Record<string, unknown>[]>>>,
+  relationField: string,
+  errors: { key: string; row: number }[],
+): void {
+  const byRow: Record<number, string[]> = {};
+  errors.forEach((e) => {
+    if (!byRow[e.row]) byRow[e.row] = [];
+    if (!byRow[e.row].includes(e.key)) byRow[e.row].push(e.key);
+  });
+  setLineItems((prev) => {
+    const list = [...(prev[relationField] || [])];
+    let rowNo = 0; // nomor baris non-add (sama dgn penomoran collectRequiredErrors)
+    list.forEach((item, i) => {
+      if (item._isAddButton) return;
+      rowNo += 1;
+      const next: Record<string, unknown> = { ...item };
+      if (byRow[rowNo]) next._requiredErrors = byRow[rowNo];
+      else delete next._requiredErrors;
+      list[i] = next;
+    });
+    return { ...prev, [relationField]: list };
+  });
+}
+
 /** Kondisi baris yang DIKECUALIKAN dari validasi wajib kolom notebook.
  *  Dibaca generik dari `column_config_rules[rel]._row.required_skip_when`
  *  (mis. baris turunan header: {'is_base': true}). */
@@ -214,6 +246,8 @@ export function useModelFormActions(params: {
       if (errors.length > 0) {
         const fieldList = [...new Set(errors.map((e) => e.label))].join(', ');
         message.warning(`Lengkapi kolom wajib pada baris sebelumnya: ${fieldList}`);
+        // Tandai cell yang belum diisi → border merah di grid (generik)
+        markRequiredErrorCells(setLineItems, relationField, errors);
         return;
       }
     }

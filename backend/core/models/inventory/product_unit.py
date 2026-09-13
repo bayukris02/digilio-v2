@@ -134,4 +134,15 @@ class ProductUnit(BaseModel):
     def to_record(self):
         data = super().to_record()
         data['is_base'] = False
+        # Nama tampil baris multi satuan = nama satuannya (dipakai label
+        # many2one ke `inventory.product_unit`, mis. kolom Satuan di PR).
+        label = self.uom_display(getattr(self, 'uom', None))
+        data['name'] = label
+        if label:
+            data['display_name'] = label
         return data
+
+    def __str__(self):
+        """Label default: nama satuan (dipakai saat record ini jadi nilai
+        many2one di model lain, mis. Satuan pada baris Permintaan Pembelian)."""
+        return self.uom_display(getattr(self, 'uom', None)) or (f'#{self.pk}' if self.pk else '')

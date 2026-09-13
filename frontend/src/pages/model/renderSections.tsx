@@ -244,9 +244,12 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
                   // definisi di Many2OneField: domain={'vendor': 'vendor'} —
                   // literal '{record_id}' → id record yang sedang dibuka
                   const domain = (fieldMeta as any)?.domain as Record<string, string> | undefined;
+                  // rowData → domain bisa memakai nilai field pada baris ini
+                  // (mis. Satuan difilter produk baris tsb), bukan hanya header.
                   const extraParams = resolveMany2oneDomain(
                     domain, config, form,
                     recordData?.id != null ? Number(recordData.id) : null,
+                    (params.data as Record<string, unknown> | undefined) || null,
                   );
                   modelApi.listRecords(fieldMeta.relation, 1, M2O_PAGE_SIZE, extraParams)
                     .then((response) => {
@@ -282,7 +285,15 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
                 const items = [...(prev[relationField] || [])];
                 const idx = items.findIndex((item) => item._key === lineKey);
                 if (idx < 0) return prev;
-                items[idx] = { ...items[idx], [params.colDef.field!]: params.newValue };
+                const editedKey = params.colDef.field!;
+                const next: Record<string, unknown> = { ...items[idx], [editedKey]: params.newValue };
+                // Cell yang sudah diisi → hapus tanda border merah (jika ada)
+                if (Array.isArray(next._requiredErrors)) {
+                  const remaining = (next._requiredErrors as string[]).filter((f) => f !== editedKey);
+                  if (remaining.length > 0) next._requiredErrors = remaining;
+                  else delete next._requiredErrors;
+                }
+                items[idx] = next;
                 return { ...prev, [relationField]: items };
               });
               // Force parent compute (SummaryCard) agar summary refresh

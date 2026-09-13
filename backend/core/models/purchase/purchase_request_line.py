@@ -22,6 +22,17 @@ class PurchaseRequestLine(BaseModel):
             autofill={'description': 'name'},
         ),
         'description': TextField(label='Deskripsi'),
+        'uom': Many2OneField(
+            label='Satuan',
+            relation='inventory.product_unit',
+            required=False,
+            allow_duplicate=True,
+            domain={'product': 'product'},
+            compute='_compute_uom',
+            depends=['product'],
+            editable_computed=True,  # tetap bisa dipilih user (compute hanya autofill)
+            help_text='Satuan diambil dari daftar Multi Satuan pada produk yang dipilih',
+        ),
         'qty': FloatField(label='Jumlah', default=1),
         'estimated_cost': MonetaryField(label='Est. Harga', currency='IDR'),
         'total': MonetaryField(
@@ -40,7 +51,7 @@ class PurchaseRequestLine(BaseModel):
     }
 
     _list_view = {
-        'columns': ['product', 'description', 'qty', 'estimated_cost', 'total'],
+        'columns': ['product', 'uom', 'description', 'qty', 'estimated_cost', 'total'],
         'default_sort': ['id'],
     }
 
@@ -53,6 +64,37 @@ class PurchaseRequestLine(BaseModel):
         qty = float(self.qty or 0)
         cost = float(self.estimated_cost or 0)
         self.total = round(qty * cost, 2)
+
+    def _compute_uom(self):
+        """Satuan mengikuti produk terpilih — sumber: baris Multi Satuan produk.
+
+        Dipicu compute endpoint saat `product` diubah di notebook (juga saat
+        save). Pilihan user DIPERTAHANKAN selama satuannya masih milik produk
+        yang sama; diganti hanya kalau produk berganti / satuan belum diisi.
+        Produk tanpa baris Multi Satuan → satuan dikosongkan.
+        """
+        from core.models.inventory.product_unit import ProductUnit
+
+        product_id = self.product_id
+
+        # Satuan terpilih masih milik produk yang sama → pertahankan
+        if self.uom_id:
+            current = ProductUnit.objects.filter(pk=self.uom_id, is_deleted=False).first()
+            if current is not None and (product_id is None or current.product_id == product_id):
+                return
+
+        if not product_id:
+            self.uom_id = None
+            return
+
+        qs = ProductUnit.objects.filter(product_id=product_id, is_deleted=False).order_by('id')
+        base_uom_id = getattr(self.product, 'uom_id', None)
+
+        # Utamakan baris satuan utama produk, fallback baris pertama
+        target = qs.filter(uom_id=base_uom_id).first() if base_uom_id else None
+        if target is None:
+            target = qs.first()
+        self.uom_id = target.pk if target is not None else None
 
     def to_record(self):
         """Override: isi processed_qty, remaining_qty + breakdown qty PO (draft/confirmed) & qty diterima dari GR."""

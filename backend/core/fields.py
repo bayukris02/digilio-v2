@@ -11,7 +11,7 @@ class BaseField:
     field_type = None  # e.g., 'char', 'date', 'monetary'
     django_field_class = None
 
-    def __init__(self, label='', required=False, default=None, help_text='', compute=None, depends=None, chatter_show=True, unique=False, virtual=False, editable_statuses=None, placeholder=None, hidden_statuses=None, onchange=None, line_onchange=None, confirm_onchange=None):
+    def __init__(self, label='', required=False, default=None, help_text='', compute=None, depends=None, chatter_show=True, unique=False, virtual=False, editable_statuses=None, placeholder=None, hidden_statuses=None, onchange=None, line_onchange=None, confirm_onchange=None, editable_computed=False):
         self.label = label
         self.required = required
         self.default = default
@@ -27,6 +27,10 @@ class BaseField:
         self.onchange = onchange or {}  # {target_field: target_value} — reset field saat nilai berubah
         self.line_onchange = line_onchange or {}  # {target_field: target_value} — reset line field saat nilai berubah
         self.confirm_onchange = confirm_onchange  # {message, reset_relations} — konfirmasi + reset lines
+        # True = field ber-compute tetap bisa diedit user (nilai compute hanya
+        # mengisi otomatis, mis. Satuan mengikuti Produk). Default False =
+        # perilaku lama: computed field readonly + abu-abu di grid.
+        self.editable_computed = editable_computed
 
     def to_config(self):
         """Return JSON-serialisable config for the frontend."""
@@ -60,6 +64,8 @@ class BaseField:
             cfg['line_onchange'] = self.line_onchange
         if self.confirm_onchange:
             cfg['confirm_onchange'] = self.confirm_onchange
+        if self.editable_computed:
+            cfg['editable_computed'] = True
         return cfg
 
     def to_python(self, value):

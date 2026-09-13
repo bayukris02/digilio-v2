@@ -141,7 +141,7 @@ class PurchaseRequest(BaseModel):
                 'key': 'lines',
                 'label': 'List Product',
                 'relation': 'request_lines',
-                'columns': ['product', 'description', 'qty', 'estimated_cost', 'total'],
+                'columns': ['product', {'name': 'uom', 'display_field': 'name'}, 'description', 'qty', 'estimated_cost', 'total'],
                 'summary': {
                     'columns': {'qty': 'sum', 'estimated_cost': 'sum', 'total': 'sum'},
                 },

@@ -66,12 +66,17 @@ const { TextArea } = Input;
  *  - literal '{record_id}'  → diganti id record yang sedang dibuka
  *    (konvensi sama dgn filter many2one di GenericWizardModal)
  *  - literal lain           → dipakai apa adanya (mis. status='confirmed')
+ *
+ * `rowData` (opsional, untuk cell notebook): bila header_field juga ada di
+ * baris notebook (mis. domain={'product': 'product'} → satuan milik produk
+ * pada baris itu), nilai baris dipakai lebih dulu daripada nilai header.
  */
 export function resolveMany2oneDomain(
   domain: Record<string, string> | undefined,
   config: ModelConfig | undefined,
   form: any,
   recordIdNum?: number | null,
+  rowData?: Record<string, unknown> | null,
 ): Record<string, string> {
   const extraParams: Record<string, string> = {};
   if (!domain) return extraParams;
@@ -79,6 +84,17 @@ export function resolveMany2oneDomain(
     if (headerField === '{record_id}') {
       if (recordIdNum != null) extraParams[relatedField] = String(recordIdNum);
       return;
+    }
+    // Nilai dari baris notebook (row-scoped domain) — didahulukan
+    if (rowData) {
+      const raw = rowData[headerField];
+      const rowVal = (raw != null && typeof raw === 'object')
+        ? ((raw as Record<string, unknown>).value ?? (raw as Record<string, unknown>).id)
+        : raw;
+      if (rowVal != null && rowVal !== '') {
+        extraParams[relatedField] = String(rowVal);
+        return;
+      }
     }
     const isFormField = config?.fields?.[headerField] != null;
     const headerVal = isFormField ? form?.getFieldValue(headerField) : headerField;

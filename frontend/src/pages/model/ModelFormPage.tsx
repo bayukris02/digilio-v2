@@ -24,7 +24,7 @@ import ProgressBar from '../../components/ProgressBar';
 import { SmartButton, renderField, Many2OneCellEditor, Many2ManyCellEditor, MonetaryCellEditor, resolveMany2oneDomain } from './formControls';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard';
 import { useFormChangeHandler } from './useFormChangeHandler';
-import { useModelFormActions, collectRequiredErrors, requiredSkipRowWhen } from './useModelFormActions';
+import { useModelFormActions, collectRequiredErrors, requiredSkipRowWhen, markRequiredErrorCells } from './useModelFormActions';
 import { buildTabItems as renderSectionsBuildTabItems, type TabConfig } from './renderSections';
 import type { ColDef, ICellRendererParams } from 'ag-grid-community';
 import { AllCommunityModule, ModuleRegistry } from 'ag-grid-community';
@@ -784,6 +784,7 @@ export default function ModelFormPage({
           );
           if (errors.length > 0) {
             hasLineErrors = true;
+            markRequiredErrorCells(setLineItems, fieldName, errors);
             errors.forEach((err) => {
               message.error(`"${childConfigs[fieldName]?.label || fieldName}" baris ${err.row}: ${err.label} wajib diisi`);
             });
@@ -801,6 +802,8 @@ export default function ModelFormPage({
             .filter((item) => !item._isAddButton)
             .map((item) => {
             const { _key, ...rest } = item;
+            // Flag UI (border merah) tidak ikut terkirim ke backend
+            delete (rest as Record<string, unknown>)._requiredErrors;
             const childCfg = childConfigs[fieldName];
             if (childCfg?.fields) {
               const m2oKeys = Object.entries(childCfg.fields)
@@ -1096,6 +1099,7 @@ export default function ModelFormPage({
         Object.entries(lineItems).forEach(([fieldName, items]) => {
           prepared[fieldName] = items.filter((i) => !i._isAddButton).map((item) => {
             const { _key, ...rest } = item;
+            delete (rest as Record<string, unknown>)._requiredErrors;
             return rest;
           });
         });
@@ -1330,12 +1334,14 @@ export default function ModelFormPage({
         field: key,
         editable: (params: any) => {
           if (params.data?._isAddButton) return false;
-          return fieldEditable && !field.depends;
+          // Field ber-compute (punya `depends`) readonly — kecuali model
+          // menandainya `editable_computed` (nilai compute hanya autofill).
+          return fieldEditable && (!field.depends || (field as any).editable_computed);
         },
         cellStyle: (params: any) => {
           if (params.data?._isAddButton) return undefined;
           if (params.node?.rowPinned) return undefined;
-          if (!fieldEditable || field.depends)
+          if (!fieldEditable || (field.depends && !(field as any).editable_computed))
             return { backgroundColor: '#f5f5f5' };
           return undefined;
         },
@@ -1574,6 +1580,20 @@ export default function ModelFormPage({
           };
         }
       }
+      // ── Kolom wajib yang belum diisi → border merah (generik) ──
+      // Flag `_requiredErrors` diisi saat validasi addLine/save gagal
+      // (markRequiredErrorCells) dan dihapus saat cell diisi.
+      const baseCellStyleForRequired = col.cellStyle;
+      col.cellStyle = (params: any) => {
+        const base = typeof baseCellStyleForRequired === 'function'
+          ? baseCellStyleForRequired(params)
+          : baseCellStyleForRequired;
+        const missing = (params.data as Record<string, unknown> | undefined)?._requiredErrors;
+        if (Array.isArray(missing) && key && missing.includes(key)) {
+          return { ...(base || {}), border: '1px solid #ff4d4f', boxShadow: 'inset 0 0 0 1px #ff4d4f', backgroundColor: '#fff1f0' };
+        }
+        return base;
+      };
       cols.push(col);
     });
     // Action column with delete button (only in edit mode)
@@ -1788,6 +1808,7 @@ export default function ModelFormPage({
           .filter((item) => !item._isAddButton)
           .map((item) => {
           const { _key, ...rest } = item;
+          delete (rest as Record<string, unknown>)._requiredErrors;
           // Convert "id|name" strings → {id} for backend many2one fields
           const childCfg = childConfigs[fieldName];
           if (childCfg?.fields) {
