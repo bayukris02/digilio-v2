@@ -11,6 +11,7 @@ import {
   MoreOutlined, InboxOutlined, CheckOutlined, PrinterOutlined,
   DownloadOutlined, SendOutlined, EditOutlined, CopyOutlined,
   StopOutlined, UndoOutlined, HolderOutlined, DownOutlined, ExportOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { modelApi, type ModelConfig, type FieldConfig } from '../../api/models';
 import { parseDate, formatDate, formatLastUpdate } from '../../utils/format';
@@ -573,6 +574,7 @@ export default function ModelFormPage({
     MailOutlined: <MailOutlined />,
     CheckOutlined: <CheckOutlined />,
     MoreOutlined: <MoreOutlined />,
+    SettingOutlined: <SettingOutlined />,
     PrinterOutlined: <PrinterOutlined />,
     DownloadOutlined: <DownloadOutlined />,
     SendOutlined: <SendOutlined />,
@@ -600,21 +602,25 @@ export default function ModelFormPage({
     });
 
     // ── Tombol GLOBAL (abu-abu) — selalu di posisi paling kiri ──
+    // Fitur  : meta-driven dari `config.actions_menu`; kosong → tombol disembunyikan.
     // Print  : meta-driven dari `config.printouts` (daftar printout model).
-    // Action : meta-driven dari `config.actions_menu`; kosong → tombol disembunyikan.
+    // KEDUANYA hanya muncul setelah dokumen tersimpan (bukan `/new`) dan,
+    // untuk model ber-states, hanya setelah dokumen punya state.
     const global: Record<string, unknown>[] = [];
     const hasRecord = !!recordId && recordId !== 'new' && !Number.isNaN(Number(recordId));
-    if ((config?.printouts || []).length && hasRecord) {
-      global.push({ label: 'Print', color: 'default', icon: 'PrinterOutlined', _global: 'print' });
-    }
-    if ((config?.actions_menu || []).length) {
+    const modelHasStates = Object.keys((config?.states as Record<string, unknown> | undefined) || {}).length > 0;
+    const globalReady = hasRecord && (!modelHasStates || !!currentStatus);
+    if ((config?.actions_menu || []).length && globalReady) {
       global.push({
-        label: 'Action',
+        label: 'Fitur',
         color: 'default',
-        icon: 'MoreOutlined',
+        icon: 'SettingOutlined',
         _global: 'actions',
         menu: config?.actions_menu,
       });
+    }
+    if ((config?.printouts || []).length && globalReady) {
+      global.push({ label: 'Print', color: 'default', icon: 'PrinterOutlined', _global: 'print' });
     }
     return [...global, ...visible];
   }, [config, recordData, recordId]);
