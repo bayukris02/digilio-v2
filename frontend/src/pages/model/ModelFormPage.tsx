@@ -1957,6 +1957,51 @@ export default function ModelFormPage({
     );
   });
 
+  // ── Tombol GLOBAL meta-driven (Print & Action) ──
+  // Dipindah ke header kanan, tepat di samping kiri teks "pembaharuan terakhir".
+  // `size` mengikuti konteks pemakaian (header = small).
+  const renderGlobalButton = (btn: Record<string, unknown>, size?: 'small' | 'middle') => {
+    const globalKind = btn._global as string;
+    const icon = ICON_MAP[btn.icon as keyof typeof ICON_MAP];
+    if (globalKind === 'print') {
+      return (
+        <Button
+          key="__print__"
+          size={size}
+          variant="outlined"
+          color="default"
+          icon={icon}
+          onClick={() => setPrintWizardOpen(true)}
+        >
+          {btn.label as string}
+        </Button>
+      );
+    }
+    if (globalKind === 'actions') {
+      const menuItems = (btn.menu || []) as { key: string; action: string; label: string; icon?: string }[];
+      return (
+        <Dropdown
+          key="__action__"
+          trigger={['click']}
+          menu={{
+            items: menuItems.map((m) => ({
+              key: m.key,
+              label: m.label,
+              icon: (m.icon && ICON_MAP[m.icon as keyof typeof ICON_MAP]) || undefined,
+              onClick: () => handleAction({ action: m.action }),
+            })),
+          }}
+        >
+          <Button size={size} variant="outlined" color="default" icon={icon}>
+            {btn.label as string}
+          </Button>
+        </Dropdown>
+      );
+    }
+    return null;
+  };
+  const globalActionButtons = actionButtons.filter((b) => !!b._global);
+
   return (
     <div
       style={
@@ -2070,6 +2115,9 @@ export default function ModelFormPage({
           />
           {/* ── Save Status + Navigation (right group) ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Tombol global meta-driven (Print & Action) — di samping kiri
+                teks "pembaharuan terakhir" */}
+            {globalActionButtons.map((btn) => renderGlobalButton(btn, 'small'))}
             {/* Save Status Indicator */}
             <span
               style={{
@@ -2211,53 +2259,10 @@ export default function ModelFormPage({
           }}
         >
           <Space size={4}>
-            {actionButtons.map((btn) => {
+            {actionButtons.filter((b) => !b._global).map((btn) => {
               const children = btn.children as Record<string, unknown>[] | undefined;
-              const globalKind = btn._global as string | undefined;
-              // Warna tombol: default = abu-abu (tombol global Print/Action)
+              // Warna tombol: default = abu-abu
               const btnColor = (btn.color as 'green' | 'primary' | 'default' | undefined) || 'default';
-
-              // ── Tombol global Print → wizard printout + preview ──
-              if (globalKind === 'print') {
-                return (
-                  <Button
-                    key="__print__"
-                    variant="outlined"
-                    color="default"
-                    icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
-                    onClick={() => setPrintWizardOpen(true)}
-                  >
-                    {btn.label}
-                  </Button>
-                );
-              }
-
-              // ── Tombol global Action → dropdown aksi tambahan (meta-driven) ──
-              if (globalKind === 'actions') {
-                const menuItems = (btn.menu || []) as { key: string; action: string; label: string; icon?: string }[];
-                return (
-                  <Dropdown
-                    key="__action__"
-                    trigger={['click']}
-                    menu={{
-                      items: menuItems.map((m) => ({
-                        key: m.key,
-                        label: m.label,
-                        icon: (m.icon && ICON_MAP[m.icon as keyof typeof ICON_MAP]) || undefined,
-                        onClick: () => handleAction({ action: m.action }),
-                      })),
-                    }}
-                  >
-                    <Button
-                      variant="outlined"
-                      color="default"
-                      icon={ICON_MAP[btn.icon as keyof typeof ICON_MAP]}
-                    >
-                      {btn.label}
-                    </Button>
-                  </Dropdown>
-                );
-              }
 
               // Split button: children ada → tombol utama + panah dropdown (Odoo-style)
               if (children?.length) {
