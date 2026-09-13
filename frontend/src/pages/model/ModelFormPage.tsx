@@ -10,7 +10,7 @@ import {
   PlusOutlined, DeleteOutlined, FileTextOutlined, MailOutlined,
   MoreOutlined, InboxOutlined, CheckOutlined, PrinterOutlined,
   DownloadOutlined, SendOutlined, EditOutlined, CopyOutlined,
-  StopOutlined, UndoOutlined, HolderOutlined, DownOutlined, ExportOutlined,
+  StopOutlined, UndoOutlined, DownOutlined, ExportOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import { modelApi, type ModelConfig, type FieldConfig } from '../../api/models';
@@ -1399,8 +1399,14 @@ export default function ModelFormPage({
       // Selection: tanpa colors → label polos (seperti many2one); ada colors → Tag badge
       if (field.type === 'selection') {
         col.cellEditor = 'agSelectCellEditor';
+        // Nilai tertentu bisa disembunyikan dari dropdown editor (mis. 'utama'
+        // untuk baris satuan utama produk) — generik via column_config_rules.
+        const hideOptions = ((config?.column_config_rules?.[relationField]?.[key] as
+          { hide_options?: string[] } | undefined)?.hide_options) || [];
         col.cellEditorParams = {
-          values: (field.options || []).map((o: { value: string }) => o.value),
+          values: (field.options || [])
+            .map((o: { value: string }) => o.value)
+            .filter((v: string) => !hideOptions.includes(v)),
         };
         const labelOf = (v: unknown) => field.options?.find(
           (o: { value: string; label: string }) => o.value === v,
@@ -1613,8 +1619,9 @@ export default function ModelFormPage({
         minWidth: 96,
         flex: 0,
         // Drag & drop pindah urutan baris digabung di kolom ini (dulu kolom
-        // terpisah tanpa header). Seluruh sel jadi area drag; ikon grip hanya
-        // penanda visual. Baris +Add tidak draggable.
+        // terpisah tanpa header). Handle drag digambar OTOMATIS oleh AG Grid
+        // (kolom ber-rowDrag) — jangan render ikon grip manual lagi agar tidak
+        // dobel. Baris +Add tidak draggable.
         rowDrag: (params) => !(params.data as Record<string, unknown> | undefined)?._isAddButton,
         cellRenderer: (params: ICellRendererParams) => {
           if (params.data?._isAddButton || params.node?.rowPinned) return null;
@@ -1631,7 +1638,6 @@ export default function ModelFormPage({
                   onClick={() => { setDeletingKey(params.data._key); deleteLine(relationField, params.data._key); setDeletingKey(null); }}
                 />
               )}
-              <HolderOutlined style={{ color: '#999', cursor: 'grab' }} />
             </span>
           );
         },

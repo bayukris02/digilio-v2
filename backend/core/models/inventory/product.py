@@ -164,7 +164,12 @@ class Product(BaseModel):
                 '_row': {'required_skip_when': {'is_base': True}},
                 '_action': {'hide_when_row': {'is_base': True}},
                 'uom': {'readonly_when_row': {'is_base': True}},
-                'sifat': {'readonly_when_row': {'is_base': True}},
+                # 'utama' hanya nilai internal baris satuan utama (biar kolom
+                # wajib terisi) → sembunyikan dari dropdown pilihan user.
+                'sifat': {
+                    'readonly_when_row': {'is_base': True},
+                    'hide_options': ['utama'],
+                },
                 'konversi': {'readonly_when_row': {'is_base': True}},
             },
         }
@@ -184,6 +189,7 @@ class Product(BaseModel):
         units = (one2many_data or {}).get('units')
         if not units:
             return
+        from core.models.inventory.product_unit import SIFAT_UTAMA
         rows = []
         base_seen = False
         for line in units:
@@ -195,7 +201,7 @@ class Product(BaseModel):
                 base_seen = True
                 line['is_base'] = True
                 line['konversi'] = 1
-                line['sifat'] = None         # satuan utama tidak punya sifat
+                line['sifat'] = SIFAT_UTAMA   # kolom wajib tetap terisi
                 rows.append(line)
                 continue
             if not line.get('uom'):
@@ -256,13 +262,17 @@ class Product(BaseModel):
         kolom Satuan di Permintaan Pembelian).
         """
         data = super().to_record()
-        from core.models.inventory.product_unit import KETERANGAN_BASE
+        from core.models.inventory.product_unit import KETERANGAN_BASE, SIFAT_UTAMA
         rows = list(data.get('units') or [])
         for row in rows:
             # Keterangan baris satuan utama selalu teks acuan konversi
             # (nilai tersimpan bisa kosong untuk data hasil backfill).
             if row.get('is_base') and not row.get('keterangan'):
                 row['keterangan'] = KETERANGAN_BASE
+            # Sifat baris satuan utama = 'utama' (label "Satuan Utama") —
+            # tidak bisa dipilih user, hanya agar kolom wajib terisi.
+            if row.get('is_base'):
+                row['sifat'] = SIFAT_UTAMA
         rows.sort(key=lambda r: (0 if r.get('is_base') else 1, r.get('id') or 0))
         data['units'] = rows
         return data
@@ -438,13 +448,14 @@ class Product(BaseModel):
         if not self.pk or not self.uom_id:
             return
         from core.models.inventory.product_unit import ProductUnit
+        from core.models.inventory.product_unit import SIFAT_UTAMA
         bases = list(ProductUnit.objects.filter(
             product_id=self.pk, is_base=True, is_deleted=False,
         ).order_by('id'))
         if not bases:
             ProductUnit.objects.create(
                 product_id=self.pk, uom_id=self.uom_id,
-                is_base=True, konversi=1, sifat=None,
+                is_base=True, konversi=1, sifat=SIFAT_UTAMA,
             )
             return
         base = bases[0]
@@ -452,9 +463,10 @@ class Product(BaseModel):
         for dup in bases[1:]:
             dup.is_deleted = True
             dup.save()
-        if base.uom_id != self.uom_id or base.konversi != 1:
+        if base.uom_id != self.uom_id or base.konversi != 1 or base.sifat != SIFAT_UTAMA:
             base.uom_id = self.uom_id
             base.konversi = 1
+            base.sifat = SIFAT_UTAMA
             base.save()
 
     def __str__(self):

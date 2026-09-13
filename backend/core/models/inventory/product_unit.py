@@ -12,6 +12,10 @@ from core.model_meta import BaseModel
 
 SIFAT_BESAR = 'besar'
 SIFAT_KECIL = 'kecil'
+# Sifat khusus baris satuan utama — TIDAK bisa dipilih user (disembunyikan dari
+# dropdown lewat column_config_rules `hide_options`); hanya agar kolom wajib
+# "Sifat Satuan" pada baris pertama terisi.
+SIFAT_UTAMA = 'utama'
 KETERANGAN_BASE = 'Satuan acuan konversi'
 
 
@@ -35,6 +39,7 @@ class ProductUnit(BaseModel):
             options=[
                 (SIFAT_BESAR, 'Lebih besar dari satuan utama'),
                 (SIFAT_KECIL, 'Lebih kecil dari satuan utama'),
+                (SIFAT_UTAMA, 'Satuan Utama'),
             ],
         ),
         'konversi': FloatField(label='Konversi', default=1, required=True),
@@ -44,6 +49,7 @@ class ProductUnit(BaseModel):
         # baris ini punya PK dan bisa dirujuk many2one.
         'is_base': BooleanField(
             label='Satuan Utama', default=False, chatter_show=False,
+            editable_statuses=[],  # mesin yang menandai — selalu readonly
         ),
         'keterangan': CharField(label='Keterangan', compute='_compute_keterangan'),
     }
@@ -140,6 +146,7 @@ class ProductUnit(BaseModel):
         """
         if self.is_base:
             self.konversi = 1
+            self.sifat = SIFAT_UTAMA
             if not self.uom_id and self.product_id:
                 self.uom_id = getattr(self.product, 'uom_id', None)
         super().save(*args, **kwargs)
