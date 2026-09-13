@@ -176,19 +176,28 @@ class Product(BaseModel):
     def _validate_children(cls, one2many_data):
         """Normalisasi baris Multi Satuan sebelum disimpan.
 
-        Baris **satuan utama** (is_base = true) TIDAK disimpan — nilainya turunan
-        field `Satuan` di header produk (ditampilkan lagi oleh `to_record`).
+        Baris **satuan utama** (is_base = true) IKUT DISIMPAN sebagai baris
+        `inventory.product_unit` — nilainya mengikuti field `Satuan` di header
+        produk (konversi 1, tanpa sifat). Inilah sumber tunggal satuan produk.
         Baris lain wajib punya Nama Satuan, Sifat Satuan, dan Konversi > 0.
         """
         units = (one2many_data or {}).get('units')
         if not units:
             return
         rows = []
+        base_seen = False
         for line in units:
             if not isinstance(line, dict):
                 continue
             if line.get('is_base'):
-                continue                     # baris turunan header — jangan disimpan
+                if base_seen:
+                    continue                 # hanya 1 baris satuan utama
+                base_seen = True
+                line['is_base'] = True
+                line['konversi'] = 1
+                line['sifat'] = None         # satuan utama tidak punya sifat
+                rows.append(line)
+                continue
             if not line.get('uom'):
                 raise ValidationError('Multi Satuan: Nama Satuan wajib diisi.')
             if not line.get('sifat'):
@@ -240,23 +249,22 @@ class Product(BaseModel):
         self._computed_o2m_lines = {'units': out}
 
     def to_record(self):
-        """Override: baris pertama Multi Satuan = satuan utama (turunan header)."""
-        from core.models.inventory.product_unit import KETERANGAN_BASE, ProductUnit
+        """Override: baris satuan utama (is_base) tampil paling atas.
+
+        Baris satuan utama adalah baris TERSIMPAN (punya PK) — tidak lagi
+        disintesis dari header, jadi baris ini bisa dirujuk many2one (mis.
+        kolom Satuan di Permintaan Pembelian).
+        """
         data = super().to_record()
-        base_row = {
-            'id': None,
-            'product': {'id': self.pk, 'name': str(self)} if self.pk else None,
-            'uom': (
-                # Kolom "Nama Satuan" → tampilkan nama saja (tanpa "[KODE] Nama")
-                {'id': self.uom_id, 'name': ProductUnit.uom_display(self.uom)}
-                if self.uom_id else None
-            ),
-            'sifat': None,
-            'konversi': 1,
-            'is_base': True,
-            'keterangan': KETERANGAN_BASE,
-        }
-        data['units'] = [base_row] + list(data.get('units') or [])
+        from core.models.inventory.product_unit import KETERANGAN_BASE
+        rows = list(data.get('units') or [])
+        for row in rows:
+            # Keterangan baris satuan utama selalu teks acuan konversi
+            # (nilai tersimpan bisa kosong untuk data hasil backfill).
+            if row.get('is_base') and not row.get('keterangan'):
+                row['keterangan'] = KETERANGAN_BASE
+        rows.sort(key=lambda r: (0 if r.get('is_base') else 1, r.get('id') or 0))
+        data['units'] = rows
         return data
 
     # ── Guard: field yang terkunci setelah ada mutasi stok ──
@@ -416,6 +424,38 @@ class Product(BaseModel):
             if dup.exists():
                 raise ValueError(f'Kode produk "{self.code}" sudah dipakai produk lain.')
         super().save(*args, **kwargs)
+        # Pastikan baris satuan utama (baris 1 tab Multi Satuan) selalu ada
+        # sebagai baris tersimpan & sinkron dengan field Satuan header.
+        self._ensure_base_unit()
+
+    def _ensure_base_unit(self):
+        """Jamin 1 baris Multi Satuan dengan `is_base = True` per produk.
+
+        Baris ini adalah sumber tunggal satuan produk (dipakai mis. kolom
+        Satuan di Permintaan Pembelian). Isi satuannya mengikuti field `Satuan`
+        di header produk; dibuat otomatis bila belum ada.
+        """
+        if not self.pk or not self.uom_id:
+            return
+        from core.models.inventory.product_unit import ProductUnit
+        bases = list(ProductUnit.objects.filter(
+            product_id=self.pk, is_base=True, is_deleted=False,
+        ).order_by('id'))
+        if not bases:
+            ProductUnit.objects.create(
+                product_id=self.pk, uom_id=self.uom_id,
+                is_base=True, konversi=1, sifat=None,
+            )
+            return
+        base = bases[0]
+        # Duplikat → sisakan satu baris saja
+        for dup in bases[1:]:
+            dup.is_deleted = True
+            dup.save()
+        if base.uom_id != self.uom_id or base.konversi != 1:
+            base.uom_id = self.uom_id
+            base.konversi = 1
+            base.save()
 
     def __str__(self):
         return self.name or ''

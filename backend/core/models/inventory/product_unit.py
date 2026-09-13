@@ -38,11 +38,12 @@ class ProductUnit(BaseModel):
             ],
         ),
         'konversi': FloatField(label='Konversi', default=1, required=True),
-        # Virtual + compute → kolom readonly di tabel baris (dan baris satuan
-        # utama selalu FALSE karena hanya baris turunan header yang TRUE).
+        # Baris satuan utama (baris 1 tab Multi Satuan) = baris TERSIMPAN dengan
+        # is_base = True — nilainya mengikuti field Satuan di header produk.
+        # Inilah sumber tunggal satuan produk (mis. kolom Satuan di PR), jadi
+        # baris ini punya PK dan bisa dirujuk many2one.
         'is_base': BooleanField(
-            label='Satuan Utama', virtual=True, default=False,
-            compute='_compute_is_base', chatter_show=False,
+            label='Satuan Utama', default=False, chatter_show=False,
         ),
         'keterangan': CharField(label='Keterangan', compute='_compute_keterangan'),
     }
@@ -120,20 +121,39 @@ class ProductUnit(BaseModel):
 
     # ── Computed ──
 
-    def _compute_is_base(self):
-        """Baris tersimpan selalu BUKAN satuan utama (satuan utama = header produk)."""
-        self.is_base = False
-
     def _compute_keterangan(self):
-        """Keterangan turunan: satuan + sifat + konversi vs satuan utama produk."""
+        """Keterangan turunan: satuan + sifat + konversi vs satuan utama produk.
+
+        Baris satuan utama (is_base) → keterangan tetap 'Satuan acuan konversi'.
+        """
+        if self.is_base:
+            self.keterangan = KETERANGAN_BASE
+            return
         self.keterangan = self.build_keterangan(
             getattr(self.product, 'uom', None) if self.product_id else None,
             self.uom, self.sifat, self.konversi,
         )
 
+    def save(self, *args, **kwargs):
+        """Baris satuan utama: konversi 1, satuan mengikuti header produk, dan
+        hanya boleh ADA SATU baris is_base aktif per produk (duplikat → terhapus).
+        """
+        if self.is_base:
+            self.konversi = 1
+            if not self.uom_id and self.product_id:
+                self.uom_id = getattr(self.product, 'uom_id', None)
+        super().save(*args, **kwargs)
+
+        if self.is_base:
+            dups = ProductUnit.objects.filter(
+                product_id=self.product_id, is_base=True, is_deleted=False,
+            ).exclude(pk=self.pk)
+            for dup in dups:
+                dup.is_deleted = True
+                dup.save()
+
     def to_record(self):
         data = super().to_record()
-        data['is_base'] = False
         # Nama tampil baris multi satuan = nama satuannya (dipakai label
         # many2one ke `inventory.product_unit`, mis. kolom Satuan di PR).
         label = self.uom_display(getattr(self, 'uom', None))
