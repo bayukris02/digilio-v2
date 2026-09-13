@@ -273,7 +273,28 @@ export function useModelFormActions(params: {
       ...prev,
       [relationField]: [...(prev[relationField] || []), newItem],
     }));
-  }, [childConfigs, lineItems, config, form]);
+    // Opsi many2one yang domain-nya bergantung pada field BARIS (mis. Kolom
+    // Satuan difilter Produk baris ini) dikosongkan untuk baris baru — kalau
+    // tidak, dropdown sempat menampilkan sisa opsi baris sebelumnya. Opsi akan
+    // dimuat ulang begitu field sumbernya diisi di baris ini.
+    if (childCfg?.fields) {
+      const rowScopedKeys = Object.entries(childCfg.fields)
+        .filter(([, f]) => {
+          const fMeta = f as Record<string, unknown>;
+          const dom = fMeta.domain as Record<string, string> | undefined;
+          return fMeta.type === 'many2one' && !!dom &&
+            Object.values(dom).some((v) => (childCfg.fields as Record<string, unknown>)[v] != null);
+        })
+        .map(([fkey]) => `${relationField}.${fkey}`);
+      if (rowScopedKeys.length > 0) {
+        setMany2oneOptions((prev) => {
+          const next = { ...prev };
+          rowScopedKeys.forEach((k) => delete next[k]);
+          return next;
+        });
+      }
+    }
+  }, [childConfigs, lineItems, config, form, setMany2oneOptions]);
 
   const deleteLine = useCallback((relationField: string, key: string) => {
     setLineItems((prev) => ({

@@ -354,6 +354,38 @@ export function buildTabItems(ctx: Ctx): Array<{ key: string; label: string; chi
                   return { ...prev, [relationField]: items };
                 });
               }
+              // 2b. Many2One dengan domain ROW-SCOPED (mis. Kolom Satuan difilter
+              //     Produk baris ini) → muat ulang opsinya begitu field sumber di
+              //     baris berubah. Tanpa ini, dropdown masih menampilkan opsi
+              //     baris lain sampai cell diklik ulang.
+              const changedField = params.colDef.field!;
+              const rowNow = (autofilledLine || updatedLine) as Record<string, unknown>;
+              Object.entries(childFields || {}).forEach(([fkey, fcfg]) => {
+                const fMeta = fcfg as Record<string, unknown>;
+                if (fMeta.type !== 'many2one' || !fMeta.relation || !fMeta.domain) return;
+                const rowDomain = fMeta.domain as Record<string, string>;
+                if (!Object.values(rowDomain).includes(changedField)) return;
+                const rowParams = resolveMany2oneDomain(
+                  rowDomain, config, form,
+                  (recordData?.id as number | undefined) ?? null,
+                  rowNow,
+                );
+                const optKey = `${relationField}.${fkey}`;
+                modelApi.listRecords(fMeta.relation as string, 1, M2O_PAGE_SIZE, rowParams)
+                  .then((response) => {
+                    const opts = response.results.map((r) => ({
+                      ...r,
+                      value: r.id as number,
+                      label: ((r.display_name || r.name) as string) || `#${r.id}`,
+                    }));
+                    setMany2oneOptions((prev) => ({ ...prev, [optKey]: opts }));
+                    setMany2oneMeta((prev) => ({
+                      ...prev,
+                      [optKey]: { page: 1, total: response.count, loading: false, params: rowParams },
+                    }));
+                  })
+                  .catch(() => {});
+              });
               // 3. Call backend compute API — single source of truth
               const childModelName = (config?.fields?.[relationField] as Record<string, string>)?.relation || '';
               if (childModelName) {
